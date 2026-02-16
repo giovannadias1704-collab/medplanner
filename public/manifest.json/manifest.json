@@ -1,7 +1,7 @@
 {
   "name": "MedPlanner - Organizador para Estudantes de Medicina",
   "short_name": "MedPlanner",
-  "description": "Planner completo para estudantes de medicina: organize estudos, saúde, finanças e muito mais!",
+  "description": "Planner completo para estudantes de medicina",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
