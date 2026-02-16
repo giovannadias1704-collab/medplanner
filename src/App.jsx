@@ -13,6 +13,7 @@ import Health from './pages/Health';
 import Finances from './pages/Finances';
 import Home from './pages/Home';
 import Wellness from './pages/Wellness';
+import Analytics from './pages/Analytics';
 import Settings from './pages/Settings';
 import Navigation from './components/Navigation';
 import InstallPWA from './components/InstallPWA';
@@ -80,6 +81,11 @@ function AppContent() {
           <Route path="/wellness" element={
             <ProtectedRoute>
               <Wellness />
+            </ProtectedRoute>
+          } />
+          <Route path="/analytics" element={
+            <ProtectedRoute>
+              <Analytics />
             </ProtectedRoute>
           } />
           <Route path="/settings" element={
