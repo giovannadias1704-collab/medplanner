@@ -36,6 +36,10 @@ export function AppProvider({ children }) {
   const [homeTasks, setHomeTasks] = useState([]);
   const [wellBeingEntries, setWellBeingEntries] = useState([]);
   
+  // ========== NOVO: NOTIFICAÇÕES ==========
+  const [notifications, setNotifications] = useState([]);
+  const [notificationPermission, setNotificationPermission] = useState('default');
+  
   const [userProfile, setUserProfile] = useState({
     displayName: '',
     photoURL: '',
@@ -60,7 +64,14 @@ export function AppProvider({ children }) {
     weekStartsOn: 'monday',
     currency: 'BRL',
     waterGoal: 2.0,
-    notifications: true
+    notifications: true,
+    notificationTypes: {
+      events: true,
+      tasks: true,
+      bills: true,
+      water: true,
+      study: true
+    }
   });
 
   // Autenticação
@@ -70,6 +81,13 @@ export function AppProvider({ children }) {
       setLoading(false);
     });
     return () => unsubscribe();
+  }, []);
+
+  // ========== NOVO: VERIFICAR PERMISSÃO DE NOTIFICAÇÕES ==========
+  useEffect(() => {
+    if ('Notification' in window) {
+      setNotificationPermission(Notification.permission);
+    }
   }, []);
 
   // Carregar dados do usuário
@@ -138,6 +156,9 @@ export function AppProvider({ children }) {
     // Study Questions
     unsubscribes.push(createListener('studyQuestions', setStudyQuestions));
 
+    // ========== NOVO: NOTIFICATIONS ==========
+    unsubscribes.push(createListener('notifications', setNotifications));
+
     // User Profile
     const userProfileQuery = query(collection(db, 'users', user.uid, 'profile'));
     unsubscribes.push(
@@ -185,14 +206,265 @@ export function AppProvider({ children }) {
     return () => unsubscribes.forEach(unsub => unsub());
   }, [user]);
 
+  // ========== NOVO: SISTEMA DE VERIFICAÇÃO DE NOTIFICAÇÕES ==========
+  useEffect(() => {
+    if (!user || !settings.notifications) return;
+
+    // Verificar a cada 5 minutos
+    const checkInterval = setInterval(() => {
+      checkForNotifications();
+    }, 5 * 60 * 1000); // 5 minutos
+
+    // Verificar imediatamente
+    checkForNotifications();
+
+    return () => clearInterval(checkInterval);
+  }, [user, events, tasks, bills, settings]);
+
+  // ========== NOVO: FUNÇÃO PARA VERIFICAR E CRIAR NOTIFICAÇÕES ==========
+  const checkForNotifications = async () => {
+    if (!user || !settings.notifications) return;
+
+    const now = new Date();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = tomorrow.toISOString().split('T')[0];
+    
+    const in3Days = new Date(now);
+    in3Days.setDate(in3Days.getDate() + 3);
+    const in3DaysStr = in3Days.toISOString().split('T')[0];
+
+    // Eventos de amanhã
+    if (settings.notificationTypes?.events) {
+      for (const event of events) {
+        if (event.date === tomorrowStr) {
+          await createInAppNotification({
+            type: 'event',
+            title: '📅 Evento Amanhã',
+            message: `${event.title} acontece amanhã!`,
+            relatedId: event.id,
+            priority: 'high'
+          });
+        }
+      }
+    }
+
+    // Tarefas atrasadas
+    if (settings.notificationTypes?.tasks) {
+      const todayStr = now.toISOString().split('T')[0];
+      for (const task of tasks) {
+        if (!task.completed && task.date < todayStr) {
+          await createInAppNotification({
+            type: 'task',
+            title: '⚠️ Tarefa Atrasada',
+            message: `"${task.title}" está atrasada!`,
+            relatedId: task.id,
+            priority: 'high'
+          });
+        }
+      }
+    }
+
+    // Contas a vencer em 3 dias
+    if (settings.notificationTypes?.bills) {
+      for (const bill of bills) {
+        if (!bill.paid && bill.date <= in3DaysStr && bill.date >= tomorrowStr) {
+          await createInAppNotification({
+            type: 'bill',
+            title: '💰 Conta a Vencer',
+            message: `"${bill.title}" vence em breve! Valor: R$ ${bill.amount}`,
+            relatedId: bill.id,
+            priority: 'medium'
+          });
+        }
+      }
+    }
+
+    // Lembrete de água (a cada 2 horas durante o dia)
+    if (settings.notificationTypes?.water) {
+      const hour = now.getHours();
+      if (hour >= 8 && hour <= 20 && hour % 2 === 0) {
+        const waterToday = getWaterIntakeToday();
+        if (waterToday < settings.waterGoal) {
+          await createInAppNotification({
+            type: 'water',
+            title: '💧 Hora de Beber Água',
+            message: `Você já bebeu ${waterToday}L de ${settings.waterGoal}L hoje!`,
+            priority: 'low',
+            autoClose: true
+          });
+        }
+      }
+    }
+  };
+
+  // ========== NOVO: CRIAR NOTIFICAÇÃO IN-APP ==========
+  const createInAppNotification = async (notificationData) => {
+    if (!user) return;
+    
+    try {
+      // Verificar se já existe notificação similar recente (últimas 24h)
+      const oneDayAgo = new Date();
+      oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+      
+      const existingNotification = notifications.find(n => 
+        n.type === notificationData.type &&
+        n.relatedId === notificationData.relatedId &&
+        new Date(n.createdAt) > oneDayAgo
+      );
+
+      if (existingNotification) return; // Não duplicar
+
+      // Criar notificação no Firebase
+      await addDoc(collection(db, 'users', user.uid, 'notifications'), {
+        ...notificationData,
+        read: false,
+        createdAt: new Date().toISOString()
+      });
+
+      // Enviar notificação do navegador se permitido
+      if (notificationPermission === 'granted') {
+        sendBrowserNotification(notificationData.title, notificationData.message);
+      }
+    } catch (error) {
+      console.error('Erro ao criar notificação:', error);
+    }
+  };
+
+  // ========== NOVO: ENVIAR NOTIFICAÇÃO DO NAVEGADOR ==========
+  const sendBrowserNotification = (title, message, icon = '/icon-192.png') => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification(title, {
+          body: message,
+          icon: icon,
+          badge: '/icon-192.png',
+          tag: `medplanner-${Date.now()}`,
+          requireInteraction: false
+        });
+      } catch (error) {
+        console.error('Erro ao enviar notificação do navegador:', error);
+      }
+    }
+  };
+
+  // ========== NOVO: SOLICITAR PERMISSÃO DE NOTIFICAÇÕES ==========
+  const requestNotificationPermission = async () => {
+    if (!('Notification' in window)) {
+      console.log('Este navegador não suporta notificações');
+      return 'unsupported';
+    }
+
+    try {
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
+      return permission;
+    } catch (error) {
+      console.error('Erro ao solicitar permissão:', error);
+      return 'denied';
+    }
+  };
+
+  // ========== NOVO: MARCAR NOTIFICAÇÃO COMO LIDA ==========
+  const markNotificationAsRead = async (notificationId) => {
+    if (!user) return;
+    try {
+      const notificationRef = doc(db, 'users', user.uid, 'notifications', notificationId);
+      await updateDoc(notificationRef, { 
+        read: true,
+        readAt: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Erro ao marcar notificação como lida:', error);
+    }
+  };
+
+  // ========== NOVO: MARCAR TODAS COMO LIDAS ==========
+  const markAllNotificationsAsRead = async () => {
+    if (!user) return;
+    try {
+      const unreadNotifications = notifications.filter(n => !n.read);
+      
+      for (const notification of unreadNotifications) {
+        await markNotificationAsRead(notification.id);
+      }
+    } catch (error) {
+      console.error('Erro ao marcar todas como lidas:', error);
+    }
+  };
+
+  // ========== NOVO: DELETAR NOTIFICAÇÃO ==========
+  const deleteNotification = async (notificationId) => {
+    if (!user) return;
+    try {
+      await deleteDoc(doc(db, 'users', user.uid, 'notifications', notificationId));
+    } catch (error) {
+      console.error('Erro ao deletar notificação:', error);
+    }
+  };
+
+  // ========== NOVO: LIMPAR NOTIFICAÇÕES ANTIGAS (30+ dias) ==========
+  const clearOldNotifications = async () => {
+    if (!user) return;
+    try {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      
+      const oldNotifications = notifications.filter(n => 
+        new Date(n.createdAt) < thirtyDaysAgo
+      );
+
+      for (const notification of oldNotifications) {
+        await deleteNotification(notification.id);
+      }
+
+      return oldNotifications.length;
+    } catch (error) {
+      console.error('Erro ao limpar notificações antigas:', error);
+    }
+  };
+
+  // ========== NOVO: OBTER NOTIFICAÇÕES NÃO LIDAS ==========
+  const getUnreadNotifications = () => {
+    return notifications.filter(n => !n.read);
+  };
+
+  // ========== NOVO: CRIAR NOTIFICAÇÃO MANUAL ==========
+  const addManualNotification = async (title, message, type = 'info', priority = 'medium') => {
+    await createInAppNotification({
+      type,
+      title,
+      message,
+      priority,
+      manual: true
+    });
+  };
+
   // ==================== EVENTS ====================
   const addEvent = async (eventData) => {
     if (!user) return;
     try {
-      await addDoc(collection(db, 'users', user.uid, 'events'), {
+      const eventRef = await addDoc(collection(db, 'users', user.uid, 'events'), {
         ...eventData,
         createdAt: new Date().toISOString()
       });
+
+      // ========== NOVO: CRIAR NOTIFICAÇÃO PARA EVENTO ==========
+      if (settings.notificationTypes?.events && eventData.date) {
+        const eventDate = new Date(eventData.date);
+        const now = new Date();
+        const daysUntil = Math.ceil((eventDate - now) / (1000 * 60 * 60 * 24));
+
+        if (daysUntil === 1) {
+          await createInAppNotification({
+            type: 'event',
+            title: '📅 Evento Amanhã',
+            message: `${eventData.title} acontece amanhã!`,
+            relatedId: eventRef.id,
+            priority: 'high'
+          });
+        }
+      }
     } catch (error) {
       console.error('Erro ao adicionar evento:', error);
       throw error;
@@ -761,6 +1033,7 @@ export function AppProvider({ children }) {
       studyQuestions,
       settings,
       userProfile,
+      notifications,
       exportedAt: new Date().toISOString()
     };
     
@@ -1026,6 +1299,9 @@ export function AppProvider({ children }) {
     studyReviews,
     studyQuestions,
     settings,
+    // ========== NOVO: NOTIFICATIONS ==========
+    notifications,
+    notificationPermission,
     // Events
     addEvent,
     updateEvent,
@@ -1086,7 +1362,18 @@ export function AppProvider({ children }) {
     addStudyQuestion,
     answerStudyQuestion,
     getTodayReviews,
-    getUpcomingExams
+    getUpcomingExams,
+    // ========== NOVO: NOTIFICATION FUNCTIONS ==========
+    createInAppNotification,
+    sendBrowserNotification,
+    requestNotificationPermission,
+    markNotificationAsRead,
+    markAllNotificationsAsRead,
+    deleteNotification,
+    clearOldNotifications,
+    getUnreadNotifications,
+    addManualNotification,
+    checkForNotifications
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

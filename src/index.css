@@ -26,6 +26,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
   background-color: var(--theme-bg);
   color: var(--theme-text);
+  padding-top: 64px; /* ========== NOVO: Espaçamento para header fixo ========== */
 }
 
 @layer base {
@@ -108,6 +109,18 @@ body {
   to { 
     opacity: 1; 
     transform: translateY(0); 
+  }
+}
+
+/* ========== NOVA ANIMAÇÃO: Slide da Direita ========== */
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
   }
 }
 

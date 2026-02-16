@@ -44,7 +44,11 @@ export default function Settings() {
     updateSettings,
     processPDFWithAI,
     exportAllData,
-    addEvent
+    addEvent,
+    // ========== NOVO: FUNÇÕES DE NOTIFICAÇÃO ==========
+    notificationPermission,
+    requestNotificationPermission,
+    clearOldNotifications
   } = useContext(AppContext);
 
   const { onboardingData, resetOnboarding } = useOnboarding();
@@ -62,7 +66,14 @@ export default function Settings() {
     currency: 'BRL',
     weekStartsOn: 'monday',
     waterGoal: 2.0,
-    notifications: true
+    notifications: true,
+    notificationTypes: {
+      events: true,
+      tasks: true,
+      bills: true,
+      water: true,
+      study: true
+    }
   });
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [processingPDF, setProcessingPDF] = useState(false);
@@ -151,6 +162,46 @@ export default function Settings() {
       setLocalSettings(newSettings);
     } catch (error) {
       alert('Erro ao atualizar configuração');
+    }
+  };
+
+  // ========== NOVO: ATUALIZAR TIPO DE NOTIFICAÇÃO ==========
+  const handleNotificationTypeChange = async (type, value) => {
+    try {
+      const newSettings = {
+        ...localSettings,
+        notificationTypes: {
+          ...localSettings.notificationTypes,
+          [type]: value
+        }
+      };
+      await updateSettings(newSettings);
+      setLocalSettings(newSettings);
+    } catch (error) {
+      alert('Erro ao atualizar tipo de notificação');
+    }
+  };
+
+  // ========== NOVO: SOLICITAR PERMISSÃO ==========
+  const handleRequestPermission = async () => {
+    const permission = await requestNotificationPermission();
+    
+    if (permission === 'granted') {
+      alert('✅ Permissão concedida! Você receberá notificações do MedPlanner.');
+    } else if (permission === 'denied') {
+      alert('❌ Permissão negada. Você pode ativar nas configurações do navegador.');
+    }
+  };
+
+  // ========== NOVO: LIMPAR NOTIFICAÇÕES ANTIGAS ==========
+  const handleClearOldNotifications = async () => {
+    if (confirm('Deseja limpar notificações com mais de 30 dias?')) {
+      try {
+        const count = await clearOldNotifications();
+        alert(`✅ ${count} notificação(ões) antiga(s) removida(s)!`);
+      } catch (error) {
+        alert('Erro ao limpar notificações');
+      }
     }
   };
 
@@ -542,7 +593,7 @@ Funcionalidade em desenvolvimento! 🚀`);
           </div>
         </section>
 
-        {/* Aparência - ATUALIZADO COM THEMESELECTOR */}
+        {/* Aparência */}
         <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 animate-fade-in" style={{ animationDelay: '0.1s' }}>
           <div className="p-6">
             <div className="flex items-center gap-3 mb-5">
@@ -563,6 +614,212 @@ Funcionalidade em desenvolvimento! 🚀`);
               currentTheme={selectedTheme}
               onThemeChange={handleThemeChangeNew}
             />
+          </div>
+        </section>
+
+        {/* ========== NOVA SEÇÃO: NOTIFICAÇÕES ========== */}
+        <section className="bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 rounded-2xl shadow-lg border-2 border-yellow-200 dark:border-yellow-800 animate-fade-in" style={{ animationDelay: '0.15s' }}>
+          <div className="p-6">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-12 h-12 bg-gradient-to-br from-yellow-500 to-amber-600 rounded-2xl flex items-center justify-center shadow-lg">
+                <BellIcon className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                  Notificações
+                </h2>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Gerencie alertas e lembretes
+                </p>
+              </div>
+            </div>
+
+            {/* Status da Permissão */}
+            <div className="mb-5 p-5 bg-white dark:bg-gray-800 rounded-xl">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <p className="font-semibold text-gray-900 dark:text-white mb-1">
+                    Permissão do Navegador
+                  </p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    {notificationPermission === 'granted' && '✅ Ativada - Você receberá notificações'}
+                    {notificationPermission === 'denied' && '❌ Negada - Ative nas configurações do navegador'}
+                    {notificationPermission === 'default' && '⏳ Não solicitada ainda'}
+                  </p>
+                </div>
+                {notificationPermission !== 'granted' && (
+                  <button
+                    onClick={handleRequestPermission}
+                    className="px-4 py-2 bg-gradient-to-r from-yellow-500 to-amber-600 text-white rounded-lg font-semibold hover:from-yellow-600 hover:to-amber-700 transition-all shadow-lg"
+                  >
+                    Ativar
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Tipos de Notificações */}
+            <div className="space-y-3">
+              <p className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-3">
+                Receber notificações de:
+              </p>
+
+              {/* Eventos */}
+              <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center">
+                    <span className="text-xl">📅</span>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-900 dark:text-white">
+                      Eventos
+                    </p>
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                      Lembrete 1 dia antes
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleNotificationTypeChange('events', !localSettings.notificationTypes?.events)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    localSettings.notificationTypes?.events ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                      localSettings.notificationTypes?.events ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Tarefas */}
+              <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center">
+                    <span className="text-xl">✅</span>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-900 dark:text-white">
+                      Tarefas
+                    </p>
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                      Tarefas atrasadas
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleNotificationTypeChange('tasks', !localSettings.notificationTypes?.tasks)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    localSettings.notificationTypes?.tasks ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                      localSettings.notificationTypes?.tasks ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Contas */}
+              <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-orange-100 dark:bg-orange-900/30 rounded-xl flex items-center justify-center">
+                    <span className="text-xl">💰</span>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-900 dark:text-white">
+                      Contas
+                    </p>
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                      3 dias antes do vencimento
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleNotificationTypeChange('bills', !localSettings.notificationTypes?.bills)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    localSettings.notificationTypes?.bills ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                      localSettings.notificationTypes?.bills ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Água */}
+              <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-cyan-100 dark:bg-cyan-900/30 rounded-xl flex items-center justify-center">
+                    <span className="text-xl">💧</span>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-900 dark:text-white">
+                      Hidratação
+                    </p>
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                      A cada 2 horas (8h-20h)
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleNotificationTypeChange('water', !localSettings.notificationTypes?.water)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    localSettings.notificationTypes?.water ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                      localSettings.notificationTypes?.water ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Estudos */}
+              <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-xl flex items-center justify-center">
+                    <span className="text-xl">📚</span>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-900 dark:text-white">
+                      Estudos
+                    </p>
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                      Revisões e cronograma
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleNotificationTypeChange('study', !localSettings.notificationTypes?.study)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    localSettings.notificationTypes?.study ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                      localSettings.notificationTypes?.study ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
+            {/* Botão de Limpeza */}
+            <div className="mt-5 pt-5 border-t border-gray-200 dark:border-gray-700">
+              <button
+                onClick={handleClearOldNotifications}
+                className="w-full py-3 border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 font-semibold transition-all flex items-center justify-center gap-2"
+              >
+                <TrashIcon className="w-5 h-5" />
+                Limpar Notificações Antigas (30+ dias)
+              </button>
+            </div>
           </div>
         </section>
 
@@ -771,35 +1028,6 @@ Funcionalidade em desenvolvimento! 🚀`);
                   onChange={(e) => handleSettingChange('waterGoal', parseFloat(e.target.value))}
                   className="w-24 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white text-center font-bold transition-all"
                 />
-              </div>
-
-              {/* Notificações */}
-              <div className="flex items-center justify-between p-5 bg-gray-50 dark:bg-gray-700/50 rounded-xl hover-lift transition-all">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-yellow-100 dark:bg-yellow-900/30 rounded-xl flex items-center justify-center">
-                    <BellIcon className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900 dark:text-white">
-                      Notificações
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Alertas e lembretes
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleSettingChange('notifications', !localSettings.notifications)}
-                  className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors shadow-inner ${
-                    localSettings.notifications ? 'bg-gradient-to-r from-primary-600 to-primary-700' : 'bg-gray-300 dark:bg-gray-600'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition-transform ${
-                      localSettings.notifications ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
               </div>
             </div>
           </div>

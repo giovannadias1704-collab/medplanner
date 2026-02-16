@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
 import { useAuth } from './hooks/useAuth';
+import { useNotifications } from './hooks/useNotifications';
 import ProtectedRoute from './components/ProtectedRoute';
 import Auth from './pages/Auth';
 import Onboarding from './pages/Onboarding';
@@ -14,9 +15,12 @@ import Home from './pages/Home';
 import Wellness from './pages/Wellness';
 import Settings from './pages/Settings';
 import Navigation from './components/Navigation';
+import InstallPWA from './components/InstallPWA';
+import NotificationToast from './components/NotificationToast';
 
 function AppContent() {
   const { user, loading } = useAuth();
+  const { latestNotification, dismissNotification, removeNotification } = useNotifications();
 
   if (loading) {
     return (
@@ -30,6 +34,7 @@ function AppContent() {
     <Router>
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
         {user && <Navigation />}
+        
         <Routes>
           <Route path="/auth" element={!user ? <Auth /> : <Navigate to="/dashboard" />} />
           <Route path="/onboarding" element={
@@ -84,6 +89,20 @@ function AppContent() {
           } />
           <Route path="/" element={<Navigate to={user ? "/dashboard" : "/auth"} />} />
         </Routes>
+
+        {/* ========== NOVO: COMPONENTES GLOBAIS ========== */}
+        {user && <InstallPWA />}
+        
+        {/* Toast de Notificações */}
+        {user && latestNotification && !latestNotification.read && (
+          <div className="fixed top-4 right-4 z-50">
+            <NotificationToast 
+              notification={latestNotification}
+              onDismiss={dismissNotification}
+              onRemove={removeNotification}
+            />
+          </div>
+        )}
       </div>
     </Router>
   );
