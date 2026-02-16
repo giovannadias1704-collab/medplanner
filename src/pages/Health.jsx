@@ -1,6 +1,10 @@
-import { useState, useContext, useEffect } from 'react';
+import { useState, useContext, useEffect, useMemo } from 'react';
 import { AppContext } from '../context/AppContext';
 import PageHeader from '../components/PageHeader';
+import StatsCard from '../components/StatsCard';
+import ProgressChart from '../components/ProgressChart';
+import InsightCard from '../components/InsightCard';
+import { calculateHealthStats } from '../utils/statsCalculator';
 import { HeartIcon, FireIcon, ScaleIcon, BeakerIcon, XMarkIcon, PlusIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
 
 export default function Health() {
@@ -22,6 +26,12 @@ export default function Health() {
   const [showWorkoutModal, setShowWorkoutModal] = useState(false);
   const [showMealModal, setShowMealModal] = useState(false);
   const [showWeightModal, setShowWeightModal] = useState(false);
+
+  // ========== NOVO: CALCULAR ESTATÍSTICAS ==========
+  const healthStats = useMemo(() => 
+    calculateHealthStats(waterLogs, workouts, weights, settings),
+    [waterLogs, workouts, weights, settings]
+  );
 
   // Forms state
   const [newWorkout, setNewWorkout] = useState({ 
@@ -123,6 +133,100 @@ export default function Health() {
         emoji="💪"
         imageQuery="fitness,gym,health,workout"
       />
+
+      {/* ========== NOVO: ESTATÍSTICAS DE SAÚDE ========== */}
+      <div className="max-w-7xl mx-auto px-4 py-6">
+        <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6 animate-fade-in">
+          <StatsCard
+            title="Água Hoje"
+            value={`${healthStats.waterToday}L`}
+            subtitle={`Meta: ${healthStats.waterGoal}L`}
+            icon="💧"
+            color={healthStats.waterGoalPercentage >= 100 ? 'green' : 'blue'}
+            trend={
+              healthStats.waterGoalPercentage >= 100 
+                ? { direction: 'up', value: '100%' }
+                : { direction: 'down', value: `${healthStats.waterGoalPercentage}%` }
+            }
+          />
+          
+          <StatsCard
+            title="Treinos (7d)"
+            value={healthStats.workoutsThisWeek}
+            subtitle={`${healthStats.totalWorkoutMinutes} min total`}
+            icon="🔥"
+            color="orange"
+            trend={
+              healthStats.workoutsThisWeek >= 3 
+                ? { direction: 'up', value: 'Ótimo!' }
+                : { direction: 'down', value: 'Baixo' }
+            }
+          />
+          
+          <StatsCard
+            title="Peso Atual"
+            value={healthStats.currentWeight ? `${healthStats.currentWeight}kg` : '-'}
+            subtitle={
+              healthStats.weightChange 
+                ? `${healthStats.weightChange > 0 ? '+' : ''}${healthStats.weightChange}kg`
+                : 'Sem mudanças'
+            }
+            icon="⚖️"
+            color="purple"
+            trend={
+              healthStats.weightChange 
+                ? { 
+                    direction: healthStats.weightChange < 0 ? 'down' : 'up', 
+                    value: `${Math.abs(healthStats.weightChange)}kg` 
+                  }
+                : undefined
+            }
+          />
+          
+          <StatsCard
+            title="Média Água"
+            value={`${healthStats.avgWaterPerDay}L`}
+            subtitle="Por dia (7 dias)"
+            icon="📊"
+            color="blue"
+          />
+        </section>
+
+        {/* ========== NOVO: GRÁFICO DE PROGRESSO ========== */}
+        <section className="mb-6 animate-fade-in" style={{ animationDelay: '0.1s' }}>
+          <ProgressChart
+            title="📈 Progresso Semanal de Saúde"
+            color="green"
+            data={[
+              { 
+                label: 'Treinos Realizados', 
+                value: healthStats.workoutsThisWeek, 
+                unit: 'treinos' 
+              },
+              { 
+                label: 'Minutos de Atividade', 
+                value: healthStats.totalWorkoutMinutes, 
+                unit: 'min' 
+              },
+              { 
+                label: 'Média de Água/Dia', 
+                value: parseFloat(healthStats.avgWaterPerDay), 
+                unit: 'L' 
+              }
+            ]}
+          />
+        </section>
+
+        {/* ========== NOVO: INSIGHTS AUTOMÁTICOS ========== */}
+        {healthStats.insights && healthStats.insights.length > 0 && (
+          <section className="mb-6 animate-fade-in" style={{ animationDelay: '0.15s' }}>
+            <InsightCard 
+              title="💡 Insights de Saúde"
+              insights={healthStats.insights}
+            />
+          </section>
+        )}
+      </div>
 
       {/* Tabs */}
       <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">

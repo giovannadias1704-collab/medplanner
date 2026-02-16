@@ -1,6 +1,10 @@
 import { useState, useMemo, useContext } from 'react';
 import { AppContext } from '../context/AppContext';
 import PageHeader from '../components/PageHeader';
+import StatsCard from '../components/StatsCard';
+import ProgressChart from '../components/ProgressChart';
+import InsightCard from '../components/InsightCard';
+import { calculateFinanceStats } from '../utils/statsCalculator';
 import { formatCurrency } from '../utils/helpers';
 import { daysUntil } from '../utils/helpers';
 import { PlusIcon, XMarkIcon, TrashIcon, CheckCircleIcon, ClockIcon } from '@heroicons/react/24/outline';
@@ -16,6 +20,12 @@ export default function Finances() {
     paid: false,
     recurring: false
   });
+
+  // ========== NOVO: CALCULAR ESTATÍSTICAS ==========
+  const financeStats = useMemo(() => 
+    calculateFinanceStats(bills),
+    [bills]
+  );
 
   const upcomingBills = useMemo(() => {
     return bills
@@ -77,8 +87,86 @@ export default function Finances() {
       />
 
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+        
+        {/* ========== NOVO: ESTATÍSTICAS FINANCEIRAS ========== */}
+        <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 animate-fade-in">
+          <StatsCard
+            title="Total do Mês"
+            value={`R$ ${financeStats.totalBills}`}
+            subtitle={`${financeStats.billsCount} conta(s)`}
+            icon="💵"
+            color="blue"
+          />
+          
+          <StatsCard
+            title="Pago"
+            value={`R$ ${financeStats.totalPaid}`}
+            subtitle={`${financeStats.paidCount} conta(s)`}
+            icon="✅"
+            color="green"
+            trend={
+              financeStats.paymentRate >= 80 
+                ? { direction: 'up', value: `${financeStats.paymentRate}%` }
+                : { direction: 'down', value: `${financeStats.paymentRate}%` }
+            }
+          />
+          
+          <StatsCard
+            title="Pendente"
+            value={`R$ ${financeStats.totalPending}`}
+            subtitle={`${financeStats.pendingCount} conta(s)`}
+            icon="⏳"
+            color="orange"
+          />
+          
+          <StatsCard
+            title="Atrasadas"
+            value={financeStats.overdueCount}
+            subtitle={financeStats.upcomingCount > 0 ? `${financeStats.upcomingCount} vencendo` : 'Nenhuma'}
+            icon="🚨"
+            color={financeStats.overdueCount > 0 ? 'red' : 'green'}
+            trend={
+              financeStats.overdueCount > 0 
+                ? { direction: 'down', value: 'Urgente!' }
+                : { direction: 'up', value: 'Tudo ok' }
+            }
+          />
+        </section>
+
+        {/* ========== NOVO: GRÁFICO DE PROGRESSO ========== */}
+        {financeStats.billsCount > 0 && (
+          <section className="animate-fade-in" style={{ animationDelay: '0.1s' }}>
+            <ProgressChart
+              title="📊 Progresso de Pagamentos do Mês"
+              color="green"
+              data={[
+                { 
+                  label: 'Contas Pagas', 
+                  value: financeStats.paidCount, 
+                  unit: `de ${financeStats.billsCount}` 
+                },
+                { 
+                  label: 'Taxa de Pagamento', 
+                  value: parseInt(financeStats.paymentRate), 
+                  unit: '%' 
+                }
+              ]}
+            />
+          </section>
+        )}
+
+        {/* ========== NOVO: INSIGHTS AUTOMÁTICOS ========== */}
+        {financeStats.insights && financeStats.insights.length > 0 && (
+          <section className="animate-fade-in" style={{ animationDelay: '0.15s' }}>
+            <InsightCard 
+              title="💡 Insights Financeiros"
+              insights={financeStats.insights}
+            />
+          </section>
+        )}
+
         {/* Resumo Total */}
-        <div className="bg-gradient-to-br from-yellow-500 to-orange-600 rounded-2xl p-6 shadow-xl text-white animate-fade-in">
+        <div className="bg-gradient-to-br from-yellow-500 to-orange-600 rounded-2xl p-6 shadow-xl text-white animate-fade-in" style={{ animationDelay: '0.2s' }}>
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-2">
@@ -107,7 +195,7 @@ export default function Finances() {
         </div>
 
         {/* Próximas a Vencer */}
-        <section className="animate-fade-in" style={{ animationDelay: '0.1s' }}>
+        <section className="animate-fade-in" style={{ animationDelay: '0.25s' }}>
           <div className="flex items-center gap-3 mb-5">
             <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-pink-600 rounded-2xl flex items-center justify-center shadow-lg">
               <ClockIcon className="h-6 w-6 text-white" />
@@ -149,7 +237,7 @@ export default function Finances() {
                         ? 'bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-yellow-900/30 dark:to-orange-900/30 border-yellow-300 dark:border-yellow-800'
                         : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'
                     }`}
-                    style={{ animationDelay: `${0.2 + index * 0.1}s` }}
+                    style={{ animationDelay: `${0.3 + index * 0.1}s` }}
                   >
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex-1">
@@ -207,7 +295,7 @@ export default function Finances() {
         </section>
 
         {/* Contas Recorrentes */}
-        <section className="animate-fade-in" style={{ animationDelay: '0.2s' }}>
+        <section className="animate-fade-in" style={{ animationDelay: '0.3s' }}>
           <div className="flex items-center gap-3 mb-5">
             <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg">
               <span className="text-2xl">🔄</span>
@@ -235,7 +323,7 @@ export default function Finances() {
                 <div
                   key={bill.id}
                   className="bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-2xl p-5 shadow-lg border-2 border-purple-200 dark:border-purple-800 hover-lift animate-slide-in"
-                  style={{ animationDelay: `${0.3 + index * 0.1}s` }}
+                  style={{ animationDelay: `${0.35 + index * 0.1}s` }}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -265,7 +353,7 @@ export default function Finances() {
 
         {/* Contas Pagas */}
         {bills.filter(b => b.paid).length > 0 && (
-          <section className="animate-fade-in" style={{ animationDelay: '0.3s' }}>
+          <section className="animate-fade-in" style={{ animationDelay: '0.4s' }}>
             <div className="flex items-center gap-3 mb-5">
               <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center shadow-lg">
                 <CheckCircleIcon className="h-6 w-6 text-white" />
@@ -285,7 +373,7 @@ export default function Finances() {
                 <div
                   key={bill.id}
                   className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-2xl p-5 shadow-lg border-2 border-green-200 dark:border-green-800 opacity-75 hover:opacity-100 transition-opacity animate-slide-in"
-                  style={{ animationDelay: `${0.4 + index * 0.1}s` }}
+                  style={{ animationDelay: `${0.45 + index * 0.1}s` }}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3 flex-1">

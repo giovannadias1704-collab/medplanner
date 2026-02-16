@@ -1,6 +1,10 @@
-import { useState, useContext, useEffect } from 'react';
+import { useState, useContext, useEffect, useMemo } from 'react';
 import { AppContext } from '../context/AppContext';
 import PageHeader from '../components/PageHeader';
+import StatsCard from '../components/StatsCard';
+import ProgressChart from '../components/ProgressChart';
+import InsightCard from '../components/InsightCard';
+import { calculateStudyStats } from '../utils/statsCalculator';
 import { 
   AcademicCapIcon,
   CalendarIcon,
@@ -42,6 +46,12 @@ export default function Study() {
   const [showTopicsModal, setShowTopicsModal] = useState(false);
   const [showExamModal, setShowExamModal] = useState(false);
   const [generatingSchedule, setGeneratingSchedule] = useState(false);
+
+  // ========== NOVO: CALCULAR ESTATÍSTICAS ==========
+  const studyStats = useMemo(() => 
+    calculateStudyStats(studySchedule, studyReviews, events),
+    [studySchedule, studyReviews, events]
+  );
 
   // Onboarding form
   const [onboardingData, setOnboardingData] = useState({
@@ -294,6 +304,85 @@ export default function Study() {
         emoji="📚"
         imageQuery="study,library,books,education"
       />
+
+      {/* ========== NOVO: ESTATÍSTICAS DE ESTUDOS ========== */}
+      <div className="max-w-7xl mx-auto px-4 py-6">
+        <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6 animate-fade-in">
+          <StatsCard
+            title="Horas (7 dias)"
+            value={studyStats.totalHours}
+            subtitle="Horas estudadas"
+            icon="⏱️"
+            color="blue"
+          />
+          
+          <StatsCard
+            title="Conclusão"
+            value={`${studyStats.completionRate}%`}
+            subtitle={`${studyStats.completedStudies}/${studyStats.totalScheduled} itens`}
+            icon="✅"
+            color="green"
+            trend={
+              studyStats.completionRate >= 80 
+                ? { direction: 'up', value: 'Ótimo!' }
+                : { direction: 'down', value: 'Melhorar' }
+            }
+          />
+          
+          <StatsCard
+            title="Próxima Prova"
+            value={studyStats.daysUntilExam ? `${studyStats.daysUntilExam}d` : '-'}
+            subtitle={studyStats.nextExam}
+            icon="🎯"
+            color={studyStats.daysUntilExam && studyStats.daysUntilExam <= 7 ? 'red' : 'orange'}
+          />
+          
+          <StatsCard
+            title="Revisões"
+            value={studyStats.pendingReviews}
+            subtitle="Pendentes"
+            icon="🔄"
+            color="purple"
+          />
+        </section>
+
+        {/* ========== NOVO: GRÁFICO DE PROGRESSO ========== */}
+        {studyStats.totalScheduled > 0 && (
+          <section className="mb-6 animate-fade-in" style={{ animationDelay: '0.1s' }}>
+            <ProgressChart
+              title="📊 Progresso Semanal de Estudos"
+              color="blue"
+              data={[
+                { 
+                  label: 'Itens Concluídos', 
+                  value: studyStats.completedStudies, 
+                  unit: `de ${studyStats.totalScheduled}` 
+                },
+                { 
+                  label: 'Taxa de Conclusão', 
+                  value: parseInt(studyStats.completionRate), 
+                  unit: '%' 
+                },
+                { 
+                  label: 'Horas Estudadas', 
+                  value: studyStats.totalHours, 
+                  unit: 'horas' 
+                }
+              ]}
+            />
+          </section>
+        )}
+
+        {/* ========== NOVO: INSIGHTS AUTOMÁTICOS ========== */}
+        {studyStats.insights && studyStats.insights.length > 0 && (
+          <section className="mb-6 animate-fade-in" style={{ animationDelay: '0.15s' }}>
+            <InsightCard 
+              title="💡 Insights de Estudos"
+              insights={studyStats.insights}
+            />
+          </section>
+        )}
+      </div>
 
       {/* Tabs */}
       <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">

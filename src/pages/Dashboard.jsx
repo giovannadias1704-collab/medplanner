@@ -4,8 +4,12 @@ import { useOnboarding } from '../hooks/useOnboarding';
 import PageHeader from '../components/PageHeader';
 import QuickCaptureBar from '../components/QuickCaptureBar';
 import EventCard from '../components/EventCard';
+import StatsCard from '../components/StatsCard';
+import ProgressChart from '../components/ProgressChart';
+import InsightCard from '../components/InsightCard';
 import { isToday, isTomorrow } from '../utils/dateParser';
 import { daysUntil } from '../utils/helpers';
+import { calculateDashboardStats, calculateTaskStats } from '../utils/statsCalculator';
 import { addDays, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { 
@@ -13,12 +17,36 @@ import {
   HeartIcon, 
   BanknotesIcon,
   SparklesIcon,
-  FireIcon
+  FireIcon,
+  CalendarIcon,
+  CheckCircleIcon,
+  CurrencyDollarIcon,
+  BeakerIcon
 } from '@heroicons/react/24/outline';
 
 export default function Dashboard() {
-  const { events, tasks, bills } = useContext(AppContext);
+  const { 
+    events, 
+    tasks, 
+    bills, 
+    homeTasks, 
+    studySchedule, 
+    waterLogs, 
+    settings 
+  } = useContext(AppContext);
+  
   const { onboardingData } = useOnboarding();
+
+  // ========== NOVO: CALCULAR ESTATÍSTICAS ==========
+  const dashboardStats = useMemo(() => 
+    calculateDashboardStats(events, tasks, homeTasks, bills, studySchedule, waterLogs, settings),
+    [events, tasks, homeTasks, bills, studySchedule, waterLogs, settings]
+  );
+
+  const taskStats = useMemo(() => 
+    calculateTaskStats(tasks, homeTasks),
+    [tasks, homeTasks]
+  );
 
   // Top 3 Prioridades
   const top3Priorities = useMemo(() => {
@@ -124,9 +152,81 @@ export default function Dashboard() {
 
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
         
+        {/* ========== NOVO: ESTATÍSTICAS DO DIA ========== */}
+        <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 animate-fade-in">
+          <StatsCard
+            title="Eventos Hoje"
+            value={dashboardStats.eventsToday}
+            subtitle="No calendário"
+            icon="📅"
+            color="blue"
+          />
+          
+          <StatsCard
+            title="Tarefas Hoje"
+            value={dashboardStats.tasksToday}
+            subtitle="Pendentes"
+            icon="✅"
+            color="green"
+          />
+          
+          <StatsCard
+            title="Contas (7 dias)"
+            value={dashboardStats.billsThisWeek}
+            subtitle="A vencer"
+            icon="💰"
+            color="orange"
+          />
+          
+          <StatsCard
+            title="Hidratação"
+            value={`${dashboardStats.waterToday}L`}
+            subtitle={`Meta: ${dashboardStats.waterGoal}L`}
+            icon="💧"
+            color={dashboardStats.waterGoalPercentage >= 100 ? 'green' : 'blue'}
+            trend={
+              dashboardStats.waterGoalPercentage >= 100 
+                ? { direction: 'up', value: '100%' }
+                : { direction: 'down', value: `${dashboardStats.waterGoalPercentage}%` }
+            }
+          />
+        </section>
+
+        {/* ========== NOVO: PROGRESSO DE TAREFAS ========== */}
+        {taskStats.totalTasks > 0 && (
+          <section className="animate-fade-in" style={{ animationDelay: '0.1s' }}>
+            <ProgressChart
+              title="📊 Progresso de Tarefas"
+              color="green"
+              data={[
+                { 
+                  label: 'Concluídas', 
+                  value: taskStats.completedTasks, 
+                  unit: `de ${taskStats.totalTasks}` 
+                },
+                { 
+                  label: 'Taxa de Conclusão', 
+                  value: parseInt(taskStats.completionRate), 
+                  unit: '%' 
+                }
+              ]}
+            />
+          </section>
+        )}
+
+        {/* ========== NOVO: INSIGHTS AUTOMÁTICOS ========== */}
+        {taskStats.insights && taskStats.insights.length > 0 && (
+          <section className="animate-fade-in" style={{ animationDelay: '0.15s' }}>
+            <InsightCard 
+              title="💡 Insights do Dia"
+              insights={taskStats.insights}
+            />
+          </section>
+        )}
+
         {/* Cards de Estatísticas Personalizadas */}
         {onboardingData && (
-          <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-fade-in">
+          <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-fade-in" style={{ animationDelay: '0.2s' }}>
             {/* Estudos */}
             {onboardingData.studyHoursPerDay && (
               <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl p-5 text-white shadow-xl hover-lift transition-all">
@@ -195,7 +295,7 @@ export default function Dashboard() {
 
         {/* Mensagem de Motivação Personalizada */}
         {onboardingData?.shortTermGoals && (
-          <div className="bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 rounded-2xl p-6 border-2 border-yellow-200 dark:border-yellow-800 shadow-lg animate-fade-in">
+          <div className="bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 rounded-2xl p-6 border-2 border-yellow-200 dark:border-yellow-800 shadow-lg animate-fade-in" style={{ animationDelay: '0.25s' }}>
             <div className="flex items-start gap-4">
               <div className="flex-shrink-0">
                 <div className="w-12 h-12 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-xl flex items-center justify-center">
@@ -215,7 +315,7 @@ export default function Dashboard() {
         )}
 
         {/* Top 3 Prioridades */}
-        <section className="animate-fade-in">
+        <section className="animate-fade-in" style={{ animationDelay: '0.3s' }}>
           <div className="flex items-center gap-3 mb-4">
             <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-pink-600 rounded-2xl flex items-center justify-center shadow-lg">
               <span className="text-2xl font-bold text-white">3</span>
@@ -243,7 +343,7 @@ export default function Dashboard() {
           ) : (
             <div className="space-y-3">
               {top3Priorities.map((item, index) => (
-                <div key={item.id} className="flex items-start gap-3 animate-slide-in" style={{ animationDelay: `${index * 0.1}s` }}>
+                <div key={item.id} className="flex items-start gap-3 animate-slide-in" style={{ animationDelay: `${0.35 + index * 0.1}s` }}>
                   <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-600 text-white rounded-xl flex items-center justify-center font-bold text-lg shadow-lg">
                     {index + 1}
                   </div>
@@ -257,7 +357,7 @@ export default function Dashboard() {
         </section>
 
         {/* Próximos Eventos (24-72h) */}
-        <section className="animate-fade-in" style={{ animationDelay: '0.2s' }}>
+        <section className="animate-fade-in" style={{ animationDelay: '0.4s' }}>
           <div className="flex items-center gap-3 mb-4">
             <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-2xl flex items-center justify-center shadow-lg">
               <span className="text-2xl">📅</span>
@@ -285,7 +385,7 @@ export default function Dashboard() {
           ) : (
             <div className="space-y-3">
               {upcomingEvents.map((event, index) => (
-                <div key={event.id} className="animate-slide-in" style={{ animationDelay: `${0.3 + index * 0.1}s` }}>
+                <div key={event.id} className="animate-slide-in" style={{ animationDelay: `${0.45 + index * 0.1}s` }}>
                   <EventCard event={event} />
                 </div>
               ))}
@@ -295,7 +395,7 @@ export default function Dashboard() {
 
         {/* Pendências Urgentes */}
         {urgentItems.length > 0 && (
-          <section className="animate-fade-in" style={{ animationDelay: '0.4s' }}>
+          <section className="animate-fade-in" style={{ animationDelay: '0.5s' }}>
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-red-600 rounded-2xl flex items-center justify-center shadow-lg animate-pulse">
                 <span className="text-2xl">⚠️</span>
@@ -315,7 +415,7 @@ export default function Dashboard() {
                 <div
                   key={item.id}
                   className="bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20 border-l-4 border-red-500 p-5 rounded-2xl shadow-lg hover-lift animate-slide-in"
-                  style={{ animationDelay: `${0.5 + index * 0.1}s` }}
+                  style={{ animationDelay: `${0.55 + index * 0.1}s` }}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
