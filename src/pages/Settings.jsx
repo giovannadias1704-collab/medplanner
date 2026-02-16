@@ -1,5 +1,6 @@
 import { useState, useContext, useRef, useEffect } from 'react';
 import { AppContext } from '../context/AppContext';
+import { useOnboarding } from '../hooks/useOnboarding';
 import PageHeader from '../components/PageHeader';
 import { auth } from '../services/firebase';
 import { signOut } from 'firebase/auth';
@@ -20,7 +21,14 @@ import {
   TrashIcon,
   PencilIcon,
   CheckIcon,
-  XMarkIcon
+  XMarkIcon,
+  PencilSquareIcon,
+  ArrowPathIcon,
+  AcademicCapIcon,
+  ClockIcon,
+  HeartIcon,
+  BanknotesIcon,
+  Cog6ToothIcon
 } from '@heroicons/react/24/outline';
 
 export default function Settings() {
@@ -37,6 +45,7 @@ export default function Settings() {
     addEvent
   } = useContext(AppContext);
 
+  const { onboardingData, resetOnboarding } = useOnboarding();
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
   const pdfInputRef = useRef(null);
@@ -158,6 +167,19 @@ Funcionalidade em desenvolvimento! 🚀`);
     }
   };
 
+  const handleRefreshOnboarding = () => {
+    if (confirm('Deseja refazer o questionário inicial? Seus dados atuais serão mantidos até você finalizar.')) {
+      navigate('/onboarding');
+    }
+  };
+
+  const handleResetOnboarding = () => {
+    if (confirm('Isso vai limpar TODOS os seus dados do questionário e refazer do zero. Tem certeza?')) {
+      resetOnboarding();
+      navigate('/onboarding');
+    }
+  };
+
   const handleLogout = async () => {
     if (confirm('Tem certeza que deseja sair?')) {
       try {
@@ -188,6 +210,217 @@ Funcionalidade em desenvolvimento! 🚀`);
       />
 
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+        
+        {/* ========== NOVA SEÇÃO: DADOS DO ONBOARDING ========== */}
+        <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden animate-fade-in">
+          <div className="bg-gradient-to-r from-indigo-500 to-purple-600 px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <UserCircleIcon className="w-6 h-6 text-white" />
+              <h2 className="text-xl font-bold text-white">Questionário Inicial</h2>
+            </div>
+            {onboardingData && (
+              <button
+                onClick={handleRefreshOnboarding}
+                className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg text-white font-semibold transition-all"
+              >
+                <PencilSquareIcon className="w-5 h-5" />
+                Editar
+              </button>
+            )}
+          </div>
+
+          <div className="p-6">
+            {onboardingData ? (
+              <div className="space-y-6">
+                
+                {/* Informações Básicas */}
+                {(onboardingData.name || onboardingData.semester || onboardingData.university) && (
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                      <span className="text-2xl">👤</span>
+                      Informações Básicas
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {onboardingData.name && <InfoCard label="Nome" value={onboardingData.name} />}
+                      {onboardingData.semester && <InfoCard label="Semestre" value={`${onboardingData.semester}º`} />}
+                      {onboardingData.university && <InfoCard label="Faculdade" value={onboardingData.university} span2 />}
+                    </div>
+                  </div>
+                )}
+
+                {/* Rotina */}
+                {(onboardingData.sleepTime || onboardingData.wakeTime) && (
+                  <>
+                    <div className="border-t border-gray-200 dark:border-gray-700"></div>
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                        <span className="text-2xl">🕐</span>
+                        Rotina
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {onboardingData.sleepTime && <InfoCard label="Horário de dormir" value={onboardingData.sleepTime} />}
+                        {onboardingData.wakeTime && <InfoCard label="Horário de acordar" value={onboardingData.wakeTime} />}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Estilo de Estudo */}
+                {(onboardingData.studyTime || onboardingData.studyHoursPerDay || (onboardingData.studyTechniques && onboardingData.studyTechniques.length > 0)) && (
+                  <>
+                    <div className="border-t border-gray-200 dark:border-gray-700"></div>
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                        <span className="text-2xl">📚</span>
+                        Estilo de Estudo
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {onboardingData.studyTime && <InfoCard label="Horário preferido" value={onboardingData.studyTime} />}
+                        {onboardingData.studyHoursPerDay && <InfoCard label="Horas de estudo/dia" value={`${onboardingData.studyHoursPerDay}h`} />}
+                        {onboardingData.studyTechniques && onboardingData.studyTechniques.length > 0 && (
+                          <InfoCard 
+                            label="Técnicas de estudo" 
+                            value={onboardingData.studyTechniques.join(', ')} 
+                            span2 
+                          />
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Objetivos */}
+                {(onboardingData.focusResidency || onboardingData.residencyArea || onboardingData.importantExam || onboardingData.shortTermGoals) && (
+                  <>
+                    <div className="border-t border-gray-200 dark:border-gray-700"></div>
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                        <span className="text-2xl">🎯</span>
+                        Objetivos
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {onboardingData.focusResidency && <InfoCard label="Foco em residência" value={onboardingData.focusResidency} />}
+                        {onboardingData.residencyArea && <InfoCard label="Área de residência" value={onboardingData.residencyArea} />}
+                        {onboardingData.importantExam && <InfoCard label="Prova importante" value={onboardingData.importantExam} />}
+                        {onboardingData.shortTermGoals && <InfoCard label="Metas de curto prazo" value={onboardingData.shortTermGoals} span2 />}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Saúde e Bem-Estar */}
+                {(onboardingData.exerciseFrequency || onboardingData.idealSleepHours || onboardingData.selfCareRoutine || onboardingData.psychologicalSupport || onboardingData.waterGoal) && (
+                  <>
+                    <div className="border-t border-gray-200 dark:border-gray-700"></div>
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                        <span className="text-2xl">❤️</span>
+                        Saúde e Bem-Estar
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {onboardingData.exerciseFrequency && <InfoCard label="Frequência de exercícios" value={onboardingData.exerciseFrequency} />}
+                        {onboardingData.idealSleepHours && <InfoCard label="Horas de sono ideais" value={onboardingData.idealSleepHours} />}
+                        {onboardingData.selfCareRoutine && <InfoCard label="Rotina de autocuidado" value={onboardingData.selfCareRoutine} />}
+                        {onboardingData.psychologicalSupport && <InfoCard label="Acompanhamento psicológico" value={onboardingData.psychologicalSupport} />}
+                        {onboardingData.waterGoal && <InfoCard label="Meta de água/dia" value={`${onboardingData.waterGoal}L`} />}
+                        <InfoCard label="Acompanha peso" value={onboardingData.trackWeight ? 'Sim' : 'Não'} />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Finanças */}
+                {(onboardingData.monthlyBudget || onboardingData.budgetAmount || (onboardingData.expenseCategories && onboardingData.expenseCategories.length > 0) || (onboardingData.recurringBills && onboardingData.recurringBills.length > 0)) && (
+                  <>
+                    <div className="border-t border-gray-200 dark:border-gray-700"></div>
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                        <span className="text-2xl">💰</span>
+                        Organização Financeira
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {onboardingData.monthlyBudget && <InfoCard label="Orçamento mensal" value={onboardingData.monthlyBudget} />}
+                        {onboardingData.budgetAmount && <InfoCard label="Valor do orçamento" value={onboardingData.budgetAmount} />}
+                        {onboardingData.expenseCategories && onboardingData.expenseCategories.length > 0 && (
+                          <InfoCard 
+                            label="Categorias de gastos" 
+                            value={onboardingData.expenseCategories.join(', ')} 
+                            span2 
+                          />
+                        )}
+                        {onboardingData.recurringBills && onboardingData.recurringBills.length > 0 && (
+                          <InfoCard 
+                            label="Contas recorrentes" 
+                            value={onboardingData.recurringBills.join(', ')} 
+                            span2 
+                          />
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Preferências do App */}
+                {(onboardingData.wantsNotifications || onboardingData.notificationTime || onboardingData.theme || onboardingData.language || onboardingData.aiMode) && (
+                  <>
+                    <div className="border-t border-gray-200 dark:border-gray-700"></div>
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                        <span className="text-2xl">⚙️</span>
+                        Preferências do App
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {onboardingData.wantsNotifications && <InfoCard label="Notificações" value={onboardingData.wantsNotifications === 'sim' ? 'Ativadas' : 'Desativadas'} />}
+                        {onboardingData.notificationTime && <InfoCard label="Horário de notificações" value={onboardingData.notificationTime} />}
+                        {onboardingData.theme && <InfoCard label="Tema" value={onboardingData.theme} />}
+                        {onboardingData.language && <InfoCard label="Idioma" value={onboardingData.language} />}
+                        {onboardingData.aiMode && <InfoCard label="Modo da IA" value={onboardingData.aiMode === 'confirm' ? 'Confirmar sempre' : 'Automático'} span2 />}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <div className="inline-block p-4 bg-gray-100 dark:bg-gray-700 rounded-full mb-4">
+                  <span className="text-4xl">📋</span>
+                </div>
+                <p className="text-gray-600 dark:text-gray-400 mb-4 font-medium">
+                  Você ainda não completou o questionário inicial.
+                </p>
+                <button
+                  onClick={() => navigate('/onboarding')}
+                  className="px-6 py-3 bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 text-white rounded-xl font-semibold transition-all shadow-lg"
+                >
+                  Completar Agora
+                </button>
+              </div>
+            )}
+          </div>
+
+          {onboardingData && (
+            <div className="bg-gray-50 dark:bg-gray-900/50 px-6 py-4 flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={handleRefreshOnboarding}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 text-white rounded-xl font-semibold transition-all shadow-lg"
+              >
+                <PencilSquareIcon className="w-5 h-5" />
+                Refazer Questionário
+              </button>
+              <button
+                onClick={handleResetOnboarding}
+                className="flex items-center justify-center gap-2 px-4 py-3 border-2 border-red-500 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl font-semibold transition-all"
+              >
+                <ArrowPathIcon className="w-5 h-5" />
+                Resetar Tudo
+              </button>
+            </div>
+          )}
+        </section>
+
+        {/* ========== SEÇÕES EXISTENTES MANTIDAS ========== */}
+        
         {/* Perfil do Usuário */}
         <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 animate-fade-in">
           <div className="p-6">
@@ -197,10 +430,10 @@ Funcionalidade em desenvolvimento! 🚀`);
               </div>
               <div>
                 <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                  Perfil
+                  Perfil de Usuário
                 </h2>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Suas informações pessoais
+                  Suas informações de conta
                 </p>
               </div>
             </div>
@@ -633,6 +866,22 @@ Funcionalidade em desenvolvimento! 🚀`);
           <p className="font-medium mb-1">MedPlanner v1.0.0</p>
           <p>Feito com 💙 para estudantes de medicina</p>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Componente auxiliar para exibir informações
+function InfoCard({ label, value, span2 = false }) {
+  return (
+    <div className={`${span2 ? 'md:col-span-2' : ''}`}>
+      <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+        {label}
+      </label>
+      <div className="px-4 py-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700">
+        <p className="text-gray-900 dark:text-white font-medium">
+          {value}
+        </p>
       </div>
     </div>
   );
