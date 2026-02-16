@@ -142,7 +142,7 @@ export default function Calendar() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-32">
       <PageHeader 
         title="Calendário"
-        subtitle="Organize seus compromissos e eventos"
+        subtitle="Visualize todos os seus compromissos"
         emoji="📅"
         imageQuery="calendar,planner,organizer,schedule"
       />

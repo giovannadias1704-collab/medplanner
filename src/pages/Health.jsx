@@ -119,7 +119,7 @@ export default function Health() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-32">
       <PageHeader 
         title="Saúde"
-        subtitle="Academia, Alimentação e Bem-estar"
+        subtitle="Monitore seu bem-estar físico"
         emoji="💪"
         imageQuery="fitness,gym,health,workout"
       />

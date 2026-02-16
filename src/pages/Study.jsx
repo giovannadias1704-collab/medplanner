@@ -290,7 +290,7 @@ export default function Study() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-32">
       <PageHeader 
         title="Estudos"
-        subtitle="Cronograma Inteligente e Revisões"
+        subtitle="Organize suas matérias e revisões"
         emoji="📚"
         imageQuery="study,library,books,education"
       />

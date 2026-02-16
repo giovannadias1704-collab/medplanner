@@ -87,7 +87,7 @@ export default function Wellness() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-32">
       <PageHeader 
         title="Bem-estar"
-        subtitle="Humor, Energia e Saúde Mental"
+        subtitle="Cuide da sua saúde mental e emocional"
         emoji="✨"
         imageQuery="wellness,meditation,peace,mental health"
       />

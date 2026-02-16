@@ -72,7 +72,7 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-32">
       <PageHeader 
-        title={`Olá! 👋`}
+        title={`Bem vindo👋`}
         subtitle={format(new Date(), "EEEE, dd 'de' MMMM", { locale: ptBR })}
         emoji="🏠"
         imageQuery="workspace,desk,morning,coffee"
