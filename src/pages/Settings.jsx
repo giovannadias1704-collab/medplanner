@@ -2,6 +2,8 @@ import { useState, useContext, useRef, useEffect } from 'react';
 import { AppContext } from '../context/AppContext';
 import { useOnboarding } from '../hooks/useOnboarding';
 import PageHeader from '../components/PageHeader';
+import ThemeSelector from '../components/ThemeSelector';
+import { applyTheme, getStoredTheme } from '../utils/themeManager';
 import { auth } from '../services/firebase';
 import { signOut } from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
@@ -65,6 +67,9 @@ export default function Settings() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [processingPDF, setProcessingPDF] = useState(false);
   const [editingName, setEditingName] = useState(false);
+  
+  // Estado para temas personalizados
+  const [selectedTheme, setSelectedTheme] = useState(() => getStoredTheme());
 
   // Carregar dados do perfil e settings
   useEffect(() => {
@@ -128,6 +133,17 @@ export default function Settings() {
     }
   };
 
+  // Nova função para temas personalizados
+  const handleThemeChangeNew = (newTheme) => {
+    setSelectedTheme(newTheme);
+    applyTheme(newTheme);
+    
+    // Se tiver a função antiga do context, chame também para modo dark/light
+    if (updateTheme) {
+      updateTheme(newTheme === 'dark' ? 'dark' : 'light');
+    }
+  };
+
   const handleSettingChange = async (key, value) => {
     try {
       const newSettings = { ...localSettings, [key]: value };
@@ -150,10 +166,8 @@ export default function Settings() {
     try {
       setProcessingPDF(true);
       
-      // Processar PDF com IA
       const result = await processPDFWithAI(file);
       
-      // Por enquanto, apenas exemplo
       alert(`PDF processado! 
       
 Em breve, a IA vai extrair eventos automaticamente e adicionar ao seu calendário.
@@ -211,7 +225,7 @@ Funcionalidade em desenvolvimento! 🚀`);
 
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
         
-        {/* ========== NOVA SEÇÃO: DADOS DO ONBOARDING ========== */}
+        {/* ========== SEÇÃO: DADOS DO ONBOARDING ========== */}
         <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden animate-fade-in">
           <div className="bg-gradient-to-r from-indigo-500 to-purple-600 px-6 py-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -419,8 +433,6 @@ Funcionalidade em desenvolvimento! 🚀`);
           )}
         </section>
 
-        {/* ========== SEÇÕES EXISTENTES MANTIDAS ========== */}
-        
         {/* Perfil do Usuário */}
         <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 animate-fade-in">
           <div className="p-6">
@@ -530,58 +542,27 @@ Funcionalidade em desenvolvimento! 🚀`);
           </div>
         </section>
 
-        {/* Aparência */}
+        {/* Aparência - ATUALIZADO COM THEMESELECTOR */}
         <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 animate-fade-in" style={{ animationDelay: '0.1s' }}>
           <div className="p-6">
             <div className="flex items-center gap-3 mb-5">
               <div className="w-12 h-12 bg-gradient-to-br from-yellow-500 to-orange-600 rounded-2xl flex items-center justify-center shadow-lg">
-                <SunIcon className="h-6 w-6 text-white" />
+                <span className="text-2xl">🎨</span>
               </div>
               <div>
                 <h2 className="text-xl font-bold text-gray-900 dark:text-white">
                   Aparência
                 </h2>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Escolha seu tema favorito
+                  Escolha seu tema favorito (8 opções disponíveis!)
                 </p>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <button
-                onClick={() => handleThemeChange('light')}
-                className={`p-6 rounded-2xl border-2 transition-all hover-lift ${
-                  localSettings.theme === 'light'
-                    ? 'border-primary-600 bg-gradient-to-br from-primary-50 to-blue-50 dark:from-primary-900/30 dark:to-blue-900/30 shadow-lg'
-                    : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                }`}
-              >
-                <SunIcon className="h-10 w-10 text-yellow-500 mx-auto mb-3" />
-                <p className="text-sm font-bold text-gray-900 dark:text-white">
-                  Modo Claro
-                </p>
-                {localSettings.theme === 'light' && (
-                  <CheckIcon className="h-5 w-5 text-primary-600 mx-auto mt-2" />
-                )}
-              </button>
-
-              <button
-                onClick={() => handleThemeChange('dark')}
-                className={`p-6 rounded-2xl border-2 transition-all hover-lift ${
-                  localSettings.theme === 'dark'
-                    ? 'border-primary-600 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/30 dark:to-purple-900/30 shadow-lg'
-                    : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                }`}
-              >
-                <MoonIcon className="h-10 w-10 text-indigo-500 mx-auto mb-3" />
-                <p className="text-sm font-bold text-gray-900 dark:text-white">
-                  Modo Escuro
-                </p>
-                {localSettings.theme === 'dark' && (
-                  <CheckIcon className="h-5 w-5 text-primary-600 dark:text-primary-400 mx-auto mt-2" />
-                )}
-              </button>
-            </div>
+            <ThemeSelector 
+              currentTheme={selectedTheme}
+              onThemeChange={handleThemeChangeNew}
+            />
           </div>
         </section>
 

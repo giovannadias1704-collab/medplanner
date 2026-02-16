@@ -1,12 +1,15 @@
 {
-  "name": "MedPlanner",
+  "name": "MedPlanner - Organizador para Estudantes de Medicina",
   "short_name": "MedPlanner",
-  "description": "Planner completo para estudantes de medicina",
+  "description": "Planner completo para estudantes de medicina: organize estudos, saúde, finanças e muito mais!",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#3b82f6",
-  "orientation": "portrait",
+  "theme_color": "#6366f1",
+  "orientation": "portrait-primary",
+  "categories": ["education", "health", "productivity"],
+  "lang": "pt-BR",
+  "scope": "/",
   "icons": [
     {
       "src": "/icon-192.png",
@@ -19,6 +22,22 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "short_name": "Home",
+      "description": "Ir para o Dashboard",
+      "url": "/dashboard",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Calendário",
+      "short_name": "Agenda",
+      "description": "Ver seus eventos",
+      "url": "/calendar",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     }
   ]
 }
