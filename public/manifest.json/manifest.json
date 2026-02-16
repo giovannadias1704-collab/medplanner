@@ -7,9 +7,6 @@
   "background_color": "#ffffff",
   "theme_color": "#6366f1",
   "orientation": "portrait-primary",
-  "categories": ["education", "health", "productivity"],
-  "lang": "pt-BR",
-  "scope": "/",
   "icons": [
     {
       "src": "/icon-192.png",
@@ -24,20 +21,7 @@
       "purpose": "any maskable"
     }
   ],
-  "shortcuts": [
-    {
-      "name": "Dashboard",
-      "short_name": "Home",
-      "description": "Ir para o Dashboard",
-      "url": "/dashboard",
-      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
-    },
-    {
-      "name": "Calendário",
-      "short_name": "Agenda",
-      "description": "Ver seus eventos",
-      "url": "/calendar",
-      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
-    }
-  ]
+  "categories": ["education", "productivity", "health"],
+  "lang": "pt-BR",
+  "dir": "ltr"
 }
