@@ -1,5 +1,6 @@
 import { useContext, useMemo } from 'react';
 import { AppContext } from '../context/AppContext';
+import { useOnboarding } from '../hooks/useOnboarding';
 import PageHeader from '../components/PageHeader';
 import QuickCaptureBar from '../components/QuickCaptureBar';
 import EventCard from '../components/EventCard';
@@ -7,9 +8,17 @@ import { isToday, isTomorrow } from '../utils/dateParser';
 import { daysUntil } from '../utils/helpers';
 import { addDays, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { 
+  AcademicCapIcon, 
+  HeartIcon, 
+  BanknotesIcon,
+  SparklesIcon,
+  FireIcon
+} from '@heroicons/react/24/outline';
 
 export default function Dashboard() {
   const { events, tasks, bills } = useContext(AppContext);
+  const { onboardingData } = useOnboarding();
 
   // Top 3 Prioridades
   const top3Priorities = useMemo(() => {
@@ -69,11 +78,44 @@ export default function Dashboard() {
     return urgent.sort((a, b) => a.urgency - b.urgency);
   }, [bills, tasks]);
 
+  // Mensagem personalizada baseada no perfil
+  const getPersonalizedGreeting = () => {
+    const hour = new Date().getHours();
+    let timeGreeting = 'Olá';
+    
+    if (hour >= 5 && hour < 12) timeGreeting = 'Bom dia';
+    else if (hour >= 12 && hour < 18) timeGreeting = 'Boa tarde';
+    else timeGreeting = 'Boa noite';
+
+    if (onboardingData?.name) {
+      return `${timeGreeting}, ${onboardingData.name}! 👋`;
+    }
+    return `${timeGreeting}! 👋`;
+  };
+
+  const getPersonalizedSubtitle = () => {
+    const parts = [];
+    
+    if (onboardingData?.semester) {
+      parts.push(`${onboardingData.semester}º Semestre`);
+    }
+    
+    if (onboardingData?.university) {
+      parts.push(onboardingData.university);
+    }
+
+    if (parts.length > 0) {
+      return `${parts.join(' • ')} • ${format(new Date(), "EEEE, dd 'de' MMMM", { locale: ptBR })}`;
+    }
+
+    return format(new Date(), "EEEE, dd 'de' MMMM", { locale: ptBR });
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-32">
       <PageHeader 
-        title={`Bem vindo👋`}
-        subtitle={format(new Date(), "EEEE, dd 'de' MMMM", { locale: ptBR })}
+        title={getPersonalizedGreeting()}
+        subtitle={getPersonalizedSubtitle()}
         emoji="🏠"
         imageQuery="workspace,desk,morning,coffee"
       />
@@ -81,6 +123,97 @@ export default function Dashboard() {
       <QuickCaptureBar />
 
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+        
+        {/* Cards de Estatísticas Personalizadas */}
+        {onboardingData && (
+          <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-fade-in">
+            {/* Estudos */}
+            {onboardingData.studyHoursPerDay && (
+              <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl p-5 text-white shadow-xl hover-lift transition-all">
+                <div className="flex items-center justify-between mb-3">
+                  <AcademicCapIcon className="w-8 h-8 opacity-80" />
+                  <span className="text-2xl">📚</span>
+                </div>
+                <p className="text-sm opacity-90 mb-1">Meta de Estudo</p>
+                <p className="text-3xl font-bold">{onboardingData.studyHoursPerDay}h/dia</p>
+                {onboardingData.studyTime && (
+                  <p className="text-xs opacity-75 mt-2 capitalize">Período: {onboardingData.studyTime}</p>
+                )}
+              </div>
+            )}
+
+            {/* Objetivos */}
+            {onboardingData.focusResidency && (
+              <div className="bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl p-5 text-white shadow-xl hover-lift transition-all">
+                <div className="flex items-center justify-between mb-3">
+                  <SparklesIcon className="w-8 h-8 opacity-80" />
+                  <span className="text-2xl">🎯</span>
+                </div>
+                <p className="text-sm opacity-90 mb-1">Objetivo</p>
+                <p className="text-lg font-bold">
+                  {onboardingData.focusResidency === 'sim' ? 'Residência' : 'Graduação'}
+                </p>
+                {onboardingData.residencyArea && (
+                  <p className="text-xs opacity-75 mt-2">{onboardingData.residencyArea}</p>
+                )}
+              </div>
+            )}
+
+            {/* Saúde */}
+            {onboardingData.exerciseFrequency && (
+              <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl p-5 text-white shadow-xl hover-lift transition-all">
+                <div className="flex items-center justify-between mb-3">
+                  <HeartIcon className="w-8 h-8 opacity-80" />
+                  <span className="text-2xl">💪</span>
+                </div>
+                <p className="text-sm opacity-90 mb-1">Exercícios</p>
+                <p className="text-2xl font-bold">{onboardingData.exerciseFrequency}</p>
+                {onboardingData.waterGoal && (
+                  <p className="text-xs opacity-75 mt-2">Água: {onboardingData.waterGoal}L/dia</p>
+                )}
+              </div>
+            )}
+
+            {/* Finanças */}
+            {onboardingData.monthlyBudget && (
+              <div className="bg-gradient-to-br from-orange-500 to-red-600 rounded-2xl p-5 text-white shadow-xl hover-lift transition-all">
+                <div className="flex items-center justify-between mb-3">
+                  <BanknotesIcon className="w-8 h-8 opacity-80" />
+                  <span className="text-2xl">💰</span>
+                </div>
+                <p className="text-sm opacity-90 mb-1">Orçamento</p>
+                <p className="text-lg font-bold capitalize">
+                  {onboardingData.monthlyBudget === 'sim' ? 'Definido' : onboardingData.monthlyBudget === 'não' ? 'Não definido' : 'A definir'}
+                </p>
+                {onboardingData.budgetAmount && (
+                  <p className="text-xs opacity-75 mt-2">{onboardingData.budgetAmount}</p>
+                )}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Mensagem de Motivação Personalizada */}
+        {onboardingData?.shortTermGoals && (
+          <div className="bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 rounded-2xl p-6 border-2 border-yellow-200 dark:border-yellow-800 shadow-lg animate-fade-in">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0">
+                <div className="w-12 h-12 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-xl flex items-center justify-center">
+                  <FireIcon className="w-6 h-6 text-white" />
+                </div>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
+                  🎯 Suas Metas de Curto Prazo
+                </h3>
+                <p className="text-gray-700 dark:text-gray-300">
+                  {onboardingData.shortTermGoals}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Top 3 Prioridades */}
         <section className="animate-fade-in">
           <div className="flex items-center gap-3 mb-4">
@@ -217,7 +350,9 @@ export default function Dashboard() {
           <div className="flex items-center gap-4">
             <div className="text-5xl">💪</div>
             <div>
-              <h3 className="text-xl font-bold mb-1">Continue Focado!</h3>
+              <h3 className="text-xl font-bold mb-1">
+                {onboardingData?.name ? `Continue Focado, ${onboardingData.name}!` : 'Continue Focado!'}
+              </h3>
               <p className="text-white/90 text-sm">
                 Cada tarefa concluída te aproxima dos seus objetivos
               </p>
