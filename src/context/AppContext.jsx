@@ -11,6 +11,7 @@ import {
   deleteDoc, 
   doc,
   getDocs,
+  getDoc,
   Timestamp 
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -369,11 +370,25 @@ export function AppProvider({ children }) {
   const markNotificationAsRead = async (notificationId) => {
     if (!user) return;
     try {
-      const notificationRef = doc(db, 'users', user.uid, 'notifications', notificationId);
-      await updateDoc(notificationRef, { 
-        read: true,
-        readAt: new Date().toISOString()
-      });
+      const notifRef = doc(db, 'users', user.uid, 'notifications', notificationId);
+      
+      // VERIFICAR SE DOCUMENTO EXISTE ANTES DE ATUALIZAR
+      const notifDoc = await getDoc(notifRef);
+      
+      if (!notifDoc.exists()) {
+        console.warn('⚠️ Notificação não encontrada no Firebase:', notificationId);
+        // Remover do estado local se não existir no Firebase
+        setNotifications(prev => prev.filter(notif => notif.id !== notificationId));
+        return;
+      }
+      
+      await updateDoc(notifRef, { read: true });
+      
+      setNotifications(prev => 
+        prev.map(notif => 
+          notif.id === notificationId ? { ...notif, read: true } : notif
+        )
+      );
     } catch (error) {
       console.error('Erro ao marcar notificação como lida:', error);
     }
