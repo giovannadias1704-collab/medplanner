@@ -6,23 +6,29 @@ import {
   SparklesIcon,
   MicrophoneIcon,
   SpeakerWaveIcon,
-  StopIcon
+  StopIcon,
+  PaperClipIcon,
+  DocumentTextIcon,
+  PhotoIcon,
+  TrashIcon
 } from '@heroicons/react/24/outline';
 
 export default function AIChat({ isOpen, onClose }) {
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      content: '👋 Olá! Sou seu assistente de IA para medicina. Como posso ajudar você hoje?'
+      content: '👋 Olá! Sou seu assistente de IA para medicina. Como posso ajudar você hoje?\n\n💡 Você pode enviar imagens e PDFs para análise!'
     }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [attachedFiles, setAttachedFiles] = useState([]);
   const messagesEndRef = useRef(null);
   const recognitionRef = useRef(null);
   const synthRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   // Scroll automático para última mensagem
   const scrollToBottom = () => {
@@ -72,15 +78,22 @@ export default function AIChat({ isOpen, onClose }) {
   }, []);
 
   const handleSend = async () => {
-    if (!input.trim() || loading) return;
+    if ((!input.trim() && attachedFiles.length === 0) || loading) return;
 
-    const userMessage = { role: 'user', content: input };
+    const userMessage = { 
+      role: 'user', 
+      content: input || '📎 Arquivo(s) anexado(s)',
+      files: attachedFiles.map(f => ({ name: f.name, type: f.type }))
+    };
+    
     setMessages(prev => [...prev, userMessage]);
     setInput('');
+    const filesToSend = [...attachedFiles];
+    setAttachedFiles([]);
     setLoading(true);
 
     try {
-      const response = await chatWithAI(input);
+      const response = await chatWithAI(input || 'Analise o(s) arquivo(s) anexado(s)', '', filesToSend);
       
       const aiMessage = {
         role: 'assistant',
@@ -92,7 +105,7 @@ export default function AIChat({ isOpen, onClose }) {
       console.error('Erro no chat:', error);
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: 'Desculpe, ocorreu um erro. Tente novamente.'
+        content: 'Desculpe, ocorreu um erro ao processar os arquivos. Tente novamente.'
       }]);
     } finally {
       setLoading(false);
@@ -135,9 +148,8 @@ export default function AIChat({ isOpen, onClose }) {
       return;
     }
 
-    // Limpar texto de emojis e markdown para melhor pronúncia
     const cleanText = text
-      .replace(/[📚📅💡🎯✨🔥💪👋🤖]/g, '')
+      .replace(/[📚📅💡🎯✨🔥💪👋🤖📎🖼️📄💊🩺]/g, '')
       .replace(/\*\*/g, '')
       .replace(/\*/g, '')
       .replace(/#{1,6}\s/g, '');
@@ -152,6 +164,33 @@ export default function AIChat({ isOpen, onClose }) {
     utterance.onerror = () => setIsSpeaking(false);
 
     synthRef.current.speak(utterance);
+  };
+
+  // Anexar arquivos
+  const handleFileSelect = (e) => {
+    const files = Array.from(e.target.files);
+    const validFiles = files.filter(file => {
+      const isImage = file.type.startsWith('image/');
+      const isPDF = file.type === 'application/pdf';
+      const isValidSize = file.size <= 10 * 1024 * 1024; // 10MB
+
+      if (!isImage && !isPDF) {
+        alert(`${file.name}: Apenas imagens e PDFs são permitidos.`);
+        return false;
+      }
+      if (!isValidSize) {
+        alert(`${file.name}: Arquivo muito grande. Máximo 10MB.`);
+        return false;
+      }
+      return true;
+    });
+
+    setAttachedFiles(prev => [...prev, ...validFiles]);
+  };
+
+  // Remover arquivo anexado
+  const removeFile = (index) => {
+    setAttachedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   // Atalhos rápidos
@@ -226,7 +265,25 @@ export default function AIChat({ isOpen, onClose }) {
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">
-                  <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                  <div className="flex-1">
+                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                    
+                    {/* Mostrar arquivos anexados */}
+                    {message.files && message.files.length > 0 && (
+                      <div className="mt-2 space-y-1">
+                        {message.files.map((file, i) => (
+                          <div key={i} className="flex items-center gap-2 text-xs opacity-80">
+                            {file.type.startsWith('image/') ? (
+                              <PhotoIcon className="w-4 h-4" />
+                            ) : (
+                              <DocumentTextIcon className="w-4 h-4" />
+                            )}
+                            <span>{file.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   
                   {message.role === 'assistant' && (
                     <button
@@ -261,21 +318,67 @@ export default function AIChat({ isOpen, onClose }) {
           <div ref={messagesEndRef} />
         </div>
 
+        {/* Arquivos anexados */}
+        {attachedFiles.length > 0 && (
+          <div className="px-4 py-2 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-200 dark:border-gray-700">
+            <div className="flex items-center gap-2 flex-wrap">
+              {attachedFiles.map((file, index) => (
+                <div
+                  key={index}
+                  className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm"
+                >
+                  {file.type.startsWith('image/') ? (
+                    <PhotoIcon className="w-4 h-4 text-purple-600" />
+                  ) : (
+                    <DocumentTextIcon className="w-4 h-4 text-red-600" />
+                  )}
+                  <span className="text-gray-700 dark:text-gray-300 max-w-[150px] truncate">
+                    {file.name}
+                  </span>
+                  <button
+                    onClick={() => removeFile(index)}
+                    className="text-red-500 hover:text-red-700"
+                  >
+                    <TrashIcon className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Input */}
         <div className="p-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
           <div className="flex gap-2">
+            {/* Botão de anexar */}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="px-4 py-3 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-2xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-all"
+              title="Anexar arquivo (imagem ou PDF)"
+            >
+              <PaperClipIcon className="w-5 h-5" />
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,.pdf"
+              multiple
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+
             <div className="flex-1 relative">
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="Digite sua mensagem ou clique no microfone..."
+                placeholder="Digite sua mensagem ou anexe um arquivo..."
                 className="w-full px-4 py-3 pr-12 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 dark:text-white"
                 rows={1}
                 disabled={loading}
               />
               
-              {/* Botão de microfone dentro do input */}
+              {/* Botão de microfone */}
               <button
                 onClick={toggleRecording}
                 className={`absolute right-2 top-2 w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
@@ -291,7 +394,7 @@ export default function AIChat({ isOpen, onClose }) {
 
             <button
               onClick={handleSend}
-              disabled={!input.trim() || loading}
+              disabled={(!input.trim() && attachedFiles.length === 0) || loading}
               className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-2xl hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 font-medium shadow-lg"
             >
               <PaperAirplaneIcon className="w-5 h-5" />
