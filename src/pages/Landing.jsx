@@ -1,69 +1,65 @@
 import { ArrowRightIcon, CheckCircleIcon, SparklesIcon, ChartBarIcon, CalendarIcon, AcademicCapIcon, HeartIcon } from '@heroicons/react/24/outline';
 import { Link } from 'react-router-dom';
+import { useEffect } from 'react';
+import { landingData } from '../config/landingData';
 
 export default function Landing() {
-  const features = [
-    {
-      icon: CalendarIcon,
-      title: 'Calendário Inteligente',
-      description: 'Organize suas aulas, plantões e estudos em um só lugar com lembretes automáticos.'
-    },
-    {
-      icon: AcademicCapIcon,
-      title: 'Gestão de PBLs',
-      description: 'Gerencie Problem-Based Learning com templates prontos e recursos colaborativos.'
-    },
-    {
-      icon: ChartBarIcon,
-      title: 'Analytics Completo',
-      description: 'Acompanhe seu progresso com gráficos e relatórios detalhados de desempenho.'
-    },
-    {
-      icon: HeartIcon,
-      title: 'Saúde e Bem-estar',
-      description: 'Monitore sono, exercícios e alimentação para manter o equilíbrio na rotina intensa.'
-    },
-  ];
+  // ========== DETECTAR TEMA DO SISTEMA ==========
+  useEffect(() => {
+    const applySystemTheme = () => {
+      const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      
+      if (isDarkMode) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+      
+      console.log('🎨 Tema detectado:', isDarkMode ? 'Escuro' : 'Claro');
+    };
 
-  const benefits = [
-    'Economize até 10 horas por semana na organização',
-    'Nunca mais perca um prazo ou compromisso importante',
-    'Acompanhe seu progresso acadêmico em tempo real',
-    'Acesse de qualquer dispositivo - PWA instalável',
-    'Sincronização automática na nuvem',
-    'IA integrada para otimizar seus estudos',
-  ];
+    applySystemTheme();
+
+    const darkModeQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = (e) => {
+      if (e.matches) {
+        document.documentElement.classList.add('dark');
+        console.log('🎨 Mudou para tema escuro');
+      } else {
+        document.documentElement.classList.remove('dark');
+        console.log('🎨 Mudou para tema claro');
+      }
+    };
+
+    darkModeQuery.addEventListener('change', handleChange);
+
+    return () => {
+      darkModeQuery.removeEventListener('change', handleChange);
+    };
+  }, []);
+
+  // ========== DADOS DA LANDING (importados de landingData.js) ==========
+  
+  // Mapear features com seus ícones
+  const iconMap = [CalendarIcon, AcademicCapIcon, ChartBarIcon, HeartIcon];
+  const features = landingData.features.map((feature, index) => ({
+    ...feature,
+    icon: iconMap[index]
+  }));
+
+  const benefits = landingData.benefits;
 
   const stats = [
-    { value: '500+', label: 'Estudantes ativos' },
-    { value: '95%', label: 'Taxa de satisfação' },
-    { value: '10h', label: 'Economizadas/semana' },
-    { value: '4.9', label: 'Avaliação média' },
+    { value: landingData.stats.studentsActive.value, label: landingData.stats.studentsActive.label },
+    { value: landingData.stats.satisfactionRate.value, label: landingData.stats.satisfactionRate.label },
+    { value: landingData.stats.timeSaved.value, label: landingData.stats.timeSaved.label },
+    { value: landingData.stats.averageRating.value, label: landingData.stats.averageRating.label },
   ];
 
-  const testimonials = [
-    {
-      name: 'Ana Silva',
-      course: 'Medicina - 4º ano',
-      text: 'O MedPlanner transformou minha rotina! Consigo organizar tudo e ainda sobra tempo para cuidar da saúde.',
-      avatar: '👩‍⚕️'
-    },
-    {
-      name: 'Carlos Santos',
-      course: 'Medicina - 2º ano',
-      text: 'Melhor investimento que fiz. A gestão de PBLs é incrível e me ajuda demais nas apresentações.',
-      avatar: '👨‍⚕️'
-    },
-    {
-      name: 'Marina Costa',
-      course: 'Medicina - 5º ano',
-      text: 'Uso todos os dias! O analytics me mostra exatamente onde preciso focar mais atenção nos estudos.',
-      avatar: '👩‍🔬'
-    },
-  ];
+  const testimonials = landingData.testimonials;
 
   return (
-    <div className="min-h-screen bg-white dark:bg-gray-900">
+    <div className="min-h-screen bg-white dark:bg-gray-900 transition-colors duration-300">
       
       {/* Header/Navigation */}
       <nav className="fixed top-0 left-0 right-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-lg border-b border-gray-200 dark:border-gray-800 z-50">
