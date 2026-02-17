@@ -508,3 +508,16 @@ body,
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   opacity: 0.5;
 }
+/* Animação suave para o botão IA */
+@keyframes bounce-slow {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-bounce-slow {
+  animation: bounce-slow 3s ease-in-out infinite;
+}

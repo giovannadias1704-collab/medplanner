@@ -8,7 +8,6 @@ import StatsCard from '../components/StatsCard';
 import ProgressChart from '../components/ProgressChart';
 import InsightCard from '../components/InsightCard';
 import AIChat from '../components/AIChat';
-import TestGemini from '../components/TestGemini';
 import { isToday, isTomorrow } from '../utils/dateParser';
 import { daysUntil } from '../utils/helpers';
 import { calculateDashboardStats, calculateTaskStats } from '../utils/statsCalculator';
@@ -39,8 +38,7 @@ export default function Dashboard() {
   
   const { onboardingData } = useOnboarding();
   const [showAIChat, setShowAIChat] = useState(false);
-  const [showTest, setShowTest] = useState(false);
-
+  
   // ========== NOVO: CALCULAR ESTATÍSTICAS ==========
   const dashboardStats = useMemo(() => 
     calculateDashboardStats(events, tasks, homeTasks, bills, studySchedule, waterLogs, settings),
@@ -465,14 +463,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Botão de Teste */}
-      <button
-        onClick={() => setShowTest(true)}
-        className="fixed bottom-24 right-6 w-16 h-16 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-full shadow-2xl hover:scale-110 transition-transform flex items-center justify-center z-40"
-        title="Testar Gemini"
-      >
-        🧪
-      </button>
+     
 
       {/* Botão Flutuante de IA */}
       <button
@@ -483,8 +474,6 @@ export default function Dashboard() {
         <SparklesIcon className="h-8 w-8" />
       </button>
 
-      {/* Modal de Teste */}
-      {showTest && <TestGemini />}
 
       {/* Modal do Chat IA */}
       <AIChat isOpen={showAIChat} onClose={() => setShowAIChat(false)} />

@@ -23,6 +23,7 @@ import InstallPWA from './components/InstallPWA';
 import NotificationToast from './components/NotificationToast';
 import PaymentBlockedScreen from './components/PaymentBlockedScreen';
 import PaymentProofModal from './components/PaymentProofModal';
+import GlobalAIButton from './components/GlobalAIButton';
 
 function AppContent() {
   const { user, loading } = useAuth();
@@ -130,6 +131,9 @@ function AppContent() {
 
         {/* Modal de Upload de Comprovante */}
         {user && showPaymentModal && <PaymentProofModal />}
+
+        {/* Botão Global de IA - Aparece em todas as páginas autenticadas */}
+        {user && <GlobalAIButton />}
       </div>
     </Router>
   );
