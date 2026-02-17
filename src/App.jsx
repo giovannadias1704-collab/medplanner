@@ -14,6 +14,7 @@ import Finances from './pages/Finances';
 import Home from './pages/Home';
 import Wellness from './pages/Wellness';
 import Analytics from './pages/Analytics';
+import Pricing from './pages/Pricing';
 import Settings from './pages/Settings';
 import Navigation from './components/Navigation';
 import InstallPWA from './components/InstallPWA';
@@ -88,6 +89,11 @@ function AppContent() {
               <Analytics />
             </ProtectedRoute>
           } />
+          <Route path="/pricing" element={
+            <ProtectedRoute>
+              <Pricing />
+            </ProtectedRoute>
+          } />
           <Route path="/settings" element={
             <ProtectedRoute>
               <Settings />
@@ -96,7 +102,7 @@ function AppContent() {
           <Route path="/" element={<Navigate to={user ? "/dashboard" : "/auth"} />} />
         </Routes>
 
-        {/* ========== NOVO: COMPONENTES GLOBAIS ========== */}
+        {/* COMPONENTES GLOBAIS */}
         {user && <InstallPWA />}
         
         {/* Toast de Notificações */}
