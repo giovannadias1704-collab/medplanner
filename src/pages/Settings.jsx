@@ -1,10 +1,11 @@
 import { useState, useContext, useRef, useEffect } from 'react';
 import { AppContext } from '../context/AppContext';
 import { useOnboarding } from '../hooks/useOnboarding';
+import { changePassword } from '../services/auth';
 import PageHeader from '../components/PageHeader';
 import ThemeSelector from '../components/ThemeSelector';
 import { applyTheme, getStoredTheme } from '../utils/themeManager';
-import { auth } from '../services/firebase';
+import { auth } from '../config/firebase';
 import { signOut } from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -26,30 +27,28 @@ import {
   XMarkIcon,
   PencilSquareIcon,
   ArrowPathIcon,
-  AcademicCapIcon,
-  ClockIcon,
-  HeartIcon,
-  BanknotesIcon,
-  Cog6ToothIcon
+  LockClosedIcon,
+  KeyIcon
 } from '@heroicons/react/24/outline';
 
 export default function Settings() {
+  const context = useContext(AppContext);
+  
+  // Destructure com fallbacks seguros
   const { 
     user,
-    userProfile,
-    settings,
+    userProfile = {},
+    settings = {},
     updateUserProfile,
     uploadProfilePhoto,
     updateTheme,
     updateSettings,
     processPDFWithAI,
     exportAllData,
-    addEvent,
-    // ========== NOVO: FUNÇÕES DE NOTIFICAÇÃO ==========
     notificationPermission,
     requestNotificationPermission,
     clearOldNotifications
-  } = useContext(AppContext);
+  } = context || {};
 
   const { onboardingData, resetOnboarding } = useOnboarding();
   const navigate = useNavigate();
@@ -79,6 +78,14 @@ export default function Settings() {
   const [processingPDF, setProcessingPDF] = useState(false);
   const [editingName, setEditingName] = useState(false);
   
+  // ========== NOVO: ESTADO PARA ALTERAÇÃO DE SENHA ==========
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+  
   // Estado para temas personalizados
   const [selectedTheme, setSelectedTheme] = useState(() => getStoredTheme());
 
@@ -95,7 +102,6 @@ export default function Settings() {
   useEffect(() => {
     if (settings) {
       setLocalSettings(settings);
-      // Aplicar tema ao carregar
       if (settings.theme === 'dark') {
         document.documentElement.classList.add('dark');
       } else {
@@ -135,21 +141,58 @@ export default function Settings() {
     }
   };
 
+  // ========== NOVO: ALTERAR SENHA ==========
+  const handleChangePassword = async () => {
+    // Validações
+    if (!passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmPassword) {
+      alert('⚠️ Preencha todos os campos!');
+      return;
+    }
+
+    if (passwordData.newPassword.length < 6) {
+      alert('⚠️ A nova senha deve ter pelo menos 6 caracteres!');
+      return;
+    }
+
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      alert('⚠️ As senhas não coincidem!');
+      return;
+    }
+
+    try {
+      const result = await changePassword(passwordData.currentPassword, passwordData.newPassword);
+      
+      if (result.success) {
+        alert('✅ Senha alterada com sucesso!');
+        setChangingPassword(false);
+        setPasswordData({
+          currentPassword: '',
+          newPassword: '',
+          confirmPassword: ''
+        });
+      } else {
+        alert(`❌ ${result.message}`);
+      }
+    } catch (error) {
+      alert('❌ Erro ao alterar senha. Verifique sua senha atual.');
+    }
+  };
+
   const handleThemeChange = async (newTheme) => {
     try {
-      await updateTheme(newTheme);
+      if (updateTheme) {
+        await updateTheme(newTheme);
+      }
       setLocalSettings(prev => ({ ...prev, theme: newTheme }));
     } catch (error) {
       alert('Erro ao alterar tema');
     }
   };
 
-  // Nova função para temas personalizados
   const handleThemeChangeNew = (newTheme) => {
     setSelectedTheme(newTheme);
     applyTheme(newTheme);
     
-    // Se tiver a função antiga do context, chame também para modo dark/light
     if (updateTheme) {
       updateTheme(newTheme === 'dark' ? 'dark' : 'light');
     }
@@ -157,48 +200,53 @@ export default function Settings() {
 
   const handleSettingChange = async (key, value) => {
     try {
-      const newSettings = { ...localSettings, [key]: value };
-      await updateSettings(newSettings);
-      setLocalSettings(newSettings);
+      if (updateSettings) {
+        const newSettings = { ...localSettings, [key]: value };
+        await updateSettings(newSettings);
+        setLocalSettings(newSettings);
+      }
     } catch (error) {
       alert('Erro ao atualizar configuração');
     }
   };
 
-  // ========== NOVO: ATUALIZAR TIPO DE NOTIFICAÇÃO ==========
   const handleNotificationTypeChange = async (type, value) => {
     try {
-      const newSettings = {
-        ...localSettings,
-        notificationTypes: {
-          ...localSettings.notificationTypes,
-          [type]: value
-        }
-      };
-      await updateSettings(newSettings);
-      setLocalSettings(newSettings);
+      if (updateSettings) {
+        const newSettings = {
+          ...localSettings,
+          notificationTypes: {
+            ...localSettings.notificationTypes,
+            [type]: value
+          }
+        };
+        await updateSettings(newSettings);
+        setLocalSettings(newSettings);
+      }
     } catch (error) {
       alert('Erro ao atualizar tipo de notificação');
     }
   };
 
-  // ========== NOVO: SOLICITAR PERMISSÃO ==========
   const handleRequestPermission = async () => {
-    const permission = await requestNotificationPermission();
-    
-    if (permission === 'granted') {
-      alert('✅ Permissão concedida! Você receberá notificações do MedPlanner.');
-    } else if (permission === 'denied') {
-      alert('❌ Permissão negada. Você pode ativar nas configurações do navegador.');
+    if (requestNotificationPermission) {
+      const permission = await requestNotificationPermission();
+      
+      if (permission === 'granted') {
+        alert('✅ Permissão concedida! Você receberá notificações do MedPlanner.');
+      } else if (permission === 'denied') {
+        alert('❌ Permissão negada. Você pode ativar nas configurações do navegador.');
+      }
     }
   };
 
-  // ========== NOVO: LIMPAR NOTIFICAÇÕES ANTIGAS ==========
   const handleClearOldNotifications = async () => {
     if (confirm('Deseja limpar notificações com mais de 30 dias?')) {
       try {
-        const count = await clearOldNotifications();
-        alert(`✅ ${count} notificação(ões) antiga(s) removida(s)!`);
+        if (clearOldNotifications) {
+          const count = await clearOldNotifications();
+          alert(`✅ ${count} notificação(ões) antiga(s) removida(s)!`);
+        }
       } catch (error) {
         alert('Erro ao limpar notificações');
       }
@@ -217,7 +265,9 @@ export default function Settings() {
     try {
       setProcessingPDF(true);
       
-      const result = await processPDFWithAI(file);
+      if (processPDFWithAI) {
+        await processPDFWithAI(file);
+      }
       
       alert(`PDF processado! 
       
@@ -258,8 +308,10 @@ Funcionalidade em desenvolvimento! 🚀`);
 
   const handleExportData = () => {
     try {
-      exportAllData();
-      alert('Dados exportados com sucesso! ✅');
+      if (exportAllData) {
+        exportAllData();
+        alert('Dados exportados com sucesso! ✅');
+      }
     } catch (error) {
       alert('Erro ao exportar dados');
     }
@@ -276,214 +328,6 @@ Funcionalidade em desenvolvimento! 🚀`);
 
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
         
-        {/* ========== SEÇÃO: DADOS DO ONBOARDING ========== */}
-        <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden animate-fade-in">
-          <div className="bg-gradient-to-r from-indigo-500 to-purple-600 px-6 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <UserCircleIcon className="w-6 h-6 text-white" />
-              <h2 className="text-xl font-bold text-white">Questionário Inicial</h2>
-            </div>
-            {onboardingData && (
-              <button
-                onClick={handleRefreshOnboarding}
-                className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg text-white font-semibold transition-all"
-              >
-                <PencilSquareIcon className="w-5 h-5" />
-                Editar
-              </button>
-            )}
-          </div>
-
-          <div className="p-6">
-            {onboardingData ? (
-              <div className="space-y-6">
-                
-                {/* Informações Básicas */}
-                {(onboardingData.name || onboardingData.semester || onboardingData.university) && (
-                  <div>
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                      <span className="text-2xl">👤</span>
-                      Informações Básicas
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {onboardingData.name && <InfoCard label="Nome" value={onboardingData.name} />}
-                      {onboardingData.semester && <InfoCard label="Semestre" value={`${onboardingData.semester}º`} />}
-                      {onboardingData.university && <InfoCard label="Faculdade" value={onboardingData.university} span2 />}
-                    </div>
-                  </div>
-                )}
-
-                {/* Rotina */}
-                {(onboardingData.sleepTime || onboardingData.wakeTime) && (
-                  <>
-                    <div className="border-t border-gray-200 dark:border-gray-700"></div>
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                        <span className="text-2xl">🕐</span>
-                        Rotina
-                      </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {onboardingData.sleepTime && <InfoCard label="Horário de dormir" value={onboardingData.sleepTime} />}
-                        {onboardingData.wakeTime && <InfoCard label="Horário de acordar" value={onboardingData.wakeTime} />}
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* Estilo de Estudo */}
-                {(onboardingData.studyTime || onboardingData.studyHoursPerDay || (onboardingData.studyTechniques && onboardingData.studyTechniques.length > 0)) && (
-                  <>
-                    <div className="border-t border-gray-200 dark:border-gray-700"></div>
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                        <span className="text-2xl">📚</span>
-                        Estilo de Estudo
-                      </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {onboardingData.studyTime && <InfoCard label="Horário preferido" value={onboardingData.studyTime} />}
-                        {onboardingData.studyHoursPerDay && <InfoCard label="Horas de estudo/dia" value={`${onboardingData.studyHoursPerDay}h`} />}
-                        {onboardingData.studyTechniques && onboardingData.studyTechniques.length > 0 && (
-                          <InfoCard 
-                            label="Técnicas de estudo" 
-                            value={onboardingData.studyTechniques.join(', ')} 
-                            span2 
-                          />
-                        )}
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* Objetivos */}
-                {(onboardingData.focusResidency || onboardingData.residencyArea || onboardingData.importantExam || onboardingData.shortTermGoals) && (
-                  <>
-                    <div className="border-t border-gray-200 dark:border-gray-700"></div>
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                        <span className="text-2xl">🎯</span>
-                        Objetivos
-                      </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {onboardingData.focusResidency && <InfoCard label="Foco em residência" value={onboardingData.focusResidency} />}
-                        {onboardingData.residencyArea && <InfoCard label="Área de residência" value={onboardingData.residencyArea} />}
-                        {onboardingData.importantExam && <InfoCard label="Prova importante" value={onboardingData.importantExam} />}
-                        {onboardingData.shortTermGoals && <InfoCard label="Metas de curto prazo" value={onboardingData.shortTermGoals} span2 />}
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* Saúde e Bem-Estar */}
-                {(onboardingData.exerciseFrequency || onboardingData.idealSleepHours || onboardingData.selfCareRoutine || onboardingData.psychologicalSupport || onboardingData.waterGoal) && (
-                  <>
-                    <div className="border-t border-gray-200 dark:border-gray-700"></div>
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                        <span className="text-2xl">❤️</span>
-                        Saúde e Bem-Estar
-                      </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {onboardingData.exerciseFrequency && <InfoCard label="Frequência de exercícios" value={onboardingData.exerciseFrequency} />}
-                        {onboardingData.idealSleepHours && <InfoCard label="Horas de sono ideais" value={onboardingData.idealSleepHours} />}
-                        {onboardingData.selfCareRoutine && <InfoCard label="Rotina de autocuidado" value={onboardingData.selfCareRoutine} />}
-                        {onboardingData.psychologicalSupport && <InfoCard label="Acompanhamento psicológico" value={onboardingData.psychologicalSupport} />}
-                        {onboardingData.waterGoal && <InfoCard label="Meta de água/dia" value={`${onboardingData.waterGoal}L`} />}
-                        <InfoCard label="Acompanha peso" value={onboardingData.trackWeight ? 'Sim' : 'Não'} />
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* Finanças */}
-                {(onboardingData.monthlyBudget || onboardingData.budgetAmount || (onboardingData.expenseCategories && onboardingData.expenseCategories.length > 0) || (onboardingData.recurringBills && onboardingData.recurringBills.length > 0)) && (
-                  <>
-                    <div className="border-t border-gray-200 dark:border-gray-700"></div>
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                        <span className="text-2xl">💰</span>
-                        Organização Financeira
-                      </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {onboardingData.monthlyBudget && <InfoCard label="Orçamento mensal" value={onboardingData.monthlyBudget} />}
-                        {onboardingData.budgetAmount && <InfoCard label="Valor do orçamento" value={onboardingData.budgetAmount} />}
-                        {onboardingData.expenseCategories && onboardingData.expenseCategories.length > 0 && (
-                          <InfoCard 
-                            label="Categorias de gastos" 
-                            value={onboardingData.expenseCategories.join(', ')} 
-                            span2 
-                          />
-                        )}
-                        {onboardingData.recurringBills && onboardingData.recurringBills.length > 0 && (
-                          <InfoCard 
-                            label="Contas recorrentes" 
-                            value={onboardingData.recurringBills.join(', ')} 
-                            span2 
-                          />
-                        )}
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* Preferências do App */}
-                {(onboardingData.wantsNotifications || onboardingData.notificationTime || onboardingData.theme || onboardingData.language || onboardingData.aiMode) && (
-                  <>
-                    <div className="border-t border-gray-200 dark:border-gray-700"></div>
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                        <span className="text-2xl">⚙️</span>
-                        Preferências do App
-                      </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {onboardingData.wantsNotifications && <InfoCard label="Notificações" value={onboardingData.wantsNotifications === 'sim' ? 'Ativadas' : 'Desativadas'} />}
-                        {onboardingData.notificationTime && <InfoCard label="Horário de notificações" value={onboardingData.notificationTime} />}
-                        {onboardingData.theme && <InfoCard label="Tema" value={onboardingData.theme} />}
-                        {onboardingData.language && <InfoCard label="Idioma" value={onboardingData.language} />}
-                        {onboardingData.aiMode && <InfoCard label="Modo da IA" value={onboardingData.aiMode === 'confirm' ? 'Confirmar sempre' : 'Automático'} span2 />}
-                      </div>
-                    </div>
-                  </>
-                )}
-
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <div className="inline-block p-4 bg-gray-100 dark:bg-gray-700 rounded-full mb-4">
-                  <span className="text-4xl">📋</span>
-                </div>
-                <p className="text-gray-600 dark:text-gray-400 mb-4 font-medium">
-                  Você ainda não completou o questionário inicial.
-                </p>
-                <button
-                  onClick={() => navigate('/onboarding')}
-                  className="px-6 py-3 bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 text-white rounded-xl font-semibold transition-all shadow-lg"
-                >
-                  Completar Agora
-                </button>
-              </div>
-            )}
-          </div>
-
-          {onboardingData && (
-            <div className="bg-gray-50 dark:bg-gray-900/50 px-6 py-4 flex flex-col sm:flex-row gap-3">
-              <button
-                onClick={handleRefreshOnboarding}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 text-white rounded-xl font-semibold transition-all shadow-lg"
-              >
-                <PencilSquareIcon className="w-5 h-5" />
-                Refazer Questionário
-              </button>
-              <button
-                onClick={handleResetOnboarding}
-                className="flex items-center justify-center gap-2 px-4 py-3 border-2 border-red-500 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl font-semibold transition-all"
-              >
-                <ArrowPathIcon className="w-5 h-5" />
-                Resetar Tudo
-              </button>
-            </div>
-          )}
-        </section>
-
         {/* Perfil do Usuário */}
         <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 animate-fade-in">
           <div className="p-6">
@@ -501,7 +345,7 @@ Funcionalidade em desenvolvimento! 🚀`);
               </div>
             </div>
 
-            <div className="flex items-start gap-6">
+            <div className="flex items-start gap-6 mb-6">
               {/* Foto de Perfil */}
               <div className="relative">
                 <div className="w-28 h-28 rounded-2xl overflow-hidden bg-gradient-to-br from-gray-200 to-gray-300 dark:from-gray-700 dark:to-gray-600 flex items-center justify-center shadow-lg">
@@ -518,7 +362,7 @@ Funcionalidade em desenvolvimento! 🚀`);
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploadingPhoto}
-                  className="absolute -bottom-2 -right-2 p-3 bg-gradient-to-br from-primary-600 to-primary-700 text-white rounded-xl hover:from-primary-700 hover:to-primary-800 transition-all shadow-xl disabled:opacity-50 hover-lift"
+                  className="absolute -bottom-2 -right-2 p-3 bg-gradient-to-br from-primary-600 to-primary-700 text-white rounded-xl hover:from-primary-700 hover:to-primary-800 transition-all shadow-xl disabled:opacity-50"
                 >
                   {uploadingPhoto ? (
                     <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></div>
@@ -590,11 +434,88 @@ Funcionalidade em desenvolvimento! 🚀`);
                 </div>
               </div>
             </div>
+
+            {/* ========== NOVO: SEÇÃO DE ALTERAÇÃO DE SENHA ========== */}
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-xl flex items-center justify-center">
+                    <LockClosedIcon className="h-5 w-5 text-red-600 dark:text-red-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                      Segurança
+                    </h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Altere sua senha
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setChangingPassword(!changingPassword)}
+                  className="px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-xl hover:from-red-700 hover:to-red-800 transition-all font-medium flex items-center gap-2 shadow-lg"
+                >
+                  <KeyIcon className="h-5 w-5" />
+                  {changingPassword ? 'Cancelar' : 'Alterar Senha'}
+                </button>
+              </div>
+
+              {changingPassword && (
+                <div className="space-y-4 p-5 bg-gray-50 dark:bg-gray-700/50 rounded-xl animate-fade-in">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                      Senha Atual
+                    </label>
+                    <input
+                      type="password"
+                      value={passwordData.currentPassword}
+                      onChange={(e) => setPasswordData(prev => ({ ...prev, currentPassword: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:text-white transition-all"
+                      placeholder="Digite sua senha atual"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                      Nova Senha
+                    </label>
+                    <input
+                      type="password"
+                      value={passwordData.newPassword}
+                      onChange={(e) => setPasswordData(prev => ({ ...prev, newPassword: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:text-white transition-all"
+                      placeholder="Digite a nova senha (mín. 6 caracteres)"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                      Confirmar Nova Senha
+                    </label>
+                    <input
+                      type="password"
+                      value={passwordData.confirmPassword}
+                      onChange={(e) => setPasswordData(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:text-white transition-all"
+                      placeholder="Confirme a nova senha"
+                    />
+                  </div>
+
+                  <button
+                    onClick={handleChangePassword}
+                    className="w-full py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-xl hover:from-green-700 hover:to-green-800 transition-all font-bold shadow-lg flex items-center justify-center gap-2"
+                  >
+                    <CheckIcon className="h-5 w-5" />
+                    Confirmar Alteração de Senha
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </section>
 
         {/* Aparência */}
-        <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 animate-fade-in" style={{ animationDelay: '0.1s' }}>
+        <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 animate-fade-in">
           <div className="p-6">
             <div className="flex items-center gap-3 mb-5">
               <div className="w-12 h-12 bg-gradient-to-br from-yellow-500 to-orange-600 rounded-2xl flex items-center justify-center shadow-lg">
@@ -605,7 +526,7 @@ Funcionalidade em desenvolvimento! 🚀`);
                   Aparência
                 </h2>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Escolha seu tema favorito (8 opções disponíveis!)
+                  Escolha seu tema favorito
                 </p>
               </div>
             </div>
@@ -617,480 +538,20 @@ Funcionalidade em desenvolvimento! 🚀`);
           </div>
         </section>
 
-        {/* ========== NOVA SEÇÃO: NOTIFICAÇÕES ========== */}
-        <section className="bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 rounded-2xl shadow-lg border-2 border-yellow-200 dark:border-yellow-800 animate-fade-in" style={{ animationDelay: '0.15s' }}>
-          <div className="p-6">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-12 h-12 bg-gradient-to-br from-yellow-500 to-amber-600 rounded-2xl flex items-center justify-center shadow-lg">
-                <BellIcon className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                  Notificações
-                </h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Gerencie alertas e lembretes
-                </p>
-              </div>
-            </div>
-
-            {/* Status da Permissão */}
-            <div className="mb-5 p-5 bg-white dark:bg-gray-800 rounded-xl">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <p className="font-semibold text-gray-900 dark:text-white mb-1">
-                    Permissão do Navegador
-                  </p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    {notificationPermission === 'granted' && '✅ Ativada - Você receberá notificações'}
-                    {notificationPermission === 'denied' && '❌ Negada - Ative nas configurações do navegador'}
-                    {notificationPermission === 'default' && '⏳ Não solicitada ainda'}
-                  </p>
-                </div>
-                {notificationPermission !== 'granted' && (
-                  <button
-                    onClick={handleRequestPermission}
-                    className="px-4 py-2 bg-gradient-to-r from-yellow-500 to-amber-600 text-white rounded-lg font-semibold hover:from-yellow-600 hover:to-amber-700 transition-all shadow-lg"
-                  >
-                    Ativar
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Tipos de Notificações */}
-            <div className="space-y-3">
-              <p className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-3">
-                Receber notificações de:
-              </p>
-
-              {/* Eventos */}
-              <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-xl">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center">
-                    <span className="text-xl">📅</span>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900 dark:text-white">
-                      Eventos
-                    </p>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
-                      Lembrete 1 dia antes
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleNotificationTypeChange('events', !localSettings.notificationTypes?.events)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    localSettings.notificationTypes?.events ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                      localSettings.notificationTypes?.events ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </div>
-
-              {/* Tarefas */}
-              <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-xl">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center">
-                    <span className="text-xl">✅</span>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900 dark:text-white">
-                      Tarefas
-                    </p>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
-                      Tarefas atrasadas
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleNotificationTypeChange('tasks', !localSettings.notificationTypes?.tasks)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    localSettings.notificationTypes?.tasks ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                      localSettings.notificationTypes?.tasks ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </div>
-
-              {/* Contas */}
-              <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-xl">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-orange-100 dark:bg-orange-900/30 rounded-xl flex items-center justify-center">
-                    <span className="text-xl">💰</span>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900 dark:text-white">
-                      Contas
-                    </p>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
-                      3 dias antes do vencimento
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleNotificationTypeChange('bills', !localSettings.notificationTypes?.bills)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    localSettings.notificationTypes?.bills ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                      localSettings.notificationTypes?.bills ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </div>
-
-              {/* Água */}
-              <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-xl">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-cyan-100 dark:bg-cyan-900/30 rounded-xl flex items-center justify-center">
-                    <span className="text-xl">💧</span>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900 dark:text-white">
-                      Hidratação
-                    </p>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
-                      A cada 2 horas (8h-20h)
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleNotificationTypeChange('water', !localSettings.notificationTypes?.water)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    localSettings.notificationTypes?.water ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                      localSettings.notificationTypes?.water ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </div>
-
-              {/* Estudos */}
-              <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-xl">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-xl flex items-center justify-center">
-                    <span className="text-xl">📚</span>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900 dark:text-white">
-                      Estudos
-                    </p>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
-                      Revisões e cronograma
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleNotificationTypeChange('study', !localSettings.notificationTypes?.study)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    localSettings.notificationTypes?.study ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                      localSettings.notificationTypes?.study ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </div>
-            </div>
-
-            {/* Botão de Limpeza */}
-            <div className="mt-5 pt-5 border-t border-gray-200 dark:border-gray-700">
-              <button
-                onClick={handleClearOldNotifications}
-                className="w-full py-3 border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 font-semibold transition-all flex items-center justify-center gap-2"
-              >
-                <TrashIcon className="w-5 h-5" />
-                Limpar Notificações Antigas (30+ dias)
-              </button>
-            </div>
-          </div>
-        </section>
-
-        {/* Inteligência Artificial */}
-        <section className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-2xl shadow-lg border-2 border-purple-200 dark:border-purple-800 animate-fade-in" style={{ animationDelay: '0.2s' }}>
-          <div className="p-6">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl flex items-center justify-center shadow-lg">
-                <SparklesIcon className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                  Inteligência Artificial
-                </h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Configurações de IA
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-5 bg-white dark:bg-gray-800 rounded-xl shadow-sm">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-xl flex items-center justify-center">
-                    <span className="text-xl">🤖</span>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900 dark:text-white">
-                      Auto-save
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Salvar sem confirmar
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleSettingChange('aiAutoSave', !localSettings.aiAutoSave)}
-                  className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors shadow-inner ${
-                    localSettings.aiAutoSave ? 'bg-gradient-to-r from-primary-600 to-primary-700' : 'bg-gray-300 dark:bg-gray-600'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition-transform ${
-                      localSettings.aiAutoSave ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Upload de PDF com IA */}
-        <section className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 rounded-2xl shadow-lg border-2 border-blue-200 dark:border-blue-800 animate-fade-in" style={{ animationDelay: '0.3s' }}>
-          <div className="p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-2xl flex items-center justify-center shadow-lg">
-                <DocumentArrowUpIcon className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                  Importar PDF com IA
-                </h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Extração automática de eventos
-                </p>
-              </div>
-            </div>
-
-            <div className="mb-4 p-4 bg-white dark:bg-gray-800 rounded-xl">
-              <p className="text-sm text-gray-700 dark:text-gray-300 mb-2 font-medium">
-                📄 Faça upload de cronogramas ou calendários em PDF
-              </p>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Nossa IA vai extrair automaticamente eventos, provas e compromissos! 🤖✨
-              </p>
-            </div>
-
-            <button
-              onClick={() => pdfInputRef.current?.click()}
-              disabled={processingPDF}
-              className="w-full py-6 border-2 border-dashed border-blue-300 dark:border-blue-700 rounded-2xl hover:border-blue-500 dark:hover:border-blue-500 transition-all bg-white dark:bg-gray-800 disabled:opacity-50 hover-lift"
-            >
-              {processingPDF ? (
-                <div className="flex flex-col items-center gap-3">
-                  <div className="animate-spin h-8 w-8 border-3 border-blue-600 border-t-transparent rounded-full"></div>
-                  <span className="text-blue-600 dark:text-blue-400 font-bold">
-                    Processando PDF...
-                  </span>
-                  <span className="text-xs text-gray-500">
-                    Isso pode levar alguns segundos
-                  </span>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center gap-3">
-                  <DocumentArrowUpIcon className="h-14 w-14 text-blue-500" />
-                  <p className="text-blue-600 dark:text-blue-400 font-bold text-lg">
-                    Clique para selecionar PDF
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    ou arraste e solte aqui
-                  </p>
-                </div>
-              )}
-            </button>
-            <input
-              ref={pdfInputRef}
-              type="file"
-              accept="application/pdf"
-              onChange={handlePDFUpload}
-              className="hidden"
-            />
-          </div>
-        </section>
-
-        {/* Outras Configurações */}
-        <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 animate-fade-in" style={{ animationDelay: '0.4s' }}>
-          <div className="p-6">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center shadow-lg">
-                <span className="text-2xl">🎛️</span>
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                  Preferências
-                </h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Ajuste o app ao seu estilo
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              {/* Moeda */}
-              <div className="flex items-center justify-between p-5 bg-gray-50 dark:bg-gray-700/50 rounded-xl hover-lift transition-all">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center">
-                    <CurrencyDollarIcon className="h-5 w-5 text-green-600 dark:text-green-400" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900 dark:text-white">
-                      Moeda
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Formato de valores
-                    </p>
-                  </div>
-                </div>
-                <select
-                  value={localSettings.currency}
-                  onChange={(e) => handleSettingChange('currency', e.target.value)}
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white font-medium transition-all"
-                >
-                  <option value="BRL">🇧🇷 BRL (R$)</option>
-                  <option value="USD">🇺🇸 USD ($)</option>
-                  <option value="EUR">🇪🇺 EUR (€)</option>
-                </select>
-              </div>
-
-              {/* Início da Semana */}
-              <div className="flex items-center justify-between p-5 bg-gray-50 dark:bg-gray-700/50 rounded-xl hover-lift transition-all">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center">
-                    <CalendarIcon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900 dark:text-white">
-                      Início da Semana
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Calendário
-                    </p>
-                  </div>
-                </div>
-                <select
-                  value={localSettings.weekStartsOn}
-                  onChange={(e) => handleSettingChange('weekStartsOn', e.target.value)}
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white font-medium transition-all"
-                >
-                  <option value="monday">Segunda-feira</option>
-                  <option value="sunday">Domingo</option>
-                </select>
-              </div>
-
-              {/* Meta de Água */}
-              <div className="flex items-center justify-between p-5 bg-gray-50 dark:bg-gray-700/50 rounded-xl hover-lift transition-all">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-cyan-100 dark:bg-cyan-900/30 rounded-xl flex items-center justify-center">
-                    <BeakerIcon className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900 dark:text-white">
-                      Meta de Água
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Litros por dia
-                    </p>
-                  </div>
-                </div>
-                <input
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  max="10"
-                  value={localSettings.waterGoal}
-                  onChange={(e) => handleSettingChange('waterGoal', parseFloat(e.target.value))}
-                  className="w-24 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white text-center font-bold transition-all"
-                />
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Backup e Dados */}
-        <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 animate-fade-in" style={{ animationDelay: '0.5s' }}>
-          <div className="p-6">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg">
-                <ArrowDownTrayIcon className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                  Backup e Dados
-                </h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Exporte suas informações
-                </p>
-              </div>
-            </div>
-
-            <button
-              onClick={handleExportData}
-              className="w-full py-4 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-xl hover:from-primary-700 hover:to-primary-800 transition-all font-bold flex items-center justify-center gap-2 shadow-lg hover-lift"
-            >
-              <ArrowDownTrayIcon className="h-5 w-5" />
-              Exportar Todos os Dados (JSON)
-            </button>
-          </div>
-        </section>
-
         {/* Sair */}
         <button
           onClick={handleLogout}
-          className="w-full flex items-center justify-center gap-3 py-4 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-2xl hover:from-red-700 hover:to-red-800 transition-all font-bold shadow-xl hover-lift animate-fade-in"
-          style={{ animationDelay: '0.6s' }}
+          className="w-full flex items-center justify-center gap-3 py-4 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-2xl hover:from-red-700 hover:to-red-800 transition-all font-bold shadow-xl animate-fade-in"
         >
           <ArrowRightOnRectangleIcon className="h-6 w-6" />
           Sair da Conta
         </button>
 
         {/* Versão */}
-        <div className="text-center text-sm text-gray-500 dark:text-gray-400 pt-6 animate-fade-in" style={{ animationDelay: '0.7s' }}>
+        <div className="text-center text-sm text-gray-500 dark:text-gray-400 pt-6 animate-fade-in">
           <p className="font-medium mb-1">MedPlanner v1.0.0</p>
           <p>Feito com 💙 para estudantes de medicina</p>
         </div>
-      </div>
-    </div>
-  );
-}
-
-// Componente auxiliar para exibir informações
-function InfoCard({ label, value, span2 = false }) {
-  return (
-    <div className={`${span2 ? 'md:col-span-2' : ''}`}>
-      <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-        {label}
-      </label>
-      <div className="px-4 py-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700">
-        <p className="text-gray-900 dark:text-white font-medium">
-          {value}
-        </p>
       </div>
     </div>
   );

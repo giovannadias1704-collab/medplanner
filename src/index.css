@@ -508,6 +508,7 @@ body,
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   opacity: 0.5;
 }
+
 /* Animação suave para o botão IA */
 @keyframes bounce-slow {
   0%, 100% {
@@ -520,4 +521,68 @@ body,
 
 .animate-bounce-slow {
   animation: bounce-slow 3s ease-in-out infinite;
+}
+/* Esconder scrollbar mas manter funcionalidade */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Suporte para área segura (iPhone com notch) */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+/* ========== GARANTIR NAVEGAÇÃO SEMPRE CLICÁVEL ========== */
+
+/* Navegação tem prioridade máxima */
+nav {
+  z-index: 9999 !important;
+  pointer-events: auto !important;
+  position: fixed !important;
+}
+
+/* Todos os links da navegação são clicáveis */
+nav a {
+  pointer-events: auto !important;
+  position: relative !important;
+  z-index: 10000 !important;
+  cursor: pointer !important;
+}
+
+/* ========== CRÍTICO: ÍCONES NÃO BLOQUEIAM CLIQUES ========== */
+nav a svg,
+nav a span {
+  pointer-events: none !important;
+}
+
+/* Garantir que toda a área do link é clicável */
+nav a * {
+  pointer-events: none !important;
+}
+
+/* Botão de IA fica abaixo da navegação */
+button[aria-label="Abrir Assistente IA"] {
+  z-index: 40 !important;
+  pointer-events: auto !important;
+}
+
+/* Garantir que nada bloqueia a navegação mobile */
+@media (max-width: 768px) {
+  nav {
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+  }
+  
+  /* Mobile: garantir que toda área do link funciona */
+  nav a {
+    display: flex !important;
+    pointer-events: auto !important;
+  }
 }

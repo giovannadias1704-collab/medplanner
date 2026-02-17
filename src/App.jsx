@@ -105,11 +105,14 @@ function AppContent() {
               <Analytics />
             </ProtectedRoute>
           } />
-          <Route path="/settings" element={
-            <ProtectedRoute>
-              <Settings />
-            </ProtectedRoute>
-          } />
+          // Deve ter isso:
+<Route path="/settings" element={
+  <ProtectedRoute>
+    <Settings />
+  </ProtectedRoute>
+} />
+
+// Se não tiver, adicione!
           
           {/* Rota raiz - Landing ou Dashboard */}
           <Route path="/" element={user ? <Navigate to="/dashboard" /> : <Landing />} />
