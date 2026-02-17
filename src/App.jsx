@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AppProvider } from './context/AppContext';
 import { useAuth } from './hooks/useAuth';
 import { useNotifications } from './hooks/useNotifications';
+import { useSubscription } from './context/SubscriptionContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Auth from './pages/Auth';
 import Onboarding from './pages/Onboarding';
@@ -19,10 +20,13 @@ import Settings from './pages/Settings';
 import Navigation from './components/Navigation';
 import InstallPWA from './components/InstallPWA';
 import NotificationToast from './components/NotificationToast';
+import PaymentBlockedScreen from './components/PaymentBlockedScreen';
+import PaymentProofModal from './components/PaymentProofModal';
 
 function AppContent() {
   const { user, loading } = useAuth();
   const { latestNotification, dismissNotification, removeNotification } = useNotifications();
+  const { isAccessBlocked, showPaymentModal } = useSubscription();
 
   if (loading) {
     return (
@@ -30,6 +34,11 @@ function AppContent() {
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
       </div>
     );
+  }
+
+  // BLOQUEIO POR FALTA DE PAGAMENTO
+  if (user && isAccessBlocked()) {
+    return <PaymentBlockedScreen />;
   }
 
   return (
@@ -115,6 +124,9 @@ function AppContent() {
             />
           </div>
         )}
+
+        {/* Modal de Upload de Comprovante */}
+        {user && showPaymentModal && <PaymentProofModal />}
       </div>
     </Router>
   );
