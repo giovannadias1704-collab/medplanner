@@ -4,6 +4,7 @@ import { useAuth } from './hooks/useAuth';
 import { useNotifications } from './hooks/useNotifications';
 import { useSubscription } from './context/SubscriptionContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import Landing from './pages/Landing';
 import Auth from './pages/Auth';
 import Onboarding from './pages/Onboarding';
 import Dashboard from './pages/Dashboard';
@@ -47,7 +48,13 @@ function AppContent() {
         {user && <Navigation />}
         
         <Routes>
+          {/* Landing Page - Rota pública */}
+          <Route path="/landing" element={<Landing />} />
+          
+          {/* Auth */}
           <Route path="/auth" element={!user ? <Auth /> : <Navigate to="/dashboard" />} />
+          
+          {/* Rotas protegidas */}
           <Route path="/onboarding" element={
             <ProtectedRoute>
               <Onboarding />
@@ -108,7 +115,9 @@ function AppContent() {
               <Settings />
             </ProtectedRoute>
           } />
-          <Route path="/" element={<Navigate to={user ? "/dashboard" : "/auth"} />} />
+          
+          {/* Rota raiz - Landing ou Dashboard */}
+          <Route path="/" element={user ? <Navigate to="/dashboard" /> : <Landing />} />
         </Routes>
 
         {/* COMPONENTES GLOBAIS */}
