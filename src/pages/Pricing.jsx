@@ -1,16 +1,50 @@
 import { useState } from 'react';
 import { CheckCircleIcon, XMarkIcon, SparklesIcon } from '@heroicons/react/24/outline';
-import CouponInput from '../components/CouponInput';
-import { useCoupon } from '../context/CouponContext';
+import { useAuth } from '../hooks/useAuth';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '../config/firebase';
 
 export default function Pricing() {
-  const [billingPeriod, setBillingPeriod] = useState('monthly'); // 'monthly' ou 'yearly'
+  const { user } = useAuth();
+  const [billingPeriod, setBillingPeriod] = useState('monthly');
+  const [couponCode, setCouponCode] = useState('');
+  const [couponError, setCouponError] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // ========== CONFIGURAÇÃO DO WHATSAPP ==========
-  const WHATSAPP_NUMBER = '5571992883976'; // ← SEU NÚMERO
+  const WHATSAPP_NUMBER = '5571992883976';
 
-  // ========== SISTEMA DE CUPONS ==========
-  const { calculateFinalPrice, appliedCoupon } = useCoupon();
+  // ========== CUPONS VÁLIDOS (OCULTOS) ==========
+  const validCoupons = {
+    'MEDPLANNER30': { discount: 30, name: '30% OFF' },
+    'MEDPLANNER50': { discount: 50, name: '50% OFF' },
+    'MEDPLANNER100': { discount: 100, name: '100% OFF' }
+  };
+
+  // ========== VALIDAR E APLICAR CUPOM ==========
+  const handleApplyCoupon = async () => {
+    if (!user) {
+      setCouponError('Faça login primeiro');
+      return;
+    }
+
+    const code = couponCode.toUpperCase().trim();
+    
+    if (!code) {
+      setCouponError('Digite um código');
+      return;
+    }
+
+    if (!validCoupons[code]) {
+      setCouponError('Cupom inválido');
+      return;
+    }
+
+    setAppliedCoupon({ code, ...validCoupons[code] });
+    setCouponError('');
+    alert(`✅ Cupom ${code} aplicado!\n\n${validCoupons[code].name}\n\nEscolha seu plano e finalize no WhatsApp.`);
+  };
 
   const plans = [
     {
@@ -98,26 +132,38 @@ export default function Pricing() {
     },
   ];
 
+  const calculateDiscount = (price) => {
+    if (!appliedCoupon) return price;
+    return price * (1 - appliedCoupon.discount / 100);
+  };
+
   const getPrice = (plan) => {
     if (plan.price === 0) return 'Grátis';
 
     if (plan.lifetime) {
+      const pixPrice = calculateDiscount(250);
+      const installmentPrice = calculateDiscount(300);
+      
       return (
         <div>
           <div className="text-3xl font-bold text-yellow-600 dark:text-yellow-400 mb-2">
-            R$ 250 à vista
+            R$ {pixPrice.toFixed(2).replace('.', ',')} à vista
           </div>
-          <div className="text-sm text-gray-600 dark:text-gray-400">
-            ou 5x de R$ 60
-          </div>
+          {appliedCoupon && appliedCoupon.discount < 100 && (
+            <div className="text-sm text-gray-600 dark:text-gray-400">
+              ou 5x de R$ {(installmentPrice / 5).toFixed(2).replace('.', ',')}
+            </div>
+          )}
         </div>
       );
     }
 
     const price = billingPeriod === 'monthly' ? plan.price : plan.yearlyPrice;
+    const finalPrice = calculateDiscount(price);
+    
     return billingPeriod === 'monthly' 
-      ? `R$ ${price.toFixed(2).replace('.', ',')}` 
-      : `R$ ${price.toFixed(2).replace('.', ',')}`;
+      ? `R$ ${finalPrice.toFixed(2).replace('.', ',')}` 
+      : `R$ ${finalPrice.toFixed(2).replace('.', ',')}`;
   };
 
   const getSavings = (plan) => {
@@ -127,53 +173,113 @@ export default function Pricing() {
     return savings > 0 ? savings : 0;
   };
 
-  const handleSubscribe = (plan) => {
+  const handleSubscribe = async (plan) => {
     if (plan.id === 'free') {
       alert('✅ Você já está usando o plano gratuito!');
       return;
     }
 
-    // Calcular preço com desconto
-    let finalPrice = plan.price;
-    if (appliedCoupon) {
-      finalPrice = calculateFinalPrice(plan.price);
-    }
-
-    // Se for plano vitalício, mostrar opções de pagamento
-    if (plan.id === 'lifetime') {
-      const choice = window.confirm(
-        '💎 PLANO VITALÍCIO - Escolha a forma de pagamento:\n\n' +
-        '✅ OK = R$ 250 à vista no PIX\n' +
-        '❌ CANCELAR = 5x de R$ 60 no cartão (total R$ 300)'
-      );
-
-      let message = choice ? plan.whatsappMessagePix : plan.whatsappMessageInstallment;
-      
-      // Adicionar informação do cupom
-      if (appliedCoupon) {
-        message += `\n\n🎟️ *CUPOM APLICADO:* ${appliedCoupon.code} (${appliedCoupon.label})\n💰 *Valor com desconto:* R$ ${finalPrice.toFixed(2).replace('.', ',')}`;
-      }
-
-      const encodedMessage = encodeURIComponent(message);
-      const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodedMessage}`;
-      window.open(whatsappUrl, '_blank');
+    if (!user) {
+      alert('⚠️ Faça login primeiro para assinar!');
       return;
     }
 
-    // Planos mensais
-    let message = plan.whatsappMessage;
-    if (billingPeriod === 'yearly') {
-      message = `Olá! Gostaria de assinar o *Plano ${plan.name}* (R$ ${plan.yearlyPrice.toFixed(2).replace('.', ',')}/ano) do MedPlanner. Como faço o pagamento?`;
-    }
+    setIsProcessing(true);
 
-    // Adicionar informação do cupom
-    if (appliedCoupon) {
-      message += `\n\n🎟️ *CUPOM APLICADO:* ${appliedCoupon.code} (${appliedCoupon.label})\n💰 *Valor com desconto:* R$ ${finalPrice.toFixed(2).replace('.', ',')}`;
-    }
+    try {
+      let message = '';
+      let finalPrice = plan.price;
 
-    const encodedMessage = encodeURIComponent(message);
-    const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodedMessage}`;
-    window.open(whatsappUrl, '_blank');
+      // Se for plano vitalício
+      if (plan.id === 'lifetime') {
+        const choice = window.confirm(
+          '💎 PLANO VITALÍCIO - Escolha a forma de pagamento:\n\n' +
+          '✅ OK = R$ 250 à vista no PIX\n' +
+          '❌ CANCELAR = 5x de R$ 60 no cartão (total R$ 300)'
+        );
+
+        message = choice ? plan.whatsappMessagePix : plan.whatsappMessageInstallment;
+        finalPrice = choice ? 250 : 300;
+      } else {
+        // Planos mensais/anuais
+        message = plan.whatsappMessage;
+        if (billingPeriod === 'yearly') {
+          message = `Olá! Gostaria de assinar o *Plano ${plan.name}* (R$ ${plan.yearlyPrice.toFixed(2).replace('.', ',')}/ano) do MedPlanner. Como faço o pagamento?`;
+          finalPrice = plan.yearlyPrice;
+        }
+      }
+
+      // SE TEM CUPOM APLICADO
+      if (appliedCoupon) {
+        const discount = appliedCoupon.discount;
+        const discountedPrice = finalPrice * (1 - discount / 100);
+        
+        // Gerar token de segurança
+        const token = btoa(`${user.uid}-${appliedCoupon.code}-medplanner-secret-2024`);
+        
+        // Gerar links de aprovação e rejeição
+        const approveLink = `${window.location.origin}/approve-discount?user=${user.uid}&coupon=${appliedCoupon.code}&token=${token}&action=approve`;
+        const rejectLink = `${window.location.origin}/approve-discount?user=${user.uid}&coupon=${appliedCoupon.code}&token=${token}&action=reject`;
+        
+        // Mensagem formatada com cupom
+        message = `🎟️ *SOLICITAÇÃO DE ASSINATURA COM CUPOM*
+
+━━━━━━━━━━━━━━━━━━━━
+👤 *USUÁRIO*
+Nome: ${user.displayName || 'Não informado'}
+Email: ${user.email}
+
+📦 *PLANO ESCOLHIDO*
+${plan.name} - ${billingPeriod === 'yearly' ? 'Anual' : 'Mensal'}
+
+🎫 *CUPOM APLICADO*
+Código: ${appliedCoupon.code}
+Desconto: ${discount}% OFF
+
+💰 *VALORES*
+Preço original: R$ ${finalPrice.toFixed(2).replace('.', ',')}
+Preço com desconto: R$ ${discountedPrice.toFixed(2).replace('.', ',')}
+Economia: R$ ${(finalPrice - discountedPrice).toFixed(2).replace('.', ',')}
+━━━━━━━━━━━━━━━━━━━━
+
+✅ *APROVAR (1 clique):*
+${approveLink}
+
+❌ *REJEITAR (1 clique):*
+${rejectLink}
+
+_Clique em um dos links para processar!_`;
+
+        // Salvar no Firebase
+        const userRef = doc(db, 'users', user.uid);
+        await updateDoc(userRef, {
+          subscriptionStatus: 'pending_approval',
+          requestedPlan: plan.name,
+          requestedDiscount: discount,
+          requestedCoupon: appliedCoupon.code,
+          requestedAt: new Date().toISOString(),
+          requestedPrice: discountedPrice,
+          approvalLink: approveLink,
+          rejectionLink: rejectLink
+        });
+      }
+
+      // Enviar para WhatsApp
+      const encodedMessage = encodeURIComponent(message);
+      const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodedMessage}`;
+      window.open(whatsappUrl, '_blank');
+
+      setIsProcessing(false);
+
+      if (appliedCoupon) {
+        alert(`✅ Solicitação enviada com cupom!\n\nAguarde aprovação via WhatsApp.`);
+      }
+
+    } catch (error) {
+      console.error('Erro:', error);
+      setIsProcessing(false);
+      alert('❌ Erro ao processar. Tente novamente.');
+    }
   };
 
   return (
@@ -202,11 +308,59 @@ export default function Pricing() {
           </p>
         </div>
 
-        {/* Sistema de Cupons */}
-        <CouponInput planName="Qualquer Plano" planPrice={100} />
+        {/* Campo de Cupom - Discreto e Oculto */}
+        {user && (
+          <section className="max-w-md mx-auto mb-12">
+            <details className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-200 dark:border-gray-700">
+              <summary className="font-bold text-gray-900 dark:text-white cursor-pointer text-center flex items-center justify-center gap-2">
+                <SparklesIcon className="h-5 w-5 text-purple-600" />
+                Tem um cupom de desconto?
+              </summary>
+              
+              <div className="mt-4 space-y-3">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={couponCode}
+                    onChange={(e) => {
+                      setCouponCode(e.target.value.toUpperCase());
+                      setCouponError('');
+                    }}
+                    placeholder="CÓDIGO"
+                    className="flex-1 px-4 py-3 rounded-lg border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono text-center font-bold focus:outline-none focus:border-purple-500"
+                    disabled={isProcessing}
+                  />
+                  <button
+                    onClick={handleApplyCoupon}
+                    disabled={isProcessing || !couponCode}
+                    className="px-6 py-3 bg-purple-600 text-white rounded-lg font-bold hover:bg-purple-700 transition-all disabled:opacity-50"
+                  >
+                    Aplicar
+                  </button>
+                </div>
+
+                {couponError && (
+                  <p className="text-red-500 text-sm text-center">{couponError}</p>
+                )}
+
+                {appliedCoupon && (
+                  <div className="bg-green-50 dark:bg-green-900/20 border-2 border-green-500 rounded-lg p-3 text-center">
+                    <p className="text-green-700 dark:text-green-300 font-bold">
+                      ✅ {appliedCoupon.code} aplicado ({appliedCoupon.name})
+                    </p>
+                  </div>
+                )}
+
+                <p className="text-xs text-gray-500 text-center">
+                  Cupons são enviados por email ou WhatsApp
+                </p>
+              </div>
+            </details>
+          </section>
+        )}
 
         {/* Toggle Mensal/Anual */}
-        <div className="flex items-center justify-center gap-4 mb-12 mt-12">
+        <div className="flex items-center justify-center gap-4 mb-12">
           <button
             onClick={() => setBillingPeriod('monthly')}
             className={`px-6 py-3 rounded-xl font-bold transition-all ${
@@ -310,7 +464,8 @@ export default function Pricing() {
 
               <button
                 onClick={() => handleSubscribe(plan)}
-                className={`w-full py-4 rounded-xl font-bold transition-all shadow-lg hover-lift ${
+                disabled={isProcessing}
+                className={`w-full py-4 rounded-xl font-bold transition-all shadow-lg hover-lift disabled:opacity-50 ${
                   plan.lifetime
                     ? 'bg-gradient-to-r from-yellow-500 to-orange-600 hover:from-yellow-600 hover:to-orange-700 text-white'
                     : plan.popular
@@ -320,7 +475,7 @@ export default function Pricing() {
                     : 'bg-indigo-600 hover:bg-indigo-700 text-white'
                 }`}
               >
-                {plan.cta}
+                {isProcessing ? 'Processando...' : plan.cta}
               </button>
             </div>
           ))}
@@ -370,6 +525,10 @@ export default function Pricing() {
           <div className="grid md:grid-cols-2 gap-6 max-w-5xl mx-auto">
             {[
               {
+                q: 'Como funcionam os cupons?',
+                a: 'Cupons são enviados via email/WhatsApp. Digite o código e aguarde aprovação.'
+              },
+              {
                 q: 'Quais formas de pagamento aceitam?',
                 a: 'Pix (instantâneo), Cartão de Crédito (Nubank, Visa, Master, etc.) e Boleto.'
               },
@@ -388,10 +547,6 @@ export default function Pricing() {
               {
                 q: 'Meus dados ficam salvos?',
                 a: 'Sim! Tudo sincronizado na nuvem automaticamente.'
-              },
-              {
-                q: 'E se eu esquecer de pagar?',
-                a: 'Sua conta volta para o plano gratuito, mas seus dados ficam salvos!'
               },
             ].map((faq, index) => (
               <div

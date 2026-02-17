@@ -18,6 +18,9 @@ import Wellness from './pages/Wellness';
 import Analytics from './pages/Analytics';
 import Pricing from './pages/Pricing';
 import Settings from './pages/Settings';
+import Admin from './pages/Admin';
+import ApproveDiscount from './pages/ApproveDiscount';
+import ValidatePayments from './pages/ValidatePayments';
 import Navigation from './components/Navigation';
 import InstallPWA from './components/InstallPWA';
 import NotificationToast from './components/NotificationToast';
@@ -54,65 +57,89 @@ function AppContent() {
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/auth" element={!user ? <Auth /> : <Navigate to="/dashboard" />} />
           
+          {/* ROTA DE APROVAÇÃO DE CUPONS (PÚBLICA - NÃO PRECISA DE LOGIN) */}
+          <Route path="/approve-discount" element={<ApproveDiscount />} />
+          
           {/* ROTAS PROTEGIDAS */}
           <Route path="/onboarding" element={
             <ProtectedRoute>
               <Onboarding />
             </ProtectedRoute>
           } />
+          
           <Route path="/dashboard" element={
             <ProtectedRoute>
               <Dashboard />
             </ProtectedRoute>
           } />
+          
           <Route path="/calendar" element={
             <ProtectedRoute>
               <Calendar />
             </ProtectedRoute>
           } />
+          
           <Route path="/pbl" element={
             <ProtectedRoute>
               <PBL />
             </ProtectedRoute>
           } />
+          
           <Route path="/study" element={
             <ProtectedRoute>
               <Study />
             </ProtectedRoute>
           } />
+          
           <Route path="/health" element={
             <ProtectedRoute>
               <Health />
             </ProtectedRoute>
           } />
+          
           <Route path="/finances" element={
             <ProtectedRoute>
               <Finances />
             </ProtectedRoute>
           } />
+          
           <Route path="/home" element={
             <ProtectedRoute>
               <Home />
             </ProtectedRoute>
           } />
+          
           <Route path="/wellness" element={
             <ProtectedRoute>
               <Wellness />
             </ProtectedRoute>
           } />
+          
           <Route path="/analytics" element={
             <ProtectedRoute>
               <Analytics />
             </ProtectedRoute>
           } />
-          // Deve ter isso:
-<Route path="/settings" element={
-  <ProtectedRoute>
-    <Settings />
-  </ProtectedRoute>
-} />
-
-// Se não tiver, adicione!
+          
+          <Route path="/settings" element={
+            <ProtectedRoute>
+              <Settings />
+            </ProtectedRoute>
+          } />
+          
+          {/* PAINEL ADMIN - PROTEGIDO */}
+          <Route path="/admin" element={
+            <ProtectedRoute>
+              <Admin />
+            </ProtectedRoute>
+          } />
+          
+          {/* VALIDAÇÃO DE PAGAMENTOS - PROTEGIDO */}
+          <Route path="/validate-payments" element={
+            <ProtectedRoute>
+              <ValidatePayments />
+            </ProtectedRoute>
+          } />
           
           {/* Rota raiz - Landing ou Dashboard */}
           <Route path="/" element={user ? <Navigate to="/dashboard" /> : <Landing />} />
