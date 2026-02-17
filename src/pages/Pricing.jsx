@@ -1,12 +1,17 @@
 import { useState } from 'react';
 import { CheckCircleIcon, XMarkIcon, SparklesIcon } from '@heroicons/react/24/outline';
+import CouponInput from '../components/CouponInput';
+import { useCoupon } from '../context/CouponContext';
 
 export default function Pricing() {
   const [billingPeriod, setBillingPeriod] = useState('monthly'); // 'monthly' ou 'yearly'
 
   // ========== CONFIGURAÇÃO DO WHATSAPP ==========
   const WHATSAPP_NUMBER = '5571992883976'; // ← SEU NÚMERO
-  
+
+  // ========== SISTEMA DE CUPONS ==========
+  const { calculateFinalPrice, appliedCoupon } = useCoupon();
+
   const plans = [
     {
       id: 'free',
@@ -95,7 +100,7 @@ export default function Pricing() {
 
   const getPrice = (plan) => {
     if (plan.price === 0) return 'Grátis';
-    
+
     if (plan.lifetime) {
       return (
         <div>
@@ -128,6 +133,12 @@ export default function Pricing() {
       return;
     }
 
+    // Calcular preço com desconto
+    let finalPrice = plan.price;
+    if (appliedCoupon) {
+      finalPrice = calculateFinalPrice(plan.price);
+    }
+
     // Se for plano vitalício, mostrar opções de pagamento
     if (plan.id === 'lifetime') {
       const choice = window.confirm(
@@ -136,7 +147,13 @@ export default function Pricing() {
         '❌ CANCELAR = 5x de R$ 60 no cartão (total R$ 300)'
       );
 
-      const message = choice ? plan.whatsappMessagePix : plan.whatsappMessageInstallment;
+      let message = choice ? plan.whatsappMessagePix : plan.whatsappMessageInstallment;
+      
+      // Adicionar informação do cupom
+      if (appliedCoupon) {
+        message += `\n\n🎟️ *CUPOM APLICADO:* ${appliedCoupon.code} (${appliedCoupon.label})\n💰 *Valor com desconto:* R$ ${finalPrice.toFixed(2).replace('.', ',')}`;
+      }
+
       const encodedMessage = encodeURIComponent(message);
       const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodedMessage}`;
       window.open(whatsappUrl, '_blank');
@@ -147,6 +164,11 @@ export default function Pricing() {
     let message = plan.whatsappMessage;
     if (billingPeriod === 'yearly') {
       message = `Olá! Gostaria de assinar o *Plano ${plan.name}* (R$ ${plan.yearlyPrice.toFixed(2).replace('.', ',')}/ano) do MedPlanner. Como faço o pagamento?`;
+    }
+
+    // Adicionar informação do cupom
+    if (appliedCoupon) {
+      message += `\n\n🎟️ *CUPOM APLICADO:* ${appliedCoupon.code} (${appliedCoupon.label})\n💰 *Valor com desconto:* R$ ${finalPrice.toFixed(2).replace('.', ',')}`;
     }
 
     const encodedMessage = encodeURIComponent(message);
@@ -180,8 +202,11 @@ export default function Pricing() {
           </p>
         </div>
 
+        {/* Sistema de Cupons */}
+        <CouponInput planName="Qualquer Plano" planPrice={100} />
+
         {/* Toggle Mensal/Anual */}
-        <div className="flex items-center justify-center gap-4 mb-12">
+        <div className="flex items-center justify-center gap-4 mb-12 mt-12">
           <button
             onClick={() => setBillingPeriod('monthly')}
             className={`px-6 py-3 rounded-xl font-bold transition-all ${
