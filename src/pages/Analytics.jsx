@@ -2,26 +2,24 @@ import { useState, useContext, useMemo } from 'react';
 import { AppContext } from '../context/AppContext';
 
 export default function Analytics() {
-  const { wellnessEntries } = useContext(AppContext);
-  const [activeTab, setActiveTab] = useState('diario'); // 'diario' ou 'comparativo'
-  const [timePeriod, setTimePeriod] = useState('semanal'); // 'semanal', 'mensal', 'anual'
+  const context = useContext(AppContext);
+  
+  // Destructure com fallbacks seguros
+  const {
+    wellnessEntries = [],
+    events = [],
+    pblCases = [],
+    tasks = [],
+    healthRecords = [],
+    studySessions = []
+  } = context || {};
 
-  // Função para obter dados do dia atual
-  const getTodayData = () => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    return wellnessEntries?.filter(entry => {
-      const entryDate = new Date(entry.date);
-      entryDate.setHours(0, 0, 0, 0);
-      return entryDate.getTime() === today.getTime();
-    }) || [];
-  };
+  const [activeTab, setActiveTab] = useState('comparativo');
+  const [timePeriod, setTimePeriod] = useState('semanal');
 
-  // Função para calcular estatísticas por período
-  const getStatsByPeriod = () => {
-    if (!wellnessEntries || wellnessEntries.length === 0) return null;
+  // ========== FUNÇÕES DE FILTRAGEM POR PERÍODO ==========
 
+  const getDateRange = () => {
     const now = new Date();
     let startDate = new Date();
 
@@ -39,61 +37,164 @@ export default function Analytics() {
         startDate.setDate(now.getDate() - 7);
     }
 
-    const filteredEntries = wellnessEntries.filter(entry => 
-      new Date(entry.date) >= startDate
-    );
+    return { startDate, endDate: now };
+  };
 
-    if (filteredEntries.length === 0) return null;
-
-    // Calcular médias
-    const avgSleep = filteredEntries.reduce((sum, e) => sum + (e.sleepHours || 0), 0) / filteredEntries.length;
-    const avgWater = filteredEntries.reduce((sum, e) => sum + (e.waterIntake || 0), 0) / filteredEntries.length;
-    const avgExercise = filteredEntries.reduce((sum, e) => sum + (e.exerciseMinutes || 0), 0) / filteredEntries.length;
-
-    // Contar humores
-    const moodCounts = {
-      excelente: 0,
-      bom: 0,
-      neutro: 0,
-      ruim: 0,
-      pessimo: 0,
-    };
-
-    filteredEntries.forEach(entry => {
-      if (entry.mood && moodCounts.hasOwnProperty(entry.mood)) {
-        moodCounts[entry.mood]++;
+  const filterByPeriod = (items, dateField = 'date') => {
+    if (!items || items.length === 0) return [];
+    const { startDate } = getDateRange();
+    return items.filter(item => {
+      try {
+        return new Date(item[dateField]) >= startDate;
+      } catch {
+        return false;
       }
     });
+  };
 
-    const mostFrequentMood = Object.keys(moodCounts).reduce((a, b) => 
-      moodCounts[a] > moodCounts[b] ? a : b
-    );
+  // ========== DADOS FILTRADOS ==========
 
-    // Calcular dias com metas atingidas
-    const daysWithGoals = filteredEntries.filter(e => 
-      e.sleepHours >= 7 && e.sleepHours <= 9 &&
-      e.waterIntake >= 2 &&
-      e.exerciseMinutes >= 30
-    ).length;
+  const filteredData = useMemo(() => {
+    return {
+      wellness: filterByPeriod(wellnessEntries),
+      events: filterByPeriod(events),
+      pbl: filterByPeriod(pblCases, 'createdAt'),
+      tasks: filterByPeriod(tasks, 'createdAt'),
+      health: filterByPeriod(healthRecords),
+      study: filterByPeriod(studySessions)
+    };
+  }, [timePeriod, wellnessEntries, events, pblCases, tasks, healthRecords, studySessions]);
 
-    const goalPercentage = (daysWithGoals / filteredEntries.length) * 100;
+  // ========== ESTATÍSTICAS CONSOLIDADAS ==========
+
+  const consolidatedStats = useMemo(() => {
+    // BEM-ESTAR
+    const wellness = filteredData.wellness;
+    const wellnessStats = wellness.length > 0 ? {
+      totalRecords: wellness.length,
+      avgSleep: (wellness.reduce((sum, e) => sum + (e.sleepHours || 0), 0) / wellness.length).toFixed(1),
+      avgWater: (wellness.reduce((sum, e) => sum + (e.waterIntake || 0), 0) / wellness.length).toFixed(1),
+      avgExercise: Math.round(wellness.reduce((sum, e) => sum + (e.exerciseMinutes || 0), 0) / wellness.length),
+      daysWithGoals: wellness.filter(e => 
+        e.sleepHours >= 7 && e.sleepHours <= 9 &&
+        e.waterIntake >= 2 &&
+        e.exerciseMinutes >= 30
+      ).length,
+      moodDistribution: wellness.reduce((acc, e) => {
+        acc[e.mood] = (acc[e.mood] || 0) + 1;
+        return acc;
+      }, {})
+    } : null;
+
+    // AGENDA/CALENDÁRIO
+    const calendarStats = filteredData.events.length > 0 ? {
+      totalEvents: filteredData.events.length,
+      completedEvents: filteredData.events.filter(e => e.completed).length,
+      upcomingEvents: filteredData.events.filter(e => new Date(e.date) > new Date() && !e.completed).length,
+      eventsByType: filteredData.events.reduce((acc, e) => {
+        acc[e.type] = (acc[e.type] || 0) + 1;
+        return acc;
+      }, {}),
+      completionRate: ((filteredData.events.filter(e => e.completed).length / filteredData.events.length) * 100).toFixed(0)
+    } : null;
+
+    // PBL
+    const pblStats = filteredData.pbl.length > 0 ? {
+      totalCases: filteredData.pbl.length,
+      completedCases: filteredData.pbl.filter(c => c.status === 'completed').length,
+      inProgressCases: filteredData.pbl.filter(c => c.status === 'in_progress').length,
+      avgCompletionTime: filteredData.pbl.filter(c => c.completedAt).length > 0
+        ? Math.round(
+            filteredData.pbl
+              .filter(c => c.completedAt)
+              .reduce((sum, c) => {
+                const start = new Date(c.createdAt);
+                const end = new Date(c.completedAt);
+                return sum + (end - start) / (1000 * 60 * 60 * 24);
+              }, 0) / filteredData.pbl.filter(c => c.completedAt).length
+          )
+        : 0,
+      completionRate: ((filteredData.pbl.filter(c => c.status === 'completed').length / filteredData.pbl.length) * 100).toFixed(0)
+    } : null;
+
+    // TAREFAS/ESTUDOS
+    const taskStats = filteredData.tasks.length > 0 ? {
+      totalTasks: filteredData.tasks.length,
+      completedTasks: filteredData.tasks.filter(t => t.completed).length,
+      pendingTasks: filteredData.tasks.filter(t => !t.completed).length,
+      tasksByPriority: filteredData.tasks.reduce((acc, t) => {
+        acc[t.priority || 'normal'] = (acc[t.priority || 'normal'] || 0) + 1;
+        return acc;
+      }, {}),
+      completionRate: ((filteredData.tasks.filter(t => t.completed).length / filteredData.tasks.length) * 100).toFixed(0)
+    } : null;
+
+    // SAÚDE
+    const healthStats = filteredData.health.length > 0 ? {
+      totalRecords: filteredData.health.length,
+      recordsByType: filteredData.health.reduce((acc, h) => {
+        acc[h.type] = (acc[h.type] || 0) + 1;
+        return acc;
+      }, {}),
+      urgentRecords: filteredData.health.filter(h => h.priority === 'urgent').length
+    } : null;
+
+    // SESSÕES DE ESTUDO
+    const studyStats = filteredData.study.length > 0 ? {
+      totalSessions: filteredData.study.length,
+      totalHours: (filteredData.study.reduce((sum, s) => sum + (s.duration || 0), 0) / 60).toFixed(1),
+      avgSessionDuration: Math.round(
+        filteredData.study.reduce((sum, s) => sum + (s.duration || 0), 0) / filteredData.study.length
+      ),
+      subjectDistribution: filteredData.study.reduce((acc, s) => {
+        acc[s.subject] = (acc[s.subject] || 0) + 1;
+        return acc;
+      }, {})
+    } : null;
 
     return {
-      totalEntries: filteredEntries.length,
-      avgSleep: avgSleep.toFixed(1),
-      avgWater: avgWater.toFixed(1),
-      avgExercise: Math.round(avgExercise),
-      moodCounts,
-      mostFrequentMood,
-      daysWithGoals,
-      goalPercentage: goalPercentage.toFixed(0),
-      entries: filteredEntries,
+      wellness: wellnessStats,
+      calendar: calendarStats,
+      pbl: pblStats,
+      tasks: taskStats,
+      health: healthStats,
+      study: studyStats
+    };
+  }, [filteredData]);
+
+  // ========== DADOS DO DIA ATUAL ==========
+
+  const getTodayData = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return {
+      wellness: wellnessEntries?.filter(e => {
+        const d = new Date(e.date);
+        d.setHours(0, 0, 0, 0);
+        return d.getTime() === today.getTime();
+      })?.[0] || null,
+      events: events?.filter(e => {
+        const d = new Date(e.date);
+        d.setHours(0, 0, 0, 0);
+        return d.getTime() === today.getTime();
+      }) || [],
+      tasks: tasks?.filter(t => {
+        const d = new Date(t.dueDate || t.createdAt);
+        d.setHours(0, 0, 0, 0);
+        return d.getTime() === today.getTime();
+      }) || [],
+      study: studySessions?.filter(s => {
+        const d = new Date(s.date);
+        d.setHours(0, 0, 0, 0);
+        return d.getTime() === today.getTime();
+      }) || []
     };
   };
 
-  const todayEntries = getTodayData();
-  const todayEntry = todayEntries.length > 0 ? todayEntries[todayEntries.length - 1] : null;
-  const stats = getStatsByPeriod();
+  const todayData = getTodayData();
+
+  // ========== HELPERS ==========
 
   const getMoodEmoji = (mood) => {
     const moods = {
@@ -101,447 +202,473 @@ export default function Analytics() {
       bom: '🙂',
       neutro: '😐',
       ruim: '😔',
-      pessimo: '😢',
+      pessimo: '😢'
     };
     return moods[mood] || '😐';
-  };
-
-  const getMoodLabel = (mood) => {
-    const labels = {
-      excelente: 'Excelente',
-      bom: 'Bom',
-      neutro: 'Neutro',
-      ruim: 'Ruim',
-      pessimo: 'Péssimo',
-    };
-    return labels[mood] || 'N/A';
   };
 
   const getPeriodLabel = () => {
     const labels = {
       semanal: 'Última Semana',
       mensal: 'Último Mês',
-      anual: 'Último Ano',
+      anual: 'Último Ano'
     };
     return labels[timePeriod];
   };
 
+  const getProductivityScore = () => {
+    let score = 0;
+    let maxScore = 0;
+
+    if (consolidatedStats.wellness) {
+      maxScore += 25;
+      const goalRate = parseFloat(consolidatedStats.wellness.daysWithGoals / consolidatedStats.wellness.totalRecords);
+      score += goalRate * 25;
+    }
+
+    if (consolidatedStats.calendar) {
+      maxScore += 20;
+      score += (parseFloat(consolidatedStats.calendar.completionRate) / 100) * 20;
+    }
+
+    if (consolidatedStats.pbl) {
+      maxScore += 20;
+      score += (parseFloat(consolidatedStats.pbl.completionRate) / 100) * 20;
+    }
+
+    if (consolidatedStats.tasks) {
+      maxScore += 20;
+      score += (parseFloat(consolidatedStats.tasks.completionRate) / 100) * 20;
+    }
+
+    if (consolidatedStats.study) {
+      maxScore += 15;
+      const hoursScore = Math.min(parseFloat(consolidatedStats.study.totalHours) / 20, 1);
+      score += hoursScore * 15;
+    }
+
+    return maxScore > 0 ? Math.round((score / maxScore) * 100) : 0;
+  };
+
+  const productivityScore = getProductivityScore();
+
+  const hasAnyData = 
+    wellnessEntries.length > 0 ||
+    events.length > 0 ||
+    pblCases.length > 0 ||
+    tasks.length > 0 ||
+    healthRecords.length > 0 ||
+    studySessions.length > 0;
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 md:p-6">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 md:p-6 pb-24">
       <div className="max-w-7xl mx-auto">
         
         {/* Cabeçalho */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            📊 Análises de Bem-estar
+            📊 Analytics Completo
           </h1>
           <p className="text-gray-600 dark:text-gray-400">
-            Visualize suas estatísticas e evolução
+            Análise integrada de todas as suas atividades
           </p>
         </div>
 
-        {/* Tabs */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg mb-6 overflow-hidden">
-          <div className="flex border-b border-gray-200 dark:border-gray-700">
-            <button
-              onClick={() => setActiveTab('diario')}
-              className={`flex-1 px-6 py-4 font-semibold transition-all ${
-                activeTab === 'diario'
-                  ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600'
-                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
-              }`}
-            >
-              📅 Análise Diária
-            </button>
-            <button
-              onClick={() => setActiveTab('comparativo')}
-              className={`flex-1 px-6 py-4 font-semibold transition-all ${
-                activeTab === 'comparativo'
-                  ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600'
-                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
-              }`}
-            >
-              📈 Análise Comparativa
-            </button>
+        {!hasAnyData ? (
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-12 text-center">
+            <span className="text-6xl mb-4 block">📊</span>
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+              Nenhum dado ainda
+            </h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-6">
+              Comece a usar o MedPlanner para ver suas análises aqui!
+            </p>
+            <div className="flex gap-3 justify-center flex-wrap">
+              <a href="/wellness" className="px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all font-medium">
+                Registrar Bem-estar
+              </a>
+              <a href="/calendar" className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all font-medium">
+                Adicionar Evento
+              </a>
+              <a href="/study" className="px-6 py-3 bg-orange-600 text-white rounded-xl hover:bg-orange-700 transition-all font-medium">
+                Registrar Estudo
+              </a>
+            </div>
           </div>
+        ) : (
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg mb-6 overflow-hidden">
+            {/* Tabs */}
+            <div className="flex border-b border-gray-200 dark:border-gray-700">
+              <button
+                onClick={() => setActiveTab('diario')}
+                className={`flex-1 px-6 py-4 font-semibold transition-all ${
+                  activeTab === 'diario'
+                    ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600'
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                }`}
+              >
+                📅 Análise Diária
+              </button>
+              <button
+                onClick={() => setActiveTab('comparativo')}
+                className={`flex-1 px-6 py-4 font-semibold transition-all ${
+                  activeTab === 'comparativo'
+                    ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600'
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                }`}
+              >
+                📈 Análise Comparativa
+              </button>
+            </div>
 
-          <div className="p-6">
-            
-            {/* TAB: ANÁLISE DIÁRIA */}
-            {activeTab === 'diario' && (
-              <div>
-                {!todayEntry ? (
-                  <div className="text-center py-12">
-                    <span className="text-6xl mb-4 block">📅</span>
-                    <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
-                      Nenhum registro hoje
-                    </h3>
-                    <p className="text-gray-600 dark:text-gray-400 mb-6">
-                      Registre seu bem-estar de hoje para ver as análises!
-                    </p>
-                    <a
-                      href="/wellness"
-                      className="inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-lg transition-all"
-                    >
-                      Fazer Registro de Hoje
-                    </a>
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    
-                    {/* Resumo do Dia */}
-                    <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-xl p-6 border-2 border-indigo-200 dark:border-indigo-800">
-                      <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                          Resumo de Hoje
-                        </h2>
-                        <span className="text-5xl">{getMoodEmoji(todayEntry.mood)}</span>
+            <div className="p-6">
+              
+              {/* TAB: ANÁLISE DIÁRIA */}
+              {activeTab === 'diario' && (
+                <div className="space-y-6">
+                  
+                  {/* Resumo do Dia */}
+                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-xl p-6 border-2 border-indigo-200 dark:border-indigo-800">
+                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+                      📅 Resumo de Hoje
+                    </h2>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Eventos</p>
+                        <p className="text-3xl font-bold text-indigo-600 dark:text-indigo-400">{todayData.events.length}</p>
                       </div>
-                      <p className="text-lg text-gray-700 dark:text-gray-300">
-                        Humor: <strong className="capitalize">{getMoodLabel(todayEntry.mood)}</strong>
-                      </p>
-                      {todayEntry.feeling && (
-                        <p className="text-lg text-gray-700 dark:text-gray-300">
-                          Sentimento: <strong className="capitalize">{todayEntry.feeling}</strong>
-                        </p>
-                      )}
+                      <div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Tarefas</p>
+                        <p className="text-3xl font-bold text-purple-600 dark:text-purple-400">{todayData.tasks.length}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Sessões de Estudo</p>
+                        <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">{todayData.study.length}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Humor</p>
+                        <p className="text-3xl">{todayData.wellness ? getMoodEmoji(todayData.wellness.mood) : '—'}</p>
+                      </div>
                     </div>
+                  </div>
 
-                    {/* Cards de Métricas */}
+                  {/* Bem-estar do Dia */}
+                  {todayData.wellness && (
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      
-                      {/* Sono */}
                       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-2 border-gray-200 dark:border-gray-700">
-                        <div className="flex items-center justify-between mb-4">
-                          <h3 className="text-lg font-bold text-gray-900 dark:text-white">
-                            😴 Sono
-                          </h3>
-                          <span className={`text-2xl ${
-                            todayEntry.sleepHours >= 7 && todayEntry.sleepHours <= 9
-                              ? '✅'
-                              : todayEntry.sleepHours >= 6
-                              ? '⚠️'
-                              : '❌'
-                          }`}></span>
-                        </div>
-                        <p className="text-4xl font-bold text-indigo-600 dark:text-indigo-400 mb-2">
-                          {todayEntry.sleepHours}h
-                        </p>
-                        <p className={`text-sm font-semibold ${
-                          todayEntry.sleepHours >= 7 && todayEntry.sleepHours <= 9
-                            ? 'text-green-600 dark:text-green-400'
-                            : todayEntry.sleepHours >= 6
-                            ? 'text-yellow-600 dark:text-yellow-400'
-                            : 'text-red-600 dark:text-red-400'
-                        }`}>
-                          {todayEntry.sleepHours >= 7 && todayEntry.sleepHours <= 9
-                            ? 'Sono ideal!'
-                            : todayEntry.sleepHours >= 6
-                            ? 'Sono razoável'
-                            : 'Sono insuficiente'}
-                        </p>
-                        <div className="mt-4 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                          <div
-                            className={`h-2 rounded-full ${
-                              todayEntry.sleepHours >= 7 && todayEntry.sleepHours <= 9
-                                ? 'bg-green-500'
-                                : todayEntry.sleepHours >= 6
-                                ? 'bg-yellow-500'
-                                : 'bg-red-500'
-                            }`}
-                            style={{ width: `${Math.min((todayEntry.sleepHours / 9) * 100, 100)}%` }}
-                          ></div>
-                        </div>
-                      </div>
-
-                      {/* Hidratação */}
-                      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-2 border-gray-200 dark:border-gray-700">
-                        <div className="flex items-center justify-between mb-4">
-                          <h3 className="text-lg font-bold text-gray-900 dark:text-white">
-                            💧 Hidratação
-                          </h3>
-                          <span className={`text-2xl ${todayEntry.waterIntake >= 2 ? '✅' : '⚠️'}`}></span>
-                        </div>
-                        <p className="text-4xl font-bold text-blue-600 dark:text-blue-400 mb-2">
-                          {todayEntry.waterIntake}L
-                        </p>
-                        <p className={`text-sm font-semibold ${
-                          todayEntry.waterIntake >= 2
-                            ? 'text-green-600 dark:text-green-400'
-                            : 'text-yellow-600 dark:text-yellow-400'
-                        }`}>
-                          {todayEntry.waterIntake >= 2 ? 'Meta atingida!' : 'Beba mais água'}
-                        </p>
-                        <div className="mt-4 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                          <div
-                            className={`h-2 rounded-full ${
-                              todayEntry.waterIntake >= 2 ? 'bg-green-500' : 'bg-yellow-500'
-                            }`}
-                            style={{ width: `${Math.min((todayEntry.waterIntake / 2.5) * 100, 100)}%` }}
-                          ></div>
-                        </div>
-                      </div>
-
-                      {/* Exercícios */}
-                      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-2 border-gray-200 dark:border-gray-700">
-                        <div className="flex items-center justify-between mb-4">
-                          <h3 className="text-lg font-bold text-gray-900 dark:text-white">
-                            💪 Exercícios
-                          </h3>
-                          <span className={`text-2xl ${todayEntry.exerciseMinutes >= 30 ? '✅' : '⚠️'}`}></span>
-                        </div>
-                        <p className="text-4xl font-bold text-orange-600 dark:text-orange-400 mb-2">
-                          {todayEntry.exerciseMinutes}min
-                        </p>
-                        <p className={`text-sm font-semibold ${
-                          todayEntry.exerciseMinutes >= 30
-                            ? 'text-green-600 dark:text-green-400'
-                            : 'text-yellow-600 dark:text-yellow-400'
-                        }`}>
-                          {todayEntry.exerciseMinutes >= 30 ? 'Meta atingida!' : 'Continue assim!'}
-                        </p>
-                        <div className="mt-4 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                          <div
-                            className={`h-2 rounded-full ${
-                              todayEntry.exerciseMinutes >= 30 ? 'bg-green-500' : 'bg-yellow-500'
-                            }`}
-                            style={{ width: `${Math.min((todayEntry.exerciseMinutes / 60) * 100, 100)}%` }}
-                          ></div>
-                        </div>
-                      </div>
-
-                    </div>
-
-                    {/* Anotações do Dia */}
-                    {todayEntry.notes && (
-                      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-2 border-gray-200 dark:border-gray-700">
-                        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                          📝 Anotações do Dia
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+                          😴 Sono
                         </h3>
-                        <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
-                          {todayEntry.notes}
+                        <p className="text-4xl font-bold text-indigo-600 dark:text-indigo-400">
+                          {todayData.wellness.sleepHours}h
                         </p>
                       </div>
-                    )}
+                      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-2 border-gray-200 dark:border-gray-700">
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+                          💧 Hidratação
+                        </h3>
+                        <p className="text-4xl font-bold text-blue-600 dark:text-blue-400">
+                          {todayData.wellness.waterIntake}L
+                        </p>
+                      </div>
+                      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-2 border-gray-200 dark:border-gray-700">
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+                          💪 Exercícios
+                        </h3>
+                        <p className="text-4xl font-bold text-orange-600 dark:text-orange-400">
+                          {todayData.wellness.exerciseMinutes}min
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
-                  </div>
-                )}
-              </div>
-            )}
+                  {/* Mensagem se não há dados hoje */}
+                  {!todayData.wellness && todayData.events.length === 0 && todayData.tasks.length === 0 && todayData.study.length === 0 && (
+                    <div className="text-center py-12 bg-gray-50 dark:bg-gray-700 rounded-xl">
+                      <span className="text-6xl mb-4 block">📅</span>
+                      <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+                        Nenhuma atividade hoje
+                      </h3>
+                      <p className="text-gray-600 dark:text-gray-400">
+                        Registre suas atividades para ver o resumo diário!
+                      </p>
+                    </div>
+                  )}
 
-            {/* TAB: ANÁLISE COMPARATIVA */}
-            {activeTab === 'comparativo' && (
-              <div>
-                
-                {/* Filtros de Período */}
-                <div className="mb-6">
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
-                    Período de Análise:
-                  </label>
-                  <div className="flex gap-3">
-                    {[
-                      { value: 'semanal', label: 'Última Semana', emoji: '📅' },
-                      { value: 'mensal', label: 'Último Mês', emoji: '📆' },
-                      { value: 'anual', label: 'Último Ano', emoji: '🗓️' },
-                    ].map((period) => (
-                      <button
-                        key={period.value}
-                        onClick={() => setTimePeriod(period.value)}
-                        className={`flex-1 p-4 rounded-xl border-2 flex items-center justify-center gap-2 font-semibold transition-all ${
-                          timePeriod === period.value
-                            ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
-                            : 'border-gray-300 dark:border-gray-600 hover:border-indigo-300 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-                        }`}
-                      >
-                        <span className="text-xl">{period.emoji}</span>
-                        <span>{period.label}</span>
-                      </button>
-                    ))}
-                  </div>
                 </div>
+              )}
 
-                {!stats ? (
-                  <div className="text-center py-12">
-                    <span className="text-6xl mb-4 block">📈</span>
-                    <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
-                      Dados insuficientes
-                    </h3>
-                    <p className="text-gray-600 dark:text-gray-400 mb-6">
-                      Registre seu bem-estar por alguns dias para ver as análises comparativas!
-                    </p>
-                    <a
-                      href="/wellness"
-                      className="inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-lg transition-all"
-                    >
-                      Fazer Registro
-                    </a>
+              {/* TAB: ANÁLISE COMPARATIVA */}
+              {activeTab === 'comparativo' && (
+                <div>
+                  
+                  {/* Filtros de Período */}
+                  <div className="mb-6">
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                      Período de Análise:
+                    </label>
+                    <div className="flex gap-3">
+                      {[
+                        { value: 'semanal', label: 'Última Semana', emoji: '📅' },
+                        { value: 'mensal', label: 'Último Mês', emoji: '📆' },
+                        { value: 'anual', label: 'Último Ano', emoji: '🗓️' }
+                      ].map((period) => (
+                        <button
+                          key={period.value}
+                          onClick={() => setTimePeriod(period.value)}
+                          className={`flex-1 p-4 rounded-xl border-2 flex items-center justify-center gap-2 font-semibold transition-all ${
+                            timePeriod === period.value
+                              ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
+                              : 'border-gray-300 dark:border-gray-600 hover:border-indigo-300 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                          }`}
+                        >
+                          <span className="text-xl">{period.emoji}</span>
+                          <span className="hidden md:inline">{period.label}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                ) : (
+
                   <div className="space-y-6">
                     
-                    {/* Resumo do Período */}
+                    {/* Score Geral de Produtividade */}
                     <div className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-xl p-6 border-2 border-purple-200 dark:border-purple-800">
                       <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-                        📊 Resumo: {getPeriodLabel()}
+                        🎯 Score de Produtividade: {getPeriodLabel()}
                       </h2>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div>
-                          <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Total de Registros</p>
-                          <p className="text-3xl font-bold text-purple-600 dark:text-purple-400">{stats.totalEntries}</p>
+                      <div className="flex items-center gap-6">
+                        <div className="flex-shrink-0">
+                          <div className="relative w-32 h-32">
+                            <svg className="w-full h-full transform -rotate-90">
+                              <circle
+                                cx="64"
+                                cy="64"
+                                r="56"
+                                stroke="currentColor"
+                                strokeWidth="12"
+                                fill="none"
+                                className="text-gray-200 dark:text-gray-700"
+                              />
+                              <circle
+                                cx="64"
+                                cy="64"
+                                r="56"
+                                stroke="currentColor"
+                                strokeWidth="12"
+                                fill="none"
+                                strokeDasharray={`${2 * Math.PI * 56}`}
+                                strokeDashoffset={`${2 * Math.PI * 56 * (1 - productivityScore / 100)}`}
+                                className={`${
+                                  productivityScore >= 80 ? 'text-green-500' :
+                                  productivityScore >= 60 ? 'text-blue-500' :
+                                  productivityScore >= 40 ? 'text-yellow-500' :
+                                  'text-red-500'
+                                }`}
+                                strokeLinecap="round"
+                              />
+                            </svg>
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <span className="text-4xl font-bold text-gray-900 dark:text-white">
+                                {productivityScore}
+                              </span>
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Dias com Metas</p>
-                          <p className="text-3xl font-bold text-green-600 dark:text-green-400">{stats.daysWithGoals}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Taxa de Sucesso</p>
-                          <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">{stats.goalPercentage}%</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Humor Predominante</p>
-                          <p className="text-3xl font-bold">{getMoodEmoji(stats.mostFrequentMood)}</p>
+                        <div className="flex-1">
+                          <p className="text-lg text-gray-700 dark:text-gray-300 mb-2">
+                            {productivityScore >= 80 ? '🎉 Excelente desempenho!' :
+                             productivityScore >= 60 ? '👍 Bom trabalho!' :
+                             productivityScore >= 40 ? '📈 Continue melhorando!' :
+                             '💪 Vamos dar o nosso melhor!'}
+                          </p>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">
+                            Score calculado com base em bem-estar, conclusão de tarefas, eventos, PBLs e horas de estudo.
+                          </p>
                         </div>
                       </div>
                     </div>
 
-                    {/* Médias */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Grid de Estatísticas por Área */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       
-                      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-2 border-gray-200 dark:border-gray-700">
-                        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                          😴 Média de Sono
-                        </h3>
-                        <p className="text-5xl font-bold text-indigo-600 dark:text-indigo-400 mb-2">
-                          {stats.avgSleep}h
-                        </p>
-                        <p className={`text-sm font-semibold ${
-                          parseFloat(stats.avgSleep) >= 7 && parseFloat(stats.avgSleep) <= 9
-                            ? 'text-green-600 dark:text-green-400'
-                            : 'text-yellow-600 dark:text-yellow-400'
-                        }`}>
-                          {parseFloat(stats.avgSleep) >= 7 && parseFloat(stats.avgSleep) <= 9
-                            ? '✅ Dentro do ideal'
-                            : '⚠️ Tente melhorar'}
-                        </p>
-                      </div>
-
-                      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-2 border-gray-200 dark:border-gray-700">
-                        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                          💧 Média de Hidratação
-                        </h3>
-                        <p className="text-5xl font-bold text-blue-600 dark:text-blue-400 mb-2">
-                          {stats.avgWater}L
-                        </p>
-                        <p className={`text-sm font-semibold ${
-                          parseFloat(stats.avgWater) >= 2
-                            ? 'text-green-600 dark:text-green-400'
-                            : 'text-yellow-600 dark:text-yellow-400'
-                        }`}>
-                          {parseFloat(stats.avgWater) >= 2 ? '✅ Muito bom!' : '⚠️ Beba mais água'}
-                        </p>
-                      </div>
-
-                      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-2 border-gray-200 dark:border-gray-700">
-                        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                          💪 Média de Exercícios
-                        </h3>
-                        <p className="text-5xl font-bold text-orange-600 dark:text-orange-400 mb-2">
-                          {stats.avgExercise}min
-                        </p>
-                        <p className={`text-sm font-semibold ${
-                          stats.avgExercise >= 30
-                            ? 'text-green-600 dark:text-green-400'
-                            : 'text-yellow-600 dark:text-yellow-400'
-                        }`}>
-                          {stats.avgExercise >= 30 ? '✅ Excelente!' : '⚠️ Aumente a frequência'}
-                        </p>
-                      </div>
-
-                    </div>
-
-                    {/* Distribuição de Humor */}
-                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-2 border-gray-200 dark:border-gray-700">
-                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
-                        😊 Distribuição de Humor
-                      </h3>
-                      <div className="space-y-3">
-                        {Object.entries(stats.moodCounts).map(([mood, count]) => {
-                          const percentage = (count / stats.totalEntries) * 100;
-                          return (
-                            <div key={mood}>
-                              <div className="flex items-center justify-between mb-1">
-                                <span className="text-sm font-semibold text-gray-700 dark:text-gray-300 capitalize flex items-center gap-2">
-                                  <span className="text-xl">{getMoodEmoji(mood)}</span>
-                                  {getMoodLabel(mood)}
+                      {/* BEM-ESTAR */}
+                      {consolidatedStats.wellness && (
+                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-2 border-indigo-200 dark:border-indigo-700">
+                          <h3 className="text-lg font-bold text-indigo-600 dark:text-indigo-400 mb-4 flex items-center gap-2">
+                            💪 Bem-estar
+                          </h3>
+                          <div className="space-y-3">
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-gray-600 dark:text-gray-400">Registros:</span>
+                              <span className="font-bold text-gray-900 dark:text-white">{consolidatedStats.wellness.totalRecords}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-gray-600 dark:text-gray-400">Sono médio:</span>
+                              <span className="font-bold text-gray-900 dark:text-white">{consolidatedStats.wellness.avgSleep}h</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-gray-600 dark:text-gray-400">Hidratação:</span>
+                              <span className="font-bold text-gray-900 dark:text-white">{consolidatedStats.wellness.avgWater}L</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-gray-600 dark:text-gray-400">Exercício:</span>
+                              <span className="font-bold text-gray-900 dark:text-white">{consolidatedStats.wellness.avgExercise}min</span>
+                            </div>
+                            <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm text-gray-600 dark:text-gray-400">Dias com metas:</span>
+                                <span className="font-bold text-green-600 dark:text-green-400">
+                                  {consolidatedStats.wellness.daysWithGoals}/{consolidatedStats.wellness.totalRecords}
                                 </span>
-                                <span className="text-sm text-gray-600 dark:text-gray-400">
-                                  {count} dias ({percentage.toFixed(0)}%)
-                                </span>
-                              </div>
-                              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
-                                <div
-                                  className={`h-3 rounded-full ${
-                                    mood === 'excelente' ? 'bg-green-500' :
-                                    mood === 'bom' ? 'bg-blue-500' :
-                                    mood === 'neutro' ? 'bg-gray-500' :
-                                    mood === 'ruim' ? 'bg-orange-500' :
-                                    'bg-red-500'
-                                  }`}
-                                  style={{ width: `${percentage}%` }}
-                                ></div>
                               </div>
                             </div>
-                          );
-                        })}
-                      </div>
-                    </div>
+                          </div>
+                        </div>
+                      )}
 
-                    {/* Insights */}
-                    <div className="bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-900/20 dark:to-blue-900/20 rounded-xl p-6 border-2 border-green-200 dark:border-green-800">
-                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                        💡 Insights e Recomendações
-                      </h3>
-                      <ul className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
-                        {parseFloat(stats.avgSleep) < 7 && (
-                          <li className="flex items-start gap-2">
-                            <span className="text-yellow-500 mt-0.5">⚠️</span>
-                            <span>Você está dormindo menos que o ideal. Tente dormir 7-9 horas por noite para melhor desempenho acadêmico.</span>
-                          </li>
-                        )}
-                        {parseFloat(stats.avgWater) < 2 && (
-                          <li className="flex items-start gap-2">
-                            <span className="text-blue-500 mt-0.5">💧</span>
-                            <span>Aumente sua hidratação! Meta: 2-3 litros por dia para melhor concentração.</span>
-                          </li>
-                        )}
-                        {stats.avgExercise < 30 && (
-                          <li className="flex items-start gap-2">
-                            <span className="text-orange-500 mt-0.5">💪</span>
-                            <span>Tente fazer pelo menos 30 minutos de exercício por dia. Isso reduz estresse e melhora o humor!</span>
-                          </li>
-                        )}
-                        {parseFloat(stats.goalPercentage) >= 70 && (
-                          <li className="flex items-start gap-2">
-                            <span className="text-green-500 mt-0.5">🎉</span>
-                            <span>Parabéns! Você está atingindo suas metas de bem-estar com frequência. Continue assim!</span>
-                          </li>
-                        )}
-                        {stats.moodCounts.excelente + stats.moodCounts.bom > stats.totalEntries * 0.6 && (
-                          <li className="flex items-start gap-2">
-                            <span className="text-green-500 mt-0.5">😊</span>
-                            <span>Seu humor tem estado predominantemente positivo. Ótimo trabalho em cuidar da sua saúde mental!</span>
-                          </li>
-                        )}
-                      </ul>
+                      {/* AGENDA/CALENDÁRIO */}
+                      {consolidatedStats.calendar && (
+                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-2 border-blue-200 dark:border-blue-700">
+                          <h3 className="text-lg font-bold text-blue-600 dark:text-blue-400 mb-4 flex items-center gap-2">
+                            📅 Calendário
+                          </h3>
+                          <div className="space-y-3">
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-gray-600 dark:text-gray-400">Total de eventos:</span>
+                              <span className="font-bold text-gray-900 dark:text-white">{consolidatedStats.calendar.totalEvents}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-gray-600 dark:text-gray-400">Concluídos:</span>
+                              <span className="font-bold text-green-600 dark:text-green-400">{consolidatedStats.calendar.completedEvents}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-gray-600 dark:text-gray-400">Próximos:</span>
+                              <span className="font-bold text-yellow-600 dark:text-yellow-400">{consolidatedStats.calendar.upcomingEvents}</span>
+                            </div>
+                            <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm text-gray-600 dark:text-gray-400">Taxa de conclusão:</span>
+                                <span className="font-bold text-blue-600 dark:text-blue-400">{consolidatedStats.calendar.completionRate}%</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* PBL */}
+                      {consolidatedStats.pbl && (
+                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-2 border-purple-200 dark:border-purple-700">
+                          <h3 className="text-lg font-bold text-purple-600 dark:text-purple-400 mb-4 flex items-center gap-2">
+                            🧠 PBL
+                          </h3>
+                          <div className="space-y-3">
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-gray-600 dark:text-gray-400">Total de casos:</span>
+                              <span className="font-bold text-gray-900 dark:text-white">{consolidatedStats.pbl.totalCases}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-gray-600 dark:text-gray-400">Concluídos:</span>
+                              <span className="font-bold text-green-600 dark:text-green-400">{consolidatedStats.pbl.completedCases}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-gray-600 dark:text-gray-400">Em progresso:</span>
+                              <span className="font-bold text-yellow-600 dark:text-yellow-400">{consolidatedStats.pbl.inProgressCases}</span>
+                            </div>
+                            <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm text-gray-600 dark:text-gray-400">Taxa de conclusão:</span>
+                                <span className="font-bold text-purple-600 dark:text-purple-400">{consolidatedStats.pbl.completionRate}%</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* TAREFAS */}
+                      {consolidatedStats.tasks && (
+                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-2 border-green-200 dark:border-green-700">
+                          <h3 className="text-lg font-bold text-green-600 dark:text-green-400 mb-4 flex items-center gap-2">
+                            ✅ Tarefas
+                          </h3>
+                          <div className="space-y-3">
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-gray-600 dark:text-gray-400">Total de tarefas:</span>
+                              <span className="font-bold text-gray-900 dark:text-white">{consolidatedStats.tasks.totalTasks}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-gray-600 dark:text-gray-400">Concluídas:</span>
+                              <span className="font-bold text-green-600 dark:text-green-400">{consolidatedStats.tasks.completedTasks}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-gray-600 dark:text-gray-400">Pendentes:</span>
+                              <span className="font-bold text-yellow-600 dark:text-yellow-400">{consolidatedStats.tasks.pendingTasks}</span>
+                            </div>
+                            <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm text-gray-600 dark:text-gray-400">Taxa de conclusão:</span>
+                                <span className="font-bold text-green-600 dark:text-green-400">{consolidatedStats.tasks.completionRate}%</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* SAÚDE */}
+                      {consolidatedStats.health && (
+                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-2 border-red-200 dark:border-red-700">
+                          <h3 className="text-lg font-bold text-red-600 dark:text-red-400 mb-4 flex items-center gap-2">
+                            🩺 Saúde
+                          </h3>
+                          <div className="space-y-3">
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-gray-600 dark:text-gray-400">Total de registros:</span>
+                              <span className="font-bold text-gray-900 dark:text-white">{consolidatedStats.health.totalRecords}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-gray-600 dark:text-gray-400">Registros urgentes:</span>
+                              <span className="font-bold text-red-600 dark:text-red-400">{consolidatedStats.health.urgentRecords}</span>
+                            </div>
+                            <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                Acompanhamento de consultas, exames e medicamentos
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ESTUDOS */}
+                      {consolidatedStats.study && (
+                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-2 border-orange-200 dark:border-orange-700">
+                          <h3 className="text-lg font-bold text-orange-600 dark:text-orange-400 mb-4 flex items-center gap-2">
+                            📚 Estudos
+                          </h3>
+                          <div className="space-y-3">
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-gray-600 dark:text-gray-400">Total de sessões:</span>
+                              <span className="font-bold text-gray-900 dark:text-white">{consolidatedStats.study.totalSessions}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-gray-600 dark:text-gray-400">Horas totais:</span>
+                              <span className="font-bold text-orange-600 dark:text-orange-400">{consolidatedStats.study.totalHours}h</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-gray-600 dark:text-gray-400">Duração média:</span>
+                              <span className="font-bold text-gray-900 dark:text-white">{consolidatedStats.study.avgSessionDuration}min</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
                     </div>
 
                   </div>
-                )}
-              </div>
-            )}
+                </div>
+              )}
 
+            </div>
           </div>
-        </div>
+        )}
 
       </div>
     </div>
