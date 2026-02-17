@@ -4,97 +4,75 @@ export const CouponContext = createContext();
 
 export function CouponProvider({ children }) {
   const [appliedCoupon, setAppliedCoupon] = useState(null);
-  const [couponPending, setCouponPending] = useState(false);
 
-  const coupons = {
-    MEDPLANNER30: { discount: 0.30, label: '30% OFF' },
-    MEDPLANNER50: { discount: 0.50, label: '50% OFF' },
-    MEDPLANNER100: { discount: 1.00, label: '100% OFF (GRÁTIS)' },
-  };
+  // SEU NÚMERO DE WHATSAPP (formato: 5571992883976)
+  const ADMIN_WHATSAPP = '5571992883976';
 
-  const validateCoupon = (code) => {
-    const upperCode = code.toUpperCase().trim();
-    return coupons[upperCode] || null;
+  const validCoupons = {
+    'MEDPLANNER30': {
+      code: 'MEDPLANNER30',
+      discount: 0.30,
+      label: '30% OFF'
+    },
+    'MEDPLANNER50': {
+      code: 'MEDPLANNER50',
+      discount: 0.50,
+      label: '50% OFF'
+    },
+    'MEDPLANNER100': {
+      code: 'MEDPLANNER100',
+      discount: 1.0,
+      label: '100% OFF - GRÁTIS'
+    }
   };
 
   const applyCoupon = async (code, planName, planPrice, userEmail) => {
-    const coupon = validateCoupon(code);
-    
+    const coupon = validCoupons[code];
+
     if (!coupon) {
-      return { success: false, message: '❌ Cupom inválido!' };
+      return {
+        success: false,
+        message: '❌ Cupom inválido!'
+      };
     }
 
-    // Enviar email de aprovação
-    const emailSent = await sendApprovalEmail(code, planName, planPrice, coupon.discount, userEmail);
+    setAppliedCoupon(coupon);
+
+    // CALCULAR VALORES
+    const discountAmount = (planPrice * coupon.discount).toFixed(2);
+    const finalPrice = (planPrice * (1 - coupon.discount)).toFixed(2);
+
+    // MENSAGEM PARA WHATSAPP
+    const message = `🎟️ *NOVO CUPOM APLICADO - MEDPLANNER*
+
+👤 *Usuário:* ${userEmail || 'Não informado'}
+📦 *Plano:* ${planName}
+🎫 *Cupom:* ${code} (${coupon.label})
+
+💰 *Valores:*
+• Preço original: R$ ${planPrice.toFixed(2).replace('.', ',')}
+• Desconto: -R$ ${discountAmount.replace('.', ',')}
+• Preço final: R$ ${finalPrice.replace('.', ',')}
+
+⏰ *Data/Hora:* ${new Date().toLocaleString('pt-BR')}
+
+---
+📌 *Ação necessária:* Aprovar ou recusar este cupom`;
+
+    // ABRIR WHATSAPP COM MENSAGEM PRÉ-PREENCHIDA
+    const whatsappURL = `https://wa.me/${ADMIN_WHATSAPP}?text=${encodeURIComponent(message)}`;
     
-    if (emailSent) {
-      setAppliedCoupon({ code, ...coupon });
-      setCouponPending(true);
-      return { 
-        success: true, 
-        message: '✅ Cupom válido! Aguardando aprovação por email (até 24h).',
-        discount: coupon.discount
-      };
-    } else {
-      return { success: false, message: '❌ Erro ao enviar email de aprovação. Tente novamente.' };
-    }
-  };
+    // ABRIR EM NOVA ABA
+    window.open(whatsappURL, '_blank');
 
-  const sendApprovalEmail = async (couponCode, planName, planPrice, discount, userEmail) => {
-    try {
-      const discountAmount = planPrice * discount;
-      const finalPrice = planPrice - discountAmount;
-
-      const emailData = {
-        to_email: 'medplanner17@gmail.com',
-        subject: `🎟️ NOVO CUPOM USADO: ${couponCode}`,
-        message: `
-🎟️ CUPOM DE DESCONTO USADO
-
-📋 Informações:
-• Código: ${couponCode}
-• Desconto: ${discount * 100}%
-• Plano: ${planName}
-• Preço original: R$ ${planPrice.toFixed(2)}
-• Desconto: -R$ ${discountAmount.toFixed(2)}
-• Preço final: R$ ${finalPrice.toFixed(2)}
-• Email do usuário: ${userEmail || 'Não informado'}
-
-⏰ Data: ${new Date().toLocaleString('pt-BR')}
-
-⚠️ AÇÃO NECESSÁRIA:
-Entre em contato com o cliente para aprovar ou recusar o uso do cupom.
-        `
-      };
-
-      // Enviar via EmailJS (vou configurar isso no próximo passo)
-      const response = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          service_id: 'YOUR_SERVICE_ID', // Configurar depois
-          template_id: 'YOUR_TEMPLATE_ID', // Configurar depois
-          user_id: 'YOUR_PUBLIC_KEY', // Configurar depois
-          template_params: emailData,
-        }),
-      });
-
-      return response.ok;
-    } catch (error) {
-      console.error('Erro ao enviar email:', error);
-      return false;
-    }
+    return {
+      success: true,
+      message: `✅ Cupom ${coupon.label} aplicado! Aguardando aprovação via WhatsApp.`
+    };
   };
 
   const removeCoupon = () => {
     setAppliedCoupon(null);
-    setCouponPending(false);
-  };
-
-  const approveCoupon = () => {
-    setCouponPending(false);
   };
 
   const calculateDiscount = (price) => {
@@ -104,20 +82,17 @@ Entre em contato com o cliente para aprovar ou recusar o uso do cupom.
 
   const calculateFinalPrice = (price) => {
     if (!appliedCoupon) return price;
-    return price - calculateDiscount(price);
+    return price * (1 - appliedCoupon.discount);
   };
 
   return (
     <CouponContext.Provider
       value={{
         appliedCoupon,
-        couponPending,
         applyCoupon,
         removeCoupon,
-        approveCoupon,
         calculateDiscount,
         calculateFinalPrice,
-        validateCoupon,
       }}
     >
       {children}

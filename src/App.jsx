@@ -48,13 +48,12 @@ function AppContent() {
         {user && <Navigation />}
         
         <Routes>
-          {/* Landing Page - Rota pública */}
+          {/* ROTAS PÚBLICAS */}
           <Route path="/landing" element={<Landing />} />
-          
-          {/* Auth */}
+          <Route path="/pricing" element={<Pricing />} />
           <Route path="/auth" element={!user ? <Auth /> : <Navigate to="/dashboard" />} />
           
-          {/* Rotas protegidas */}
+          {/* ROTAS PROTEGIDAS */}
           <Route path="/onboarding" element={
             <ProtectedRoute>
               <Onboarding />
@@ -103,11 +102,6 @@ function AppContent() {
           <Route path="/analytics" element={
             <ProtectedRoute>
               <Analytics />
-            </ProtectedRoute>
-          } />
-          <Route path="/pricing" element={
-            <ProtectedRoute>
-              <Pricing />
             </ProtectedRoute>
           } />
           <Route path="/settings" element={

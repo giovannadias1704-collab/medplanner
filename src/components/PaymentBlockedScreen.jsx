@@ -37,7 +37,7 @@ export default function PaymentBlockedScreen() {
           </a>
 
           <a
-            href="https://wa.me/5511999999999?text=Olá!%20Preciso%20regularizar%20meu%20pagamento%20do%20MedPlanner"
+            href="https://wa.me/5571992883976?text=Olá!%20Preciso%20regularizar%20meu%20pagamento%20do%20MedPlanner"
             target="_blank"
             rel="noopener noreferrer"
             className="block w-full px-8 py-4 bg-white dark:bg-gray-700 border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-600 font-semibold transition-all"

@@ -36,12 +36,12 @@ if ('serviceWorker' in navigator) {
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <CouponProvider>
-      <SubscriptionProvider>
-        <AppProvider>
+    <AppProvider>
+      <CouponProvider>
+        <SubscriptionProvider>
           <App />
-        </AppProvider>
-      </SubscriptionProvider>
-    </CouponProvider>
+        </SubscriptionProvider>
+      </CouponProvider>
+    </AppProvider>
   </React.StrictMode>
 );

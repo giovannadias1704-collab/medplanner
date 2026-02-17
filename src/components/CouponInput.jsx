@@ -51,7 +51,7 @@ export default function CouponInput({ planName, planPrice }) {
               type="text"
               value={couponCode}
               onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-              placeholder="Digite o código (ex: MEDPLANNER30)"
+              placeholder="Digite o código do cupom"
               className="flex-1 px-4 py-3 rounded-xl border-2 border-purple-300 dark:border-purple-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500"
               disabled={isLoading}
             />
@@ -71,10 +71,6 @@ export default function CouponInput({ planName, planPrice }) {
               {message}
             </p>
           )}
-
-          <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">
-            💡 Cupons disponíveis: MEDPLANNER30, MEDPLANNER50, MEDPLANNER100
-          </p>
         </>
       ) : (
         <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border-2 border-green-500 dark:border-green-700">

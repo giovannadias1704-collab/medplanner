@@ -202,15 +202,14 @@ export default function Landing() {
               </ul>
             </div>
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 border border-gray-200 dark:border-gray-700">
-              <img 
-                src="/dashboard-preview.png" 
-                alt="Dashboard Preview" 
-                className="rounded-xl w-full"
-                onError={(e) => {
-                  e.target.style.display = 'none';
-                  e.target.parentElement.innerHTML = '<div class="w-full h-64 bg-gradient-to-br from-indigo-100 to-purple-100 dark:from-indigo-900/30 dark:to-purple-900/30 rounded-xl flex items-center justify-center text-4xl">📊</div>';
-                }}
-              />
+              <div className="w-full h-64 bg-gradient-to-br from-indigo-100 to-purple-100 dark:from-indigo-900/30 dark:to-purple-900/30 rounded-xl flex items-center justify-center">
+                <div className="text-center">
+                  <span className="text-6xl mb-4 block">📊</span>
+                  <p className="text-gray-600 dark:text-gray-400 font-semibold">
+                    Dashboard Preview
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
