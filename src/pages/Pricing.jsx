@@ -5,7 +5,7 @@ export default function Pricing() {
   const [billingPeriod, setBillingPeriod] = useState('monthly'); // 'monthly' ou 'yearly'
 
   // ========== CONFIGURAÇÃO DO WHATSAPP ==========
-  const WHATSAPP_NUMBER = '5571992883976'; // ← COLOQUE SEU NÚMERO AQUI (com DDI + DDD)
+  const WHATSAPP_NUMBER = '5571992883976'; // ← SEU NÚMERO
   
   const plans = [
     {
@@ -46,7 +46,7 @@ export default function Pricing() {
       ],
       cta: 'Assinar Estudante',
       whatsappMessage: 'Olá! Gostaria de assinar o *Plano Estudante* (R$ 7,90/mês) do MedPlanner. Como faço o pagamento?',
-      popular: true,
+      popular: false,
     },
     {
       id: 'premium',
@@ -68,10 +68,47 @@ export default function Pricing() {
       whatsappMessage: 'Olá! Gostaria de assinar o *Plano Premium* (R$ 15,90/mês) do MedPlanner. Como faço o pagamento?',
       popular: false,
     },
+    {
+      id: 'lifetime',
+      name: 'Vitalício',
+      price: 250,
+      installmentPrice: 300,
+      installments: 5,
+      description: '✨ Acesso PERMANENTE',
+      color: 'gold',
+      features: [
+        { text: '🔥 TODOS OS RECURSOS PREMIUM', included: true },
+        { text: '♾️ Acesso VITALÍCIO', included: true },
+        { text: 'IA ilimitada PARA SEMPRE', included: true },
+        { text: 'TODAS as atualizações futuras', included: true },
+        { text: 'Suporte prioritário vitalício', included: true },
+        { text: 'Sem mensalidade NUNCA MAIS', included: true },
+        { text: '💰 Melhor custo-benefício', included: true },
+      ],
+      cta: 'Comprar Vitalício',
+      whatsappMessagePix: 'Olá! Gostaria de comprar o *Plano Vitalício* por *R$ 250 no PIX* (pagamento único). Como faço?',
+      whatsappMessageInstallment: 'Olá! Gostaria de comprar o *Plano Vitalício* parcelado em *5x de R$ 60* (total R$ 300). Como faço?',
+      popular: true,
+      lifetime: true,
+    },
   ];
 
   const getPrice = (plan) => {
     if (plan.price === 0) return 'Grátis';
+    
+    if (plan.lifetime) {
+      return (
+        <div>
+          <div className="text-3xl font-bold text-yellow-600 dark:text-yellow-400 mb-2">
+            R$ 250 à vista
+          </div>
+          <div className="text-sm text-gray-600 dark:text-gray-400">
+            ou 5x de R$ 60
+          </div>
+        </div>
+      );
+    }
+
     const price = billingPeriod === 'monthly' ? plan.price : plan.yearlyPrice;
     return billingPeriod === 'monthly' 
       ? `R$ ${price.toFixed(2).replace('.', ',')}` 
@@ -91,17 +128,29 @@ export default function Pricing() {
       return;
     }
 
-    // Ajustar mensagem baseado no período de cobrança
+    // Se for plano vitalício, mostrar opções de pagamento
+    if (plan.id === 'lifetime') {
+      const choice = window.confirm(
+        '💎 PLANO VITALÍCIO - Escolha a forma de pagamento:\n\n' +
+        '✅ OK = R$ 250 à vista no PIX\n' +
+        '❌ CANCELAR = 5x de R$ 60 no cartão (total R$ 300)'
+      );
+
+      const message = choice ? plan.whatsappMessagePix : plan.whatsappMessageInstallment;
+      const encodedMessage = encodeURIComponent(message);
+      const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodedMessage}`;
+      window.open(whatsappUrl, '_blank');
+      return;
+    }
+
+    // Planos mensais
     let message = plan.whatsappMessage;
     if (billingPeriod === 'yearly') {
       message = `Olá! Gostaria de assinar o *Plano ${plan.name}* (R$ ${plan.yearlyPrice.toFixed(2).replace('.', ',')}/ano) do MedPlanner. Como faço o pagamento?`;
     }
 
-    // Criar link do WhatsApp com mensagem pré-formatada
     const encodedMessage = encodeURIComponent(message);
     const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodedMessage}`;
-    
-    // Abrir WhatsApp em nova aba
     window.open(whatsappUrl, '_blank');
   };
 
@@ -159,20 +208,26 @@ export default function Pricing() {
         </div>
 
         {/* Cards de Planos */}
-        <div className="grid md:grid-cols-3 gap-8">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
           {plans.map((plan, index) => (
             <div
               key={plan.id}
               className={`relative bg-white dark:bg-gray-800 rounded-2xl shadow-xl border-2 p-8 transition-all hover:scale-105 animate-slide-in ${
                 plan.popular 
-                  ? 'border-indigo-500 ring-4 ring-indigo-200 dark:ring-indigo-900/50' 
+                  ? plan.lifetime
+                    ? 'border-yellow-500 ring-4 ring-yellow-200 dark:ring-yellow-900/50'
+                    : 'border-indigo-500 ring-4 ring-indigo-200 dark:ring-indigo-900/50'
                   : 'border-gray-200 dark:border-gray-700'
               }`}
               style={{ animationDelay: `${index * 0.1}s` }}
             >
               {plan.popular && (
                 <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                  <span className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-2 rounded-full text-sm font-bold shadow-lg flex items-center gap-2">
+                  <span className={`${
+                    plan.lifetime 
+                      ? 'bg-gradient-to-r from-yellow-500 to-orange-600'
+                      : 'bg-gradient-to-r from-indigo-600 to-purple-600'
+                  } text-white px-6 py-2 rounded-full text-sm font-bold shadow-lg flex items-center gap-2`}>
                     <SparklesIcon className="h-4 w-4" />
                     MAIS POPULAR
                   </span>
@@ -187,13 +242,19 @@ export default function Pricing() {
                   {plan.description}
                 </p>
                 <div className="mb-2">
-                  <span className="text-5xl font-bold text-gray-900 dark:text-white">
-                    {getPrice(plan)}
-                  </span>
-                  {plan.price > 0 && (
-                    <span className="text-gray-600 dark:text-gray-400 text-lg">
-                      /{billingPeriod === 'monthly' ? 'mês' : 'ano'}
-                    </span>
+                  {typeof getPrice(plan) === 'string' ? (
+                    <>
+                      <span className="text-5xl font-bold text-gray-900 dark:text-white">
+                        {getPrice(plan)}
+                      </span>
+                      {plan.price > 0 && !plan.lifetime && (
+                        <span className="text-gray-600 dark:text-gray-400 text-lg">
+                          /{billingPeriod === 'monthly' ? 'mês' : 'ano'}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    getPrice(plan)
                   )}
                 </div>
                 {billingPeriod === 'yearly' && getSavings(plan) > 0 && (
@@ -225,7 +286,9 @@ export default function Pricing() {
               <button
                 onClick={() => handleSubscribe(plan)}
                 className={`w-full py-4 rounded-xl font-bold transition-all shadow-lg hover-lift ${
-                  plan.popular
+                  plan.lifetime
+                    ? 'bg-gradient-to-r from-yellow-500 to-orange-600 hover:from-yellow-600 hover:to-orange-700 text-white'
+                    : plan.popular
                     ? 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white'
                     : plan.id === 'free'
                     ? 'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300'
