@@ -5,6 +5,7 @@ import './index.css';
 import { initTheme } from './utils/themeManager.js';
 import { AppProvider } from './context/AppContext';
 import { SubscriptionProvider } from './context/SubscriptionContext';
+import { CouponProvider } from './context/CouponContext';
 
 // Inicializar tema
 initTheme();
@@ -35,10 +36,12 @@ if ('serviceWorker' in navigator) {
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <SubscriptionProvider>
-      <AppProvider>
-        <App />
-      </AppProvider>
-    </SubscriptionProvider>
+    <CouponProvider>
+      <SubscriptionProvider>
+        <AppProvider>
+          <App />
+        </AppProvider>
+      </SubscriptionProvider>
+    </CouponProvider>
   </React.StrictMode>
 );
