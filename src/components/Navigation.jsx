@@ -8,7 +8,8 @@ import {
   Cog6ToothIcon,
   BookOpenIcon,
   BeakerIcon,
-  ChartBarIcon
+  ChartBarIcon,
+  SparklesIcon
 } from '@heroicons/react/24/outline';
 
 export default function Navigation() {
@@ -23,6 +24,7 @@ export default function Navigation() {
     { path: '/wellness', icon: HeartIcon, label: 'Bem-estar' },
     { path: '/analytics', icon: ChartBarIcon, label: 'Análises' },
     { path: '/finances', icon: CurrencyDollarIcon, label: 'Finanças' },
+    { path: '/pricing', icon: SparklesIcon, label: 'Planos' },
     { path: '/settings', icon: Cog6ToothIcon, label: 'Config' },
   ];
 
@@ -82,7 +84,7 @@ export default function Navigation() {
             );
           })}
         </div>
-        <div className="grid grid-cols-4 gap-1 p-2 pt-0">
+        <div className="grid grid-cols-5 gap-1 p-2 pt-0">
           {navItems.slice(5).map((item) => {
             const isActive = location.pathname === item.path;
             const Icon = item.icon;
