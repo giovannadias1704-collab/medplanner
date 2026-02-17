@@ -17,7 +17,9 @@ import {
   PlusIcon,
   XMarkIcon,
   ArrowDownTrayIcon,
-  PencilIcon
+  PencilIcon,
+  ArrowPathIcon,
+  LightBulbIcon
 } from '@heroicons/react/24/outline';
 
 export default function Study() {
@@ -26,6 +28,7 @@ export default function Study() {
     studySchedule,
     studyReviews,
     studyQuestions,
+    studyRecords,
     events,
     pblObjectives,
     pblCases,
@@ -35,6 +38,7 @@ export default function Study() {
     toggleReviewComplete,
     addStudyQuestion,
     answerStudyQuestion,
+    addStudyRecord,
     getTodayReviews,
     getUpcomingExams,
     addEvent
@@ -45,15 +49,97 @@ export default function Study() {
   const [showQuestionModal, setShowQuestionModal] = useState(false);
   const [showTopicsModal, setShowTopicsModal] = useState(false);
   const [showExamModal, setShowExamModal] = useState(false);
+  const [showRealityModal, setShowRealityModal] = useState(false);
+  const [showAdjustModal, setShowAdjustModal] = useState(false);
   const [generatingSchedule, setGeneratingSchedule] = useState(false);
 
-  // ========== NOVO: CALCULAR ESTATÍSTICAS ==========
   const studyStats = useMemo(() => 
     calculateStudyStats(studySchedule, studyReviews, events),
     [studySchedule, studyReviews, events]
   );
 
-  // Onboarding form
+  // Calcular padrão semanal baseado na realidade
+  const realityPattern = useMemo(() => {
+    if (!studyRecords || studyRecords.filter(r => r.type === 'reality').length < 3) {
+      return null;
+    }
+
+    const realityRecords = studyRecords.filter(r => r.type === 'reality');
+    
+    // Calcular média de horas por dia (últimas 2 semanas)
+    const twoWeeksAgo = new Date();
+    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+    
+    const recentRecords = realityRecords.filter(r => new Date(r.date) >= twoWeeksAgo);
+    
+    if (recentRecords.length === 0) return null;
+
+    // Agrupar por dia
+    const dayGroups = {};
+    recentRecords.forEach(record => {
+      const date = new Date(record.date).toISOString().split('T')[0];
+      if (!dayGroups[date]) {
+        dayGroups[date] = { total: 0, count: 0, subjects: [] };
+      }
+      dayGroups[date].total += record.time || 0;
+      dayGroups[date].count += 1;
+      dayGroups[date].subjects.push(record.subject);
+    });
+
+    const daysWithStudy = Object.values(dayGroups);
+    
+    // Média de horas por dia de estudo
+    const avgHoursPerStudyDay = daysWithStudy.reduce((sum, day) => sum + day.total, 0) / daysWithStudy.length;
+    
+    // Média de assuntos diferentes por dia
+    const avgSubjectsPerDay = daysWithStudy.reduce((sum, day) => {
+      const uniqueSubjects = [...new Set(day.subjects)].length;
+      return sum + uniqueSubjects;
+    }, 0) / daysWithStudy.length;
+
+    // Calcular produtividade média
+    const recordsWithProductivity = recentRecords.filter(r => r.productivity);
+    const productivityScores = {
+      'excelente': 5,
+      'boa': 4,
+      'media': 3,
+      'baixa': 2
+    };
+    
+    const avgProductivity = recordsWithProductivity.length > 0
+      ? recordsWithProductivity.reduce((sum, r) => sum + (productivityScores[r.productivity] || 3), 0) / recordsWithProductivity.length
+      : 3;
+
+    // Técnica mais usada
+    const techniqueCounts = {};
+    recentRecords.forEach(r => {
+      if (r.technique) {
+        techniqueCounts[r.technique] = (techniqueCounts[r.technique] || 0) + 1;
+      }
+    });
+    
+    const mostUsedTechnique = Object.entries(techniqueCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
+
+    // Dias da semana mais produtivos
+    const weekdayHours = {};
+    recentRecords.forEach(r => {
+      const weekday = new Date(r.date).getDay();
+      weekdayHours[weekday] = (weekdayHours[weekday] || 0) + (r.time || 0);
+    });
+
+    return {
+      avgHoursPerDay: Math.round(avgHoursPerStudyDay * 10) / 10,
+      avgSubjectsPerDay: Math.round(avgSubjectsPerDay),
+      avgProductivity,
+      mostUsedTechnique,
+      totalDaysStudied: daysWithStudy.length,
+      weekdayHours,
+      suggestedHours: Math.min(Math.round(avgHoursPerStudyDay), 12),
+      suggestedSubjects: Math.max(1, Math.min(Math.round(avgSubjectsPerDay), 8)),
+      confidence: Math.min(recentRecords.length / 10, 1) // 0-1, baseado em quantos registros tem
+    };
+  }, [studyRecords]);
+
   const [onboardingData, setOnboardingData] = useState({
     hoursPerDay: 4,
     subjectsPerDay: 3,
@@ -61,24 +147,29 @@ export default function Study() {
     sessionType: 'pomodoro'
   });
 
-  // Exam form
   const [newExam, setNewExam] = useState({
     title: '',
     date: '',
     topics: []
   });
 
-  // Topics management
   const [manualTopic, setManualTopic] = useState('');
   const [selectedPBLCase, setSelectedPBLCase] = useState('');
 
-  // New question form
   const [newQuestion, setNewQuestion] = useState({
     topic: '',
     question: '',
     options: ['', '', '', ''],
     correctOption: 0,
     explanation: ''
+  });
+
+  const [realityRecord, setRealityRecord] = useState({
+    subject: '',
+    time: '',
+    technique: '',
+    productivity: '',
+    notes: ''
   });
 
   const todayReviews = getTodayReviews();
@@ -95,6 +186,36 @@ export default function Study() {
       alert('Configuração salva! Agora você pode cadastrar provas e gerar cronogramas. ✅');
     } catch (error) {
       alert('Erro ao salvar configuração');
+    }
+  };
+
+  const handleAdjustFromReality = async () => {
+    if (!realityPattern) {
+      alert('Você precisa de pelo menos 3 registros de estudo para ajustar o cronograma!');
+      return;
+    }
+
+    try {
+      const adjustedConfig = {
+        ...studyConfig,
+        hoursPerDay: realityPattern.suggestedHours,
+        subjectsPerDay: realityPattern.suggestedSubjects,
+        configured: true
+      };
+
+      await updateStudyConfig(adjustedConfig);
+      
+      // Regenerar cronograma com nova configuração
+      if (upcomingExams.length > 0) {
+        await generateStudySchedule();
+        alert(`🎉 Cronograma ajustado!\n\n📊 Nova configuração baseada no seu padrão real:\n• ${realityPattern.suggestedHours}h por dia\n• ${realityPattern.suggestedSubjects} assunto(s) por dia\n\n✅ Cronograma regenerado!`);
+      } else {
+        alert(`✅ Configuração ajustada!\n\n📊 Baseado no seu padrão real:\n• ${realityPattern.suggestedHours}h por dia\n• ${realityPattern.suggestedSubjects} assunto(s) por dia\n\nCadastre uma prova para gerar o cronograma!`);
+      }
+
+      setShowAdjustModal(false);
+    } catch (error) {
+      alert('Erro ao ajustar configuração');
     }
   };
 
@@ -197,7 +318,40 @@ export default function Study() {
     }
   };
 
-  // Onboarding Modal
+  const handleSubmitReality = async (e) => {
+    e.preventDefault();
+    
+    if (!realityRecord.subject || !realityRecord.time) {
+      alert('Preencha pelo menos a matéria e o tempo!');
+      return;
+    }
+    
+    try {
+      await addStudyRecord({
+        id: Date.now().toString(),
+        type: 'reality',
+        date: new Date().toISOString(),
+        subject: realityRecord.subject,
+        time: parseFloat(realityRecord.time),
+        technique: realityRecord.technique,
+        productivity: realityRecord.productivity,
+        notes: realityRecord.notes
+      });
+      
+      setRealityRecord({
+        subject: '',
+        time: '',
+        technique: '',
+        productivity: '',
+        notes: ''
+      });
+      setShowRealityModal(false);
+      alert('✅ Estudo registrado com sucesso!');
+    } catch (error) {
+      alert('Erro ao registrar estudo');
+    }
+  };
+
   if (showOnboarding) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 flex items-center justify-center p-4">
@@ -305,7 +459,6 @@ export default function Study() {
         imageQuery="study,library,books,education"
       />
 
-      {/* ========== NOVO: ESTATÍSTICAS DE ESTUDOS ========== */}
       <div className="max-w-7xl mx-auto px-4 py-6">
         <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6 animate-fade-in">
           <StatsCard
@@ -346,9 +499,8 @@ export default function Study() {
           />
         </section>
 
-        {/* ========== NOVO: GRÁFICO DE PROGRESSO ========== */}
         {studyStats.totalScheduled > 0 && (
-          <section className="mb-6 animate-fade-in" style={{ animationDelay: '0.1s' }}>
+          <section className="mb-6 animate-fade-in">
             <ProgressChart
               title="📊 Progresso Semanal de Estudos"
               color="blue"
@@ -373,9 +525,8 @@ export default function Study() {
           </section>
         )}
 
-        {/* ========== NOVO: INSIGHTS AUTOMÁTICOS ========== */}
         {studyStats.insights && studyStats.insights.length > 0 && (
-          <section className="mb-6 animate-fade-in" style={{ animationDelay: '0.15s' }}>
+          <section className="mb-6 animate-fade-in">
             <InsightCard 
               title="💡 Insights de Estudos"
               insights={studyStats.insights}
@@ -384,12 +535,12 @@ export default function Study() {
         )}
       </div>
 
-      {/* Tabs */}
       <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex gap-4 overflow-x-auto scrollbar-hide">
             {[
               { id: 'cronograma', label: 'Cronograma', icon: CalendarIcon, emoji: '📅' },
+              { id: 'realidade', label: 'Realidade', icon: CheckCircleIcon, emoji: '✅' },
               { id: 'revisao', label: 'Revisão', icon: BookOpenIcon, emoji: '🔄' },
               { id: 'questoes', label: 'Questões', icon: QuestionMarkCircleIcon, emoji: '❓' }
             ].map(tab => (
@@ -411,10 +562,9 @@ export default function Study() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-6">
-        {/* Tab: Cronograma */}
+        
         {activeTab === 'cronograma' && (
           <div className="space-y-6">
-            {/* Ações */}
             <div className="grid grid-cols-2 gap-3 animate-fade-in">
               <button
                 onClick={() => setShowExamModal(true)}
@@ -433,9 +583,8 @@ export default function Study() {
               </button>
             </div>
 
-            {/* Próximas Provas */}
             {upcomingExams.length > 0 && (
-              <section className="bg-gradient-to-br from-orange-50 to-red-50 dark:from-orange-900/20 dark:to-red-900/20 rounded-2xl p-6 border-2 border-orange-200 dark:border-orange-800 shadow-lg animate-fade-in" style={{ animationDelay: '0.1s' }}>
+              <section className="bg-gradient-to-br from-orange-50 to-red-50 dark:from-orange-900/20 dark:to-red-900/20 rounded-2xl p-6 border-2 border-orange-200 dark:border-orange-800 shadow-lg animate-fade-in">
                 <div className="flex items-center gap-3 mb-5">
                   <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-red-600 rounded-2xl flex items-center justify-center shadow-lg">
                     <span className="text-2xl">🎯</span>
@@ -456,7 +605,6 @@ export default function Study() {
                       <div
                         key={exam.id}
                         className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-md hover-lift animate-slide-in"
-                        style={{ animationDelay: `${0.2 + index * 0.1}s` }}
                       >
                         <div className="flex items-start justify-between mb-3">
                           <div className="flex-1">
@@ -495,9 +643,8 @@ export default function Study() {
               </section>
             )}
 
-            {/* Cronograma de Hoje */}
             {todaySchedule.length > 0 && (
-              <section className="animate-fade-in" style={{ animationDelay: '0.2s' }}>
+              <section className="animate-fade-in">
                 <div className="flex items-center gap-3 mb-5">
                   <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg">
                     <span className="text-2xl">📅</span>
@@ -523,7 +670,6 @@ export default function Study() {
                           ? 'bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 border-yellow-200 dark:border-yellow-800'
                           : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'
                       }`}
-                      style={{ animationDelay: `${0.3 + index * 0.1}s` }}
                     >
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex-1">
@@ -561,9 +707,8 @@ export default function Study() {
               </section>
             )}
 
-            {/* Próximas Semanas */}
             {studySchedule.length > 0 && (
-              <section className="animate-fade-in" style={{ animationDelay: '0.3s' }}>
+              <section className="animate-fade-in">
                 <div className="flex items-center gap-3 mb-5">
                   <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl flex items-center justify-center shadow-lg">
                     <CalendarIcon className="h-6 w-6 text-white" />
@@ -586,7 +731,6 @@ export default function Study() {
                       <div
                         key={item.id}
                         className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-md border border-gray-200 dark:border-gray-700 flex items-center justify-between hover-lift animate-slide-in"
-                        style={{ animationDelay: `${0.4 + index * 0.05}s` }}
                       >
                         <div className="flex items-center gap-3 flex-1">
                           <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-xl flex items-center justify-center">
@@ -630,7 +774,303 @@ export default function Study() {
           </div>
         )}
 
-        {/* Tab: Revisão */}
+        {activeTab === 'realidade' && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 gap-3 animate-fade-in">
+              <button
+                onClick={() => setShowRealityModal(true)}
+                className="w-full flex items-center justify-center gap-2 px-5 py-4 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:from-green-700 hover:to-emerald-700 transition-all font-bold shadow-lg hover-lift"
+              >
+                <PlusIcon className="h-5 w-5" />
+                Registrar Estudo Realizado
+              </button>
+
+              {realityPattern && realityPattern.confidence >= 0.3 && (
+                <button
+                  onClick={() => setShowAdjustModal(true)}
+                  className="w-full flex items-center justify-center gap-2 px-5 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl hover:from-purple-700 hover:to-pink-700 transition-all font-bold shadow-lg hover-lift"
+                >
+                  <ArrowPathIcon className="h-5 w-5" />
+                  Ajustar Cronograma pela Realidade
+                </button>
+              )}
+            </div>
+
+            {/* Comparação Planejado vs Realidade */}
+            {realityPattern && (
+              <section className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-2xl p-6 border-2 border-blue-200 dark:border-blue-800 shadow-lg animate-fade-in">
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center">
+                    <ChartBarIcon className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                      Planejado vs Realidade
+                    </h2>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Baseado em {realityPattern.totalDaysStudied} dias de estudo
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-md">
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mb-3 font-semibold">
+                      ⏱️ Horas por Dia
+                    </p>
+                    <div className="space-y-3">
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs text-gray-500">Planejado</span>
+                          <span className="text-lg font-bold text-blue-600 dark:text-blue-400">
+                            {studyConfig.hoursPerDay}h
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                          <div 
+                            className="bg-blue-500 h-2 rounded-full"
+                            style={{ width: `${(studyConfig.hoursPerDay / 12) * 100}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs text-gray-500">Realidade</span>
+                          <span className="text-lg font-bold text-green-600 dark:text-green-400">
+                            {realityPattern.avgHoursPerDay}h
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                          <div 
+                            className="bg-green-500 h-2 rounded-full"
+                            style={{ width: `${(realityPattern.avgHoursPerDay / 12) * 100}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-md">
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mb-3 font-semibold">
+                      📚 Assuntos por Dia
+                    </p>
+                    <div className="space-y-3">
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs text-gray-500">Planejado</span>
+                          <span className="text-lg font-bold text-blue-600 dark:text-blue-400">
+                            {studyConfig.subjectsPerDay}
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                          <div 
+                            className="bg-blue-500 h-2 rounded-full"
+                            style={{ width: `${(studyConfig.subjectsPerDay / 8) * 100}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs text-gray-500">Realidade</span>
+                          <span className="text-lg font-bold text-green-600 dark:text-green-400">
+                            {realityPattern.avgSubjectsPerDay}
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                          <div 
+                            className="bg-green-500 h-2 rounded-full"
+                            style={{ width: `${(realityPattern.avgSubjectsPerDay / 8) * 100}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {Math.abs(studyConfig.hoursPerDay - realityPattern.avgHoursPerDay) > 1 && (
+                  <div className="mt-5 bg-yellow-50 dark:bg-yellow-900/20 rounded-xl p-4 border-2 border-yellow-200 dark:border-yellow-800">
+                    <div className="flex items-start gap-3">
+                      <LightBulbIcon className="h-6 w-6 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-bold text-gray-900 dark:text-white mb-1">
+                          💡 Sugestão de Ajuste
+                        </p>
+                        <p className="text-sm text-gray-700 dark:text-gray-300">
+                          Seu cronograma está planejado para <strong>{studyConfig.hoursPerDay}h/dia</strong>, 
+                          mas você está conseguindo estudar <strong>{realityPattern.avgHoursPerDay}h/dia</strong> em média.
+                          {realityPattern.avgHoursPerDay < studyConfig.hoursPerDay 
+                            ? ' Ajuste para um cronograma mais realista e alcançável!'
+                            : ' Você está indo muito bem! Pode aumentar a meta se quiser!'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </section>
+            )}
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-fade-in">
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-4">
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Hoje</p>
+                <p className="text-3xl font-bold text-indigo-600 dark:text-indigo-400">
+                  {(studyRecords?.filter(r => {
+                    const recordDate = new Date(r.date);
+                    const today = new Date();
+                    return r.type === 'reality' && 
+                      recordDate.toDateString() === today.toDateString();
+                  }).reduce((sum, r) => sum + (r.time || 0), 0) || 0).toFixed(1)}h
+                </p>
+              </div>
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-4">
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Esta Semana</p>
+                <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">
+                  {(studyRecords?.filter(r => {
+                    const recordDate = new Date(r.date);
+                    const weekAgo = new Date();
+                    weekAgo.setDate(weekAgo.getDate() - 7);
+                    return r.type === 'reality' && recordDate >= weekAgo;
+                  }).reduce((sum, r) => sum + (r.time || 0), 0) || 0).toFixed(1)}h
+                </p>
+              </div>
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-4">
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Total</p>
+                <p className="text-3xl font-bold text-purple-600 dark:text-purple-400">
+                  {studyRecords?.filter(r => r.type === 'reality').length || 0}
+                </p>
+              </div>
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-4">
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Média/Dia</p>
+                <p className="text-3xl font-bold text-green-600 dark:text-green-400">
+                  {realityPattern ? realityPattern.avgHoursPerDay : '0.0'}h
+                </p>
+              </div>
+            </div>
+
+            <section className="animate-fade-in">
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-teal-600 rounded-2xl flex items-center justify-center shadow-lg">
+                  <span className="text-2xl">✅</span>
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                    Histórico de Estudos
+                  </h2>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    {studyRecords?.filter(r => r.type === 'reality').length || 0} registro(s)
+                  </p>
+                </div>
+              </div>
+
+              {(!studyRecords || studyRecords.filter(r => r.type === 'reality').length === 0) ? (
+                <div className="bg-white dark:bg-gray-800 rounded-2xl p-10 text-center shadow-lg border border-gray-200 dark:border-gray-700">
+                  <div className="text-7xl mb-4">📚</div>
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+                    Nenhum Registro Ainda
+                  </h3>
+                  <p className="text-gray-600 dark:text-gray-400 mb-4">
+                    Comece a registrar o que você realmente estudou!
+                  </p>
+                  <button
+                    onClick={() => setShowRealityModal(true)}
+                    className="px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 font-semibold shadow-lg"
+                  >
+                    Fazer Primeiro Registro
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {[...studyRecords]
+                    .filter(r => r.type === 'reality')
+                    .reverse()
+                    .map((record, index) => (
+                      <div
+                        key={record.id}
+                        className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg border-2 border-gray-200 dark:border-gray-700 hover:border-green-300 dark:hover:border-green-600 transition-all hover-lift animate-slide-in"
+                      >
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center">
+                              <span className="text-2xl">📚</span>
+                            </div>
+                            <div>
+                              <h3 className="font-bold text-lg text-gray-900 dark:text-white">
+                                {record.subject}
+                              </h3>
+                              <p className="text-sm text-gray-600 dark:text-gray-400">
+                                {new Date(record.date).toLocaleDateString('pt-BR', {
+                                  day: '2-digit',
+                                  month: '2-digit',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </p>
+                            </div>
+                          </div>
+                          {record.productivity && (
+                            <div className="flex items-center gap-2 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 px-3 py-2 rounded-lg">
+                              <span className="text-xl">
+                                {record.productivity === 'excelente' ? '🔥' :
+                                 record.productivity === 'boa' ? '✅' :
+                                 record.productivity === 'media' ? '😐' : '😔'}
+                              </span>
+                              <span className="text-sm font-semibold text-gray-700 dark:text-gray-300 capitalize">
+                                {record.productivity}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+                          <div className="bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-900/20 dark:to-blue-900/20 rounded-lg p-3">
+                            <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Tempo</p>
+                            <p className="text-lg font-bold text-indigo-600 dark:text-indigo-400">
+                              {record.time}h
+                            </p>
+                          </div>
+                          {record.technique && (
+                            <div className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-lg p-3">
+                              <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Técnica</p>
+                              <p className="text-sm font-semibold text-purple-600 dark:text-purple-400 capitalize">
+                                {record.technique === 'leitura' ? '📖 Leitura' :
+                                 record.technique === 'resumos' ? '📝 Resumos' :
+                                 record.technique === 'flashcards' ? '🗂️ Flashcards' :
+                                 record.technique === 'mapas' ? '🗺️ Mapas' :
+                                 record.technique === 'questoes' ? '❓ Questões' :
+                                 record.technique === 'videos' ? '🎥 Vídeos' :
+                                 record.technique === 'pratica' ? '🔬 Prática' :
+                                 record.technique === 'grupo' ? '👥 Grupo' : record.technique}
+                              </p>
+                            </div>
+                          )}
+                          <div className={`bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-lg p-3 ${
+                            record.time >= 3 ? 'ring-2 ring-green-500' : ''
+                          }`}>
+                            <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Status</p>
+                            <p className="text-lg font-bold text-green-600 dark:text-green-400">
+                              {record.time >= 3 ? '🎉 Ótimo!' : '💪 Bom'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {record.notes && (
+                          <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
+                            <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                              📝 Observações:
+                            </p>
+                            <p className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap text-sm">
+                              {record.notes}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              )}
+            </section>
+          </div>
+        )}
+
         {activeTab === 'revisao' && (
           <div className="space-y-6">
             <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-2xl p-6 border-2 border-purple-200 dark:border-purple-800 shadow-lg animate-fade-in">
@@ -650,7 +1090,7 @@ export default function Study() {
               </p>
             </div>
 
-            <section className="animate-fade-in" style={{ animationDelay: '0.1s' }}>
+            <section className="animate-fade-in">
               <div className="flex items-center gap-3 mb-5">
                 <div className="w-12 h-12 bg-gradient-to-br from-yellow-500 to-orange-600 rounded-2xl flex items-center justify-center shadow-lg">
                   <span className="text-2xl">🔄</span>
@@ -681,7 +1121,6 @@ export default function Study() {
                     <div
                       key={review.id}
                       className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-lg border-2 border-purple-200 dark:border-purple-800 hover-lift animate-slide-in"
-                      style={{ animationDelay: `${0.2 + index * 0.1}s` }}
                     >
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex items-start gap-3 flex-1">
@@ -714,7 +1153,7 @@ export default function Study() {
             </section>
 
             {studyReviews.length > 0 && (
-              <section className="animate-fade-in" style={{ animationDelay: '0.3s' }}>
+              <section className="animate-fade-in">
                 <div className="flex items-center gap-3 mb-5">
                   <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg">
                     <CalendarIcon className="h-6 w-6 text-white" />
@@ -738,7 +1177,6 @@ export default function Study() {
                       <div
                         key={review.id}
                         className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-md border border-gray-200 dark:border-gray-700 flex items-center justify-between hover-lift animate-slide-in"
-                        style={{ animationDelay: `${0.4 + index * 0.05}s` }}
                       >
                         <div className="flex items-center gap-3 flex-1">
                           <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl flex items-center justify-center">
@@ -764,12 +1202,12 @@ export default function Study() {
           </div>
         )}
 
-        {/* Tab: Questões */}
         {activeTab === 'questoes' && (
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-teal-600 rounded-2xl flex items-center justify-center shadow-lg">
+                <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-teal-600 rounded-2xl
+                flex items-center justify-center shadow-lg">
                   <QuestionMarkCircleIcon className="h-6 w-6 text-white" />
                 </div>
                 <div>
@@ -817,7 +1255,6 @@ export default function Study() {
                     <div
                       key={question.id}
                       className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg border border-gray-200 dark:border-gray-700 hover-lift animate-slide-in"
-                      style={{ animationDelay: `${index * 0.1}s` }}
                     >
                       <div className="flex items-start justify-between mb-4">
                         <div className="flex-1">
@@ -878,7 +1315,156 @@ export default function Study() {
         )}
       </div>
 
-      {/* Modal Cadastrar Prova */}
+      {/* Modal: Ajustar Cronograma */}
+      {showAdjustModal && realityPattern && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 overflow-y-auto backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-7 max-w-2xl w-full my-8 shadow-2xl border border-gray-200 dark:border-gray-700 animate-scale-in">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+                <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-xl flex items-center justify-center">
+                  <ArrowPathIcon className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                </div>
+                Ajustar Cronograma pela Realidade
+              </h3>
+              <button 
+                onClick={() => setShowAdjustModal(false)}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors"
+              >
+                <XMarkIcon className="h-6 w-6 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl p-5 border-2 border-blue-200 dark:border-blue-800">
+                <h4 className="font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                  <ChartBarIcon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  Análise dos Últimos {realityPattern.totalDaysStudied} Dias
+                </h4>
+
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div className="bg-white dark:bg-gray-800 rounded-lg p-4">
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Configuração Atual</p>
+                    <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                      {studyConfig.hoursPerDay}h/dia
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {studyConfig.subjectsPerDay} assunto(s)
+                    </p>
+                  </div>
+                  <div className="bg-white dark:bg-gray-800 rounded-lg p-4">
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Média Real</p>
+                    <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                      {realityPattern.avgHoursPerDay}h/dia
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {realityPattern.avgSubjectsPerDay} assunto(s)
+                    </p>
+                  </div>
+                </div>
+
+                {realityPattern.mostUsedTechnique && (
+                  <div className="bg-white dark:bg-gray-800 rounded-lg p-4">
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">Técnica Mais Usada</p>
+                    <p className="text-lg font-bold text-purple-600 dark:text-purple-400">
+                      {realityPattern.mostUsedTechnique === 'leitura' ? '📖 Leitura' :
+                       realityPattern.mostUsedTechnique === 'resumos' ? '📝 Resumos' :
+                       realityPattern.mostUsedTechnique === 'flashcards' ? '🗂️ Flashcards' :
+                       realityPattern.mostUsedTechnique === 'mapas' ? '🗺️ Mapas Mentais' :
+                       realityPattern.mostUsedTechnique === 'questoes' ? '❓ Questões' :
+                       realityPattern.mostUsedTechnique === 'videos' ? '🎥 Videoaulas' :
+                       realityPattern.mostUsedTechnique === 'pratica' ? '🔬 Prática' :
+                       realityPattern.mostUsedTechnique === 'grupo' ? '👥 Grupo' : realityPattern.mostUsedTechnique}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-xl p-5 border-2 border-purple-200 dark:border-purple-800">
+                <h4 className="font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                  <SparklesIcon className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                  Nova Configuração Sugerida
+                </h4>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between bg-white dark:bg-gray-800 rounded-lg p-4">
+                    <div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Horas por Dia</p>
+                      <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                        {realityPattern.suggestedHours}h
+                      </p>
+                    </div>
+                    {studyConfig.hoursPerDay !== realityPattern.suggestedHours && (
+                      <div className={`text-sm font-bold px-3 py-1.5 rounded-full ${
+                        realityPattern.suggestedHours < studyConfig.hoursPerDay
+                          ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'
+                          : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                      }`}>
+                        {realityPattern.suggestedHours < studyConfig.hoursPerDay ? '📉' : '📈'} 
+                        {realityPattern.suggestedHours > studyConfig.hoursPerDay ? '+' : ''}
+                        {realityPattern.suggestedHours - studyConfig.hoursPerDay}h
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between bg-white dark:bg-gray-800 rounded-lg p-4">
+                    <div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Assuntos por Dia</p>
+                      <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                        {realityPattern.suggestedSubjects}
+                      </p>
+                    </div>
+                    {studyConfig.subjectsPerDay !== realityPattern.suggestedSubjects && (
+                      <div className={`text-sm font-bold px-3 py-1.5 rounded-full ${
+                        realityPattern.suggestedSubjects < studyConfig.subjectsPerDay
+                          ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'
+                          : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                      }`}>
+                        {realityPattern.suggestedSubjects < studyConfig.subjectsPerDay ? '📉' : '📈'} 
+                        {realityPattern.suggestedSubjects > studyConfig.subjectsPerDay ? '+' : ''}
+                        {realityPattern.suggestedSubjects - studyConfig.subjectsPerDay}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-xl p-5 border-2 border-yellow-200 dark:border-yellow-800">
+                <div className="flex items-start gap-3">
+                  <LightBulbIcon className="h-6 w-6 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold text-gray-900 dark:text-white mb-2">
+                      ⚡ O Que Vai Acontecer:
+                    </p>
+                    <ul className="text-sm text-gray-700 dark:text-gray-300 space-y-1">
+                      <li>✅ Configuração será atualizada com sua média real</li>
+                      <li>✅ Cronograma será regenerado automaticamente</li>
+                      <li>✅ Metas mais realistas e alcançáveis</li>
+                      <li>✅ Menos frustração, mais consistência</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowAdjustModal(false)}
+                  className="flex-1 px-6 py-3 border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 font-semibold transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleAdjustFromReality}
+                  className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl hover:from-purple-700 hover:to-pink-700 font-semibold shadow-lg transition-all hover-lift"
+                >
+                  Ajustar Cronograma
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showExamModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 overflow-y-auto backdrop-blur-sm animate-fade-in">
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-7 max-w-2xl w-full my-8 shadow-2xl border border-gray-200 dark:border-gray-700 animate-scale-in">
@@ -925,13 +1511,11 @@ export default function Study() {
                 />
               </div>
 
-              {/* Tópicos */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
                   Tópicos da Prova
                 </label>
 
-                {/* Opção 1: Importar do PBL */}
                 <div className="bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 rounded-xl p-4 mb-3 border-2 border-purple-200 dark:border-purple-800">
                   <h4 className="font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
                     <ArrowDownTrayIcon className="h-5 w-5 text-purple-600 dark:text-purple-400" />
@@ -960,7 +1544,6 @@ export default function Study() {
                   </div>
                 </div>
 
-                {/* Opção 2: Adicionar Manualmente */}
                 <div className="bg-gradient-to-r from-green-50 to-teal-50 dark:from-green-900/20 dark:to-teal-900/20 rounded-xl p-4 mb-3 border-2 border-green-200 dark:border-green-800">
                   <h4 className="font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
                     <PencilIcon className="h-5 w-5 text-green-600 dark:text-green-400" />
@@ -986,7 +1569,6 @@ export default function Study() {
                   </div>
                 </div>
 
-                {/* Lista de Tópicos Adicionados */}
                 {newExam.topics.length > 0 && (
                   <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
                     <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-3">
@@ -1035,7 +1617,6 @@ export default function Study() {
         </div>
       )}
 
-      {/* Modal Nova Questão */}
       {showQuestionModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 overflow-y-auto backdrop-blur-sm animate-fade-in">
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-7 max-w-2xl w-full my-8 shadow-2xl border border-gray-200 dark:border-gray-700 animate-scale-in">
@@ -1148,6 +1729,173 @@ export default function Study() {
           </div>
         </div>
       )}
+
+      {showRealityModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 overflow-y-auto backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-7 max-w-2xl w-full my-8 shadow-2xl border border-gray-200 dark:border-gray-700 animate-scale-in">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+                <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center">
+                  <CheckCircleIcon className="h-5 w-5 text-green-600 dark:text-green-400" />
+                </div>
+                Registrar Estudo Realizado
+              </h3>
+              <button 
+                onClick={() => {
+                  setShowRealityModal(false);
+                  setRealityRecord({
+                    subject: '',
+                    time: '',
+                    technique: '',
+                    productivity: '',
+                    notes: ''
+                  });
+                }}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors"
+              >
+                <XMarkIcon className="h-6 w-6 text-gray-500" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitReality} className="space-y-5">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                  O que você estudou? *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={realityRecord.subject}
+                  onChange={(e) => setRealityRecord({ ...realityRecord, subject: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-green-500 dark:bg-gray-700 dark:text-white transition-all"
+                  placeholder="Ex: Anatomia Cardíaca"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                  Quanto tempo você estudou? * (em horas)
+                </label>
+                <div className="flex items-center gap-4 mb-3">
+                  <input
+                    type="number"
+                    min="0"
+                    max="24"
+                    step="0.5"
+                    required
+                    value={realityRecord.time}
+                    onChange={(e) => setRealityRecord({ ...realityRecord, time: e.target.value })}
+                    className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-green-500 dark:bg-gray-700 dark:text-white text-lg font-semibold transition-all"
+                    placeholder="Ex: 2.5"
+                  />
+                  <span className="text-gray-600 dark:text-gray-400 font-medium">horas</span>
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  {[0.5, 1, 1.5, 2, 3, 4].map((hours) => (
+                    <button
+                      key={hours}
+                      type="button"
+                      onClick={() => setRealityRecord({ ...realityRecord, time: hours.toString() })}
+                      className="px-4 py-2 bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/30 text-green-700 dark:text-green-300 rounded-lg text-sm font-semibold transition-all"
+                    >
+                      {hours}h
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                  Técnica de Estudo
+                </label>
+                <select
+                  value={realityRecord.technique}
+                  onChange={(e) => setRealityRecord({ ...realityRecord, technique: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-green-500 dark:bg-gray-700 dark:text-white font-medium transition-all"
+                >
+                  <option value="">Selecione uma técnica</option>
+                  <option value="leitura">📖 Leitura</option>
+                  <option value="resumos">📝 Resumos</option>
+                  <option value="flashcards">🗂️ Flashcards</option>
+                  <option value="mapas">🗺️ Mapas Mentais</option>
+                  <option value="questoes">❓ Questões</option>
+                  <option value="videos">🎥 Videoaulas</option>
+                  <option value="pratica">🔬 Prática</option>
+                  <option value="grupo">👥 Grupo de Estudo</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                  Como foi sua produtividade?
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { value: 'excelente', label: 'Excelente', emoji: '🔥' },
+                    { value: 'boa', label: 'Boa', emoji: '✅' },
+                    { value: 'media', label: 'Média', emoji: '😐' },
+                    { value: 'baixa', label: 'Baixa', emoji: '😔' }
+                  ].map((prod) => (
+                    <button
+                      key={prod.value}
+                      type="button"
+                      onClick={() => setRealityRecord({ ...realityRecord, productivity: prod.value })}
+                      className={`p-4 rounded-xl border-2 flex items-center gap-3 transition-all ${
+                        realityRecord.productivity === prod.value
+                          ? 'border-green-500 bg-green-50 dark:bg-green-900/30 scale-105'
+                          : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 bg-white dark:bg-gray-700'
+                      }`}
+                    >
+                      <span className="text-2xl">{prod.emoji}</span>
+                      <span className="font-semibold text-sm text-gray-900 dark:text-white">
+                        {prod.label}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                  Observações ou reflexões
+                </label>
+                <textarea
+                  rows="4"
+                  value={realityRecord.notes}
+                  onChange={(e) => setRealityRecord({ ...realityRecord, notes: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-green-500 dark:bg-gray-700 dark:text-white resize-none transition-all"
+                  placeholder="Como foi o estudo? O que você aprendeu? Dificuldades?"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowRealityModal(false);
+                    setRealityRecord({
+                      subject: '',
+                      time: '',
+                      technique: '',
+                      productivity: '',
+                      notes: ''
+                    });
+                  }}
+                  className="flex-1 px-6 py-3 border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 font-semibold transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:from-green-700 hover:to-emerald-700 font-semibold shadow-lg transition-all hover-lift"
+                >
+                  Salvar Registro
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
-}
+} 
