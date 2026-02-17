@@ -1,489 +1,479 @@
-import { useState, useContext } from 'react';
+import { useContext, useMemo, useState } from 'react';
 import { AppContext } from '../context/AppContext';
+import { useOnboarding } from '../hooks/useOnboarding';
 import PageHeader from '../components/PageHeader';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths } from 'date-fns';
+import QuickCaptureBar from '../components/QuickCaptureBar';
+import EventCard from '../components/EventCard';
+import StatsCard from '../components/StatsCard';
+import ProgressChart from '../components/ProgressChart';
+import InsightCard from '../components/InsightCard';
+import AIChat from '../components/AIChat';
+import { isToday, isTomorrow } from '../utils/dateParser';
+import { daysUntil } from '../utils/helpers';
+import { calculateDashboardStats, calculateTaskStats } from '../utils/statsCalculator';
+import { addDays, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { 
-  ChevronLeftIcon, 
-  ChevronRightIcon, 
-  PencilIcon, 
-  TrashIcon, 
-  XMarkIcon,
-  PlusIcon 
+  AcademicCapIcon, 
+  HeartIcon, 
+  BanknotesIcon,
+  SparklesIcon,
+  FireIcon,
+  CalendarIcon,
+  CheckCircleIcon,
+  CurrencyDollarIcon,
+  BeakerIcon
 } from '@heroicons/react/24/outline';
 
-export default function Calendar() {
-  const { events, updateEvent, deleteEvent } = useContext(AppContext);
+export default function Dashboard() {
+  const { 
+    events, 
+    tasks, 
+    bills, 
+    homeTasks, 
+    studySchedule, 
+    waterLogs, 
+    settings 
+  } = useContext(AppContext);
   
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState(null);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editingEvent, setEditingEvent] = useState(null);
-  const [eventForm, setEventForm] = useState({
-    title: '',
-    date: '',
-    time: '',
-    type: 'event',
-    topics: [],
-    description: ''
-  });
-  const [manualTopic, setManualTopic] = useState('');
+  const { onboardingData } = useOnboarding();
+  const [showAIChat, setShowAIChat] = useState(false);
 
-  const monthStart = startOfMonth(currentDate);
-  const monthEnd = endOfMonth(currentDate);
-  const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
+  // ========== NOVO: CALCULAR ESTATÍSTICAS ==========
+  const dashboardStats = useMemo(() => 
+    calculateDashboardStats(events, tasks, homeTasks, bills, studySchedule, waterLogs, settings),
+    [events, tasks, homeTasks, bills, studySchedule, waterLogs, settings]
+  );
 
-  const eventsOnDate = (date) => {
+  const taskStats = useMemo(() => 
+    calculateTaskStats(tasks, homeTasks),
+    [tasks, homeTasks]
+  );
+
+  // Top 3 Prioridades
+  const top3Priorities = useMemo(() => {
+    const allItems = [
+      ...events.map(e => ({ ...e, source: 'event' })),
+      ...tasks.map(t => ({ ...t, source: 'task' })),
+      ...bills.map(b => ({ ...b, source: 'bill' }))
+    ];
+
+    const futureItems = allItems.filter(item => {
+      if (!item.date) return false;
+      const days = daysUntil(item.date);
+      return days >= 0;
+    });
+
+    return futureItems
+      .sort((a, b) => {
+        const daysA = daysUntil(a.date);
+        const daysB = daysUntil(b.date);
+        return daysA - daysB;
+      })
+      .slice(0, 3);
+  }, [events, tasks, bills]);
+
+  // Próximos eventos (24-72h)
+  const upcomingEvents = useMemo(() => {
+    const today = new Date();
+    const in3Days = addDays(today, 3);
+
     return events.filter(event => {
       if (!event.date) return false;
       const eventDate = new Date(event.date + 'T00:00:00');
-      return isSameDay(eventDate, date);
+      return eventDate > today && eventDate <= in3Days;
     });
-  };
+  }, [events]);
 
-  const selectedDayEvents = selectedDate ? eventsOnDate(selectedDate) : [];
+  // Pendências urgentes
+  const urgentItems = useMemo(() => {
+    const urgent = [];
 
-  const handleEditClick = (event) => {
-    setEditingEvent(event);
-    setEventForm({
-      title: event.title || '',
-      date: event.date || '',
-      time: event.time || '',
-      type: event.type || 'event',
-      topics: event.topics || [],
-      description: event.description || ''
-    });
-    setShowEditModal(true);
-  };
-
-  const handleDeleteClick = async (eventId, eventTitle) => {
-    if (confirm(`Tem certeza que deseja excluir "${eventTitle}"?`)) {
-      try {
-        await deleteEvent(eventId);
-        alert('Evento excluído com sucesso! ✅');
-      } catch (error) {
-        alert('Erro ao excluir evento');
+    bills.forEach(bill => {
+      if (!bill.date || bill.paid) return;
+      const days = daysUntil(bill.date);
+      if (days >= 0 && days <= 3) {
+        urgent.push({ ...bill, type: 'bill', urgency: days });
       }
+    });
+
+    tasks.forEach(task => {
+      if (!task.date || task.completed) return;
+      const days = daysUntil(task.date);
+      if (days < 0) {
+        urgent.push({ ...task, type: 'task', urgency: days });
+      }
+    });
+
+    return urgent.sort((a, b) => a.urgency - b.urgency);
+  }, [bills, tasks]);
+
+  // Mensagem personalizada baseada no perfil
+  const getPersonalizedGreeting = () => {
+    const hour = new Date().getHours();
+    let timeGreeting = 'Olá';
+    
+    if (hour >= 5 && hour < 12) timeGreeting = 'Bom dia';
+    else if (hour >= 12 && hour < 18) timeGreeting = 'Boa tarde';
+    else timeGreeting = 'Boa noite';
+
+    if (onboardingData?.name) {
+      return `${timeGreeting}, ${onboardingData.name}! 👋`;
     }
+    return `${timeGreeting}! 👋`;
   };
 
-  const handleAddTopic = () => {
-    if (manualTopic.trim()) {
-      setEventForm(prev => ({
-        ...prev,
-        topics: [...prev.topics, manualTopic.trim()]
-      }));
-      setManualTopic('');
+  const getPersonalizedSubtitle = () => {
+    const parts = [];
+    
+    if (onboardingData?.semester) {
+      parts.push(`${onboardingData.semester}º Semestre`);
     }
-  };
-
-  const handleRemoveTopic = (index) => {
-    setEventForm(prev => ({
-      ...prev,
-      topics: prev.topics.filter((_, i) => i !== index)
-    }));
-  };
-
-  const handleUpdateEvent = async (e) => {
-    e.preventDefault();
-    try {
-      await updateEvent(editingEvent.id, eventForm);
-      setShowEditModal(false);
-      setEditingEvent(null);
-      alert('Evento atualizado com sucesso! ✅');
-    } catch (error) {
-      alert('Erro ao atualizar evento');
+    
+    if (onboardingData?.university) {
+      parts.push(onboardingData.university);
     }
-  };
 
-  const getEventTypeColor = (type) => {
-    switch (type) {
-      case 'exam':
-        return 'bg-gradient-to-br from-red-50 to-pink-50 dark:from-red-900/30 dark:to-pink-900/30 text-red-800 dark:text-red-300 border-red-200 dark:border-red-800';
-      case 'assignment':
-        return 'bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-yellow-900/30 dark:to-orange-900/30 text-yellow-800 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800';
-      case 'meeting':
-        return 'bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/30 dark:to-cyan-900/30 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800';
-      case 'event':
-      default:
-        return 'bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 text-green-800 dark:text-green-300 border-green-200 dark:border-green-800';
+    if (parts.length > 0) {
+      return `${parts.join(' • ')} • ${format(new Date(), "EEEE, dd 'de' MMMM", { locale: ptBR })}`;
     }
-  };
 
-  const getEventTypeEmoji = (type) => {
-    switch (type) {
-      case 'exam':
-        return '📝';
-      case 'assignment':
-        return '📋';
-      case 'meeting':
-        return '👥';
-      case 'event':
-      default:
-        return '📅';
-    }
-  };
-
-  const getEventTypeLabel = (type) => {
-    switch (type) {
-      case 'exam':
-        return 'Prova';
-      case 'assignment':
-        return 'Trabalho';
-      case 'meeting':
-        return 'Reunião';
-      case 'event':
-      default:
-        return 'Evento';
-    }
+    return format(new Date(), "EEEE, dd 'de' MMMM", { locale: ptBR });
   };
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-32">
       <PageHeader 
-        title="Calendário"
-        subtitle="Visualize todos os seus compromissos"
-        emoji="📅"
-        imageQuery="calendar,planner,organizer,schedule"
+        title={getPersonalizedGreeting()}
+        subtitle={getPersonalizedSubtitle()}
+        emoji="🏠"
+        imageQuery="workspace,desk,morning,coffee"
       />
 
-      <div className="max-w-7xl mx-auto px-4 py-6">
-        {/* Navegação do Mês */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-5 mb-6 border border-gray-200 dark:border-gray-700 animate-fade-in">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white capitalize">
-              {format(currentDate, 'MMMM yyyy', { locale: ptBR })}
-            </h2>
+      <QuickCaptureBar />
 
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCurrentDate(subMonths(currentDate, 1))}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-all hover-scale"
-              >
-                <ChevronLeftIcon className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-              </button>
+      <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+        
+        {/* ========== NOVO: ESTATÍSTICAS DO DIA ========== */}
+        <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 animate-fade-in">
+          <StatsCard
+            title="Eventos Hoje"
+            value={dashboardStats.eventsToday}
+            subtitle="No calendário"
+            icon="📅"
+            color="blue"
+          />
+          
+          <StatsCard
+            title="Tarefas Hoje"
+            value={dashboardStats.tasksToday}
+            subtitle="Pendentes"
+            icon="✅"
+            color="green"
+          />
+          
+          <StatsCard
+            title="Contas (7 dias)"
+            value={dashboardStats.billsThisWeek}
+            subtitle="A vencer"
+            icon="💰"
+            color="orange"
+          />
+          
+          <StatsCard
+            title="Hidratação"
+            value={`${dashboardStats.waterToday}L`}
+            subtitle={`Meta: ${dashboardStats.waterGoal}L`}
+            icon="💧"
+            color={dashboardStats.waterGoalPercentage >= 100 ? 'green' : 'blue'}
+            trend={
+              dashboardStats.waterGoalPercentage >= 100 
+                ? { direction: 'up', value: '100%' }
+                : { direction: 'down', value: `${dashboardStats.waterGoalPercentage}%` }
+            }
+          />
+        </section>
 
-              <button
-                onClick={() => setCurrentDate(new Date())}
-                className="px-5 py-2 text-sm font-semibold text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-xl transition-all"
-              >
-                Hoje
-              </button>
+        {/* ========== NOVO: PROGRESSO DE TAREFAS ========== */}
+        {taskStats.totalTasks > 0 && (
+          <section className="animate-fade-in" style={{ animationDelay: '0.1s' }}>
+            <ProgressChart
+              title="📊 Progresso de Tarefas"
+              color="green"
+              data={[
+                { 
+                  label: 'Concluídas', 
+                  value: taskStats.completedTasks, 
+                  unit: `de ${taskStats.totalTasks}` 
+                },
+                { 
+                  label: 'Taxa de Conclusão', 
+                  value: parseInt(taskStats.completionRate), 
+                  unit: '%' 
+                }
+              ]}
+            />
+          </section>
+        )}
 
-              <button
-                onClick={() => setCurrentDate(addMonths(currentDate, 1))}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-all hover-scale"
-              >
-                <ChevronRightIcon className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-              </button>
-            </div>
-          </div>
-        </div>
+        {/* ========== NOVO: INSIGHTS AUTOMÁTICOS ========== */}
+        {taskStats.insights && taskStats.insights.length > 0 && (
+          <section className="animate-fade-in" style={{ animationDelay: '0.15s' }}>
+            <InsightCard 
+              title="💡 Insights do Dia"
+              insights={taskStats.insights}
+            />
+          </section>
+        )}
 
-        {/* Calendário Mensal */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-5 mb-6 border border-gray-200 dark:border-gray-700 animate-fade-in" style={{ animationDelay: '0.1s' }}>
-          {/* Dias da semana */}
-          <div className="grid grid-cols-7 gap-2 mb-3">
-            {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(day => (
-              <div key={day} className="text-center text-xs font-bold text-gray-600 dark:text-gray-400 py-2">
-                {day}
-              </div>
-            ))}
-          </div>
-
-          {/* Dias do mês */}
-          <div className="grid grid-cols-7 gap-2">
-            {daysInMonth.map((day, index) => {
-              const dayEvents = eventsOnDate(day);
-              const isToday = isSameDay(day, new Date());
-              const isSelected = selectedDate && isSameDay(day, selectedDate);
-
-              return (
-                <button
-                  key={index}
-                  onClick={() => setSelectedDate(day)}
-                  className={`
-                    aspect-square p-2 rounded-xl text-sm font-medium transition-all relative
-                    ${isToday ? 'bg-gradient-to-br from-primary-500 to-primary-600 text-white font-bold shadow-lg scale-105' : ''}
-                    ${isSelected && !isToday ? 'ring-2 ring-primary-500 bg-primary-50 dark:bg-primary-900/30 scale-105' : ''}
-                    ${!isSameMonth(day, currentDate) ? 'text-gray-400 dark:text-gray-600' : !isToday && !isSelected ? 'text-gray-900 dark:text-white' : ''}
-                    ${!isToday && !isSelected ? 'hover:bg-gray-100 dark:hover:bg-gray-700 hover-scale' : ''}
-                  `}
-                >
-                  <span>{format(day, 'd')}</span>
-                  {dayEvents.length > 0 && (
-                    <div className="absolute bottom-1 left-1/2 transform -translate-x-1/2 flex gap-0.5">
-                      {dayEvents.slice(0, 3).map((event, i) => (
-                        <div 
-                          key={i} 
-                          className={`w-1.5 h-1.5 rounded-full ${
-                            isToday ? 'bg-white' : 'bg-primary-500'
-                          }`}
-                        ></div>
-                      ))}
-                    </div>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Eventos do Dia Selecionado */}
-        {selectedDate && (
-          <div className="animate-fade-in">
-            <div className="flex items-center justify-between mb-5">
-              <div>
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-                  {format(selectedDate, "dd 'de' MMMM", { locale: ptBR })}
-                </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                  {selectedDayEvents.length} evento(s) neste dia
-                </p>
-              </div>
-            </div>
-
-            {selectedDayEvents.length === 0 ? (
-              <div className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700 rounded-2xl p-10 text-center shadow-lg border border-gray-200 dark:border-gray-700">
-                <div className="text-7xl mb-4">📭</div>
-                <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
-                  Dia Livre!
-                </h4>
-                <p className="text-gray-600 dark:text-gray-400">
-                  Nenhum evento agendado para este dia
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {selectedDayEvents.map((event, index) => (
-                  <div
-                    key={event.id}
-                    className={`rounded-2xl p-6 shadow-lg border-2 ${getEventTypeColor(event.type)} hover-lift animate-slide-in`}
-                    style={{ animationDelay: `${index * 0.1}s` }}
-                  >
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-3">
-                          <span className="text-3xl">{getEventTypeEmoji(event.type)}</span>
-                          <span className="text-xs font-bold px-3 py-1.5 rounded-full bg-white/70 dark:bg-black/30 shadow-sm">
-                            {getEventTypeLabel(event.type)}
-                          </span>
-                          {event.time && (
-                            <span className="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-1 font-medium">
-                              🕐 {event.time}
-                            </span>
-                          )}
-                        </div>
-                        <h4 className="font-bold text-xl mb-2">
-                          {event.title}
-                        </h4>
-                        {event.description && (
-                          <p className="text-sm opacity-90 mb-3">
-                            {event.description}
-                          </p>
-                        )}
-                        {event.topics && event.topics.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mt-3">
-                            {event.topics.map((topic, idx) => (
-                              <span
-                                key={idx}
-                                className="text-xs bg-white/70 dark:bg-black/30 px-3 py-1.5 rounded-full font-medium shadow-sm"
-                              >
-                                📚 {topic}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Botões de Ação */}
-                    <div className="flex gap-3 pt-4 border-t border-current/20">
-                      <button
-                        onClick={() => handleEditClick(event)}
-                        className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white/80 dark:bg-black/40 hover:bg-white dark:hover:bg-black/60 rounded-xl transition-all font-semibold shadow-sm hover-lift"
-                      >
-                        <PencilIcon className="h-5 w-5" />
-                        <span className="text-sm">Editar</span>
-                      </button>
-                      <button
-                        onClick={() => handleDeleteClick(event.id, event.title)}
-                        className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-red-500/20 hover:bg-red-500/30 text-red-700 dark:text-red-300 rounded-xl transition-all font-semibold shadow-sm hover-lift"
-                      >
-                        <TrashIcon className="h-5 w-5" />
-                        <span className="text-sm">Excluir</span>
-                      </button>
-                    </div>
-                  </div>
-                ))}
+        {/* Cards de Estatísticas Personalizadas */}
+        {onboardingData && (
+          <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-fade-in" style={{ animationDelay: '0.2s' }}>
+            {/* Estudos */}
+            {onboardingData.studyHoursPerDay && (
+              <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl p-5 text-white shadow-xl hover-lift transition-all">
+                <div className="flex items-center justify-between mb-3">
+                  <AcademicCapIcon className="w-8 h-8 opacity-80" />
+                  <span className="text-2xl">📚</span>
+                </div>
+                <p className="text-sm opacity-90 mb-1">Meta de Estudo</p>
+                <p className="text-3xl font-bold">{onboardingData.studyHoursPerDay}h/dia</p>
+                {onboardingData.studyTime && (
+                  <p className="text-xs opacity-75 mt-2 capitalize">Período: {onboardingData.studyTime}</p>
+                )}
               </div>
             )}
+
+            {/* Objetivos */}
+            {onboardingData.focusResidency && (
+              <div className="bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl p-5 text-white shadow-xl hover-lift transition-all">
+                <div className="flex items-center justify-between mb-3">
+                  <SparklesIcon className="w-8 h-8 opacity-80" />
+                  <span className="text-2xl">🎯</span>
+                </div>
+                <p className="text-sm opacity-90 mb-1">Objetivo</p>
+                <p className="text-lg font-bold">
+                  {onboardingData.focusResidency === 'sim' ? 'Residência' : 'Graduação'}
+                </p>
+                {onboardingData.residencyArea && (
+                  <p className="text-xs opacity-75 mt-2">{onboardingData.residencyArea}</p>
+                )}
+              </div>
+            )}
+
+            {/* Saúde */}
+            {onboardingData.exerciseFrequency && (
+              <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl p-5 text-white shadow-xl hover-lift transition-all">
+                <div className="flex items-center justify-between mb-3">
+                  <HeartIcon className="w-8 h-8 opacity-80" />
+                  <span className="text-2xl">💪</span>
+                </div>
+                <p className="text-sm opacity-90 mb-1">Exercícios</p>
+                <p className="text-2xl font-bold">{onboardingData.exerciseFrequency}</p>
+                {onboardingData.waterGoal && (
+                  <p className="text-xs opacity-75 mt-2">Água: {onboardingData.waterGoal}L/dia</p>
+                )}
+              </div>
+            )}
+
+            {/* Finanças */}
+            {onboardingData.monthlyBudget && (
+              <div className="bg-gradient-to-br from-orange-500 to-red-600 rounded-2xl p-5 text-white shadow-xl hover-lift transition-all">
+                <div className="flex items-center justify-between mb-3">
+                  <BanknotesIcon className="w-8 h-8 opacity-80" />
+                  <span className="text-2xl">💰</span>
+                </div>
+                <p className="text-sm opacity-90 mb-1">Orçamento</p>
+                <p className="text-lg font-bold capitalize">
+                  {onboardingData.monthlyBudget === 'sim' ? 'Definido' : onboardingData.monthlyBudget === 'não' ? 'Não definido' : 'A definir'}
+                </p>
+                {onboardingData.budgetAmount && (
+                  <p className="text-xs opacity-75 mt-2">{onboardingData.budgetAmount}</p>
+                )}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Mensagem de Motivação Personalizada */}
+        {onboardingData?.shortTermGoals && (
+          <div className="bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 rounded-2xl p-6 border-2 border-yellow-200 dark:border-yellow-800 shadow-lg animate-fade-in" style={{ animationDelay: '0.25s' }}>
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0">
+                <div className="w-12 h-12 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-xl flex items-center justify-center">
+                  <FireIcon className="w-6 h-6 text-white" />
+                </div>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
+                  🎯 Suas Metas de Curto Prazo
+                </h3>
+                <p className="text-gray-700 dark:text-gray-300">
+                  {onboardingData.shortTermGoals}
+                </p>
+              </div>
+            </div>
           </div>
         )}
-      </div>
 
-      {/* Modal de Edição */}
-      {showEditModal && editingEvent && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 overflow-y-auto backdrop-blur-sm animate-fade-in">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-7 max-w-2xl w-full my-8 shadow-2xl border border-gray-200 dark:border-gray-700 animate-scale-in">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
-                <div className="w-10 h-10 bg-primary-100 dark:bg-primary-900/30 rounded-xl flex items-center justify-center">
-                  <PencilIcon className="h-5 w-5 text-primary-600 dark:text-primary-400" />
+        {/* Top 3 Prioridades */}
+        <section className="animate-fade-in" style={{ animationDelay: '0.3s' }}>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-pink-600 rounded-2xl flex items-center justify-center shadow-lg">
+              <span className="text-2xl font-bold text-white">3</span>
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                Prioridades de Hoje
+              </h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Foco no que realmente importa
+              </p>
+            </div>
+          </div>
+
+          {top3Priorities.length === 0 ? (
+            <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-2xl p-8 text-center border-2 border-green-200 dark:border-green-800 shadow-lg">
+              <div className="text-6xl mb-3">🎉</div>
+              <p className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
+                Dia Livre!
+              </p>
+              <p className="text-gray-600 dark:text-gray-400">
+                Nenhuma prioridade urgente. Aproveite o dia!
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {top3Priorities.map((item, index) => (
+                <div key={item.id} className="flex items-start gap-3 animate-slide-in" style={{ animationDelay: `${0.35 + index * 0.1}s` }}>
+                  <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-600 text-white rounded-xl flex items-center justify-center font-bold text-lg shadow-lg">
+                    {index + 1}
+                  </div>
+                  <div className="flex-1">
+                    <EventCard event={item} />
+                  </div>
                 </div>
-                Editar Evento
-              </h3>
-              <button 
-                onClick={() => setShowEditModal(false)}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors"
-              >
-                <XMarkIcon className="h-6 w-6 text-gray-500" />
-              </button>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Próximos Eventos (24-72h) */}
+        <section className="animate-fade-in" style={{ animationDelay: '0.4s' }}>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-2xl flex items-center justify-center shadow-lg">
+              <span className="text-2xl">📅</span>
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                Próximos Eventos
+              </h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Nos próximos 3 dias
+              </p>
+            </div>
+          </div>
+
+          {upcomingEvents.length === 0 ? (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 text-center shadow-lg border border-gray-200 dark:border-gray-700">
+              <div className="text-6xl mb-3">📭</div>
+              <p className="text-gray-500 dark:text-gray-400 font-medium">
+                Nenhum evento nos próximos 3 dias
+              </p>
+              <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">
+                Tempo livre para focar em outras atividades
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {upcomingEvents.map((event, index) => (
+                <div key={event.id} className="animate-slide-in" style={{ animationDelay: `${0.45 + index * 0.1}s` }}>
+                  <EventCard event={event} />
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Pendências Urgentes */}
+        {urgentItems.length > 0 && (
+          <section className="animate-fade-in" style={{ animationDelay: '0.5s' }}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-red-600 rounded-2xl flex items-center justify-center shadow-lg animate-pulse">
+                <span className="text-2xl">⚠️</span>
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                  Urgente
+                </h2>
+                <p className="text-sm text-red-600 dark:text-red-400">
+                  {urgentItems.length} item(ns) precisam de atenção
+                </p>
+              </div>
             </div>
 
-            <form onSubmit={handleUpdateEvent} className="space-y-5">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                  Título
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={eventForm.title}
-                  onChange={(e) => setEventForm({ ...eventForm, title: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:text-white transition-all"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                    Data
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={eventForm.date}
-                    onChange={(e) => setEventForm({ ...eventForm, date: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:text-white transition-all"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                    Horário
-                  </label>
-                  <input
-                    type="time"
-                    value={eventForm.time}
-                    onChange={(e) => setEventForm({ ...eventForm, time: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:text-white transition-all"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                  Tipo
-                </label>
-                <select
-                  value={eventForm.type}
-                  onChange={(e) => setEventForm({ ...eventForm, type: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:text-white transition-all"
+            <div className="space-y-3">
+              {urgentItems.map((item, index) => (
+                <div
+                  key={item.id}
+                  className="bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20 border-l-4 border-red-500 p-5 rounded-2xl shadow-lg hover-lift animate-slide-in"
+                  style={{ animationDelay: `${0.55 + index * 0.1}s` }}
                 >
-                  <option value="event">📅 Evento</option>
-                  <option value="exam">📝 Prova</option>
-                  <option value="assignment">📋 Trabalho</option>
-                  <option value="meeting">👥 Reunião</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                  Descrição
-                </label>
-                <textarea
-                  rows="3"
-                  value={eventForm.description}
-                  onChange={(e) => setEventForm({ ...eventForm, description: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:text-white transition-all"
-                  placeholder="Adicione detalhes sobre o evento..."
-                />
-              </div>
-
-              {eventForm.type === 'exam' && (
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
-                    Tópicos da Prova
-                  </label>
-
-                  <div className="flex gap-2 mb-3">
-                    <input
-                      type="text"
-                      value={manualTopic}
-                      onChange={(e) => setManualTopic(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTopic())}
-                      className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white"
-                      placeholder="Ex: Anatomia Cardíaca"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAddTopic}
-                      className="px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 whitespace-nowrap flex items-center gap-2 font-semibold shadow-lg transition-all hover-lift"
-                    >
-                      <PlusIcon className="h-5 w-5" />
-                      Adicionar
-                    </button>
-                  </div>
-
-                  {eventForm.topics.length > 0 && (
-                    <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
-                      <p className="text-xs text-gray-600 dark:text-gray-400 mb-3 font-semibold">
-                        📚 {eventForm.topics.length} tópico(s)
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {eventForm.topics.map((topic, index) => (
-                          <div
-                            key={index}
-                            className="flex items-center gap-2 bg-white dark:bg-gray-800 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 shadow-sm"
-                          >
-                            <span className="text-sm text-gray-700 dark:text-gray-300 font-medium">
-                              {topic}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveTopic(index)}
-                              className="text-red-600 hover:text-red-700 transition-colors"
-                            >
-                              <XMarkIcon className="h-4 w-4" />
-                            </button>
-                          </div>
-                        ))}
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-2xl">
+                          {item.type === 'bill' ? '💰' : '✅'}
+                        </span>
+                        <span className="text-xs px-3 py-1 bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 rounded-full font-semibold">
+                          {item.type === 'bill' ? 'CONTA' : 'TAREFA'}
+                        </span>
                       </div>
+                      <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-1">
+                        {item.title}
+                      </h3>
+                      <p className="text-sm text-red-600 dark:text-red-400 font-medium">
+                        {item.urgency < 0
+                          ? `⏰ Atrasado há ${Math.abs(item.urgency)} dia(s)`
+                          : item.urgency === 0
+                          ? '🔥 Vence HOJE'
+                          : `📌 Vence em ${item.urgency} dia(s)`}
+                      </p>
                     </div>
-                  )}
+                  </div>
                 </div>
-              )}
+              ))}
+            </div>
+          </section>
+        )}
 
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowEditModal(false)}
-                  className="flex-1 px-6 py-3 border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 font-semibold transition-all"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 px-6 py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-xl hover:from-primary-700 hover:to-primary-800 font-semibold shadow-lg transition-all hover-lift"
-                >
-                  Salvar Alterações
-                </button>
-              </div>
-            </form>
+        {/* Card Motivacional */}
+        <div className="bg-gradient-to-br from-purple-500 via-pink-500 to-red-500 rounded-2xl p-6 text-white shadow-2xl animate-fade-in" style={{ animationDelay: '0.6s' }}>
+          <div className="flex items-center gap-4">
+            <div className="text-5xl">💪</div>
+            <div>
+              <h3 className="text-xl font-bold mb-1">
+                {onboardingData?.name ? `Continue Focado, ${onboardingData.name}!` : 'Continue Focado!'}
+              </h3>
+              <p className="text-white/90 text-sm">
+                Cada tarefa concluída te aproxima dos seus objetivos
+              </p>
+            </div>
           </div>
         </div>
-      )}
+      </div>
+
+      {/* Botão Flutuante de IA */}
+      <button
+        onClick={() => setShowAIChat(true)}
+        className="fixed bottom-6 right-6 w-16 h-16 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-full shadow-2xl hover:scale-110 transition-transform flex items-center justify-center z-40"
+        title="Assistente IA"
+      >
+        <SparklesIcon className="h-8 w-8" />
+      </button>
+
+      {/* Modal do Chat IA */}
+      <AIChat isOpen={showAIChat} onClose={() => setShowAIChat(false)} />
     </div>
   );
 }
