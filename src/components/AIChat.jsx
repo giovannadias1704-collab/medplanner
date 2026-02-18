@@ -1,6 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { chatWithAI } from '../services/gemini';
 import { useChatHistory } from '../hooks/useChatHistory';
+import { useSubscription } from '../hooks/useSubscription';
+import PremiumBlock from './PremiumBlock';
+import LimitReached from './LimitReached';
+import { doc, updateDoc, increment } from 'firebase/firestore';
+import { db } from '../config/firebase';
+import { useAuth } from '../hooks/useAuth';
 import { 
   XMarkIcon, 
   PaperAirplaneIcon, 
@@ -15,6 +21,9 @@ import {
 } from '@heroicons/react/24/outline';
 
 export default function AIChat({ isOpen, onClose }) {
+  const { user } = useAuth();
+  const { subscription, canUseAI, isPremium, loading: subLoading } = useSubscription();
+  
   const {
     conversations,
     currentConversationId,
@@ -107,8 +116,28 @@ export default function AIChat({ isOpen, onClose }) {
     };
   }, []);
 
+  // Incrementar uso de IA no Firebase
+  const incrementAIUsage = async () => {
+    if (!user || isPremium()) return; // Premium tem uso ilimitado
+    
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      await updateDoc(userRef, {
+        aiUsage: increment(1)
+      });
+    } catch (error) {
+      console.error('Erro ao incrementar uso de IA:', error);
+    }
+  };
+
   const handleSend = async () => {
     if ((!input.trim() && attachedFiles.length === 0) || loading) return;
+
+    // Verificar se pode usar IA
+    if (!canUseAI()) {
+      alert('⚠️ Você atingiu o limite de consultas de IA do seu plano.\n\nFaça upgrade para continuar usando!');
+      return;
+    }
 
     const userMessage = { 
       role: 'user', 
@@ -131,6 +160,10 @@ export default function AIChat({ isOpen, onClose }) {
       };
       
       setMessages(prev => [...prev, aiMessage]);
+      
+      // Incrementar contador de uso
+      await incrementAIUsage();
+      
     } catch (error) {
       console.error('Erro no chat:', error);
       setMessages(prev => [...prev, {
@@ -284,6 +317,68 @@ export default function AIChat({ isOpen, onClose }) {
 
   if (!isOpen) return null;
 
+  // Loading da assinatura
+  if (subLoading) {
+    return (
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
+        <div className="bg-white dark:bg-gray-800 rounded-3xl p-8 shadow-2xl">
+          <div className="flex flex-col items-center gap-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+            <p className="text-gray-600 dark:text-gray-400">Carregando...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Bloquear se não tem IA no plano
+  if (!subscription.features.aiEnabled) {
+    return (
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl w-full max-w-2xl p-8">
+          <div className="flex justify-end mb-4">
+            <button
+              onClick={onClose}
+              className="w-10 h-10 bg-gray-100 dark:bg-gray-700 rounded-xl flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-600 transition-all"
+            >
+              <XMarkIcon className="w-6 h-6 text-gray-600 dark:text-gray-300" />
+            </button>
+          </div>
+          <PremiumBlock 
+            feature="ai" 
+            requiredPlan="student"
+            message="A IA integrada está disponível nos planos Estudante, Premium e Vitalício. Faça upgrade para usar o assistente de IA com análise de imagens e PDFs!"
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Bloquear se atingiu limite
+  if (!canUseAI()) {
+    return (
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl w-full max-w-2xl p-8">
+          <div className="flex justify-end mb-4">
+            <button
+              onClick={onClose}
+              className="w-10 h-10 bg-gray-100 dark:bg-gray-700 rounded-xl flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-600 transition-all"
+            >
+              <XMarkIcon className="w-6 h-6 text-gray-600 dark:text-gray-300" />
+            </button>
+          </div>
+          <LimitReached 
+            title="Limite de IA Atingido"
+            message="Você atingiu o limite mensal de consultas de IA do seu plano. Faça upgrade para ter acesso ilimitado!"
+            currentUsage={subscription.aiUsage || 0}
+            limit={subscription.features.aiLimit}
+            feature="ai"
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
       <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl w-full max-w-4xl h-[90vh] flex overflow-hidden animate-scale-in">
@@ -367,7 +462,12 @@ export default function AIChat({ isOpen, onClose }) {
               </div>
               <div>
                 <h2 className="text-xl font-bold text-white">Assistente IA</h2>
-                <p className="text-sm text-white/80">Powered by Google Gemini 2.5-flash</p>
+                <p className="text-sm text-white/80">
+                  {isPremium() 
+                    ? '✨ Uso Ilimitado' 
+                    : `${subscription.aiUsage || 0}/${subscription.features.aiLimit} consultas`
+                  }
+                </p>
               </div>
             </div>
 
@@ -378,6 +478,27 @@ export default function AIChat({ isOpen, onClose }) {
               <XMarkIcon className="w-6 h-6 text-white" />
             </button>
           </div>
+
+          {/* Aviso de uso próximo do limite */}
+          {!isPremium() && subscription.features.aiLimit > 0 && (
+            <div className={`p-3 ${
+              (subscription.aiUsage / subscription.features.aiLimit) >= 0.8
+                ? 'bg-yellow-50 dark:bg-yellow-900/20 border-b-2 border-yellow-300 dark:border-yellow-700'
+                : 'bg-blue-50 dark:bg-blue-900/20 border-b border-blue-200 dark:border-blue-800'
+            }`}>
+              <p className={`text-sm text-center ${
+                (subscription.aiUsage / subscription.features.aiLimit) >= 0.8
+                  ? 'text-yellow-800 dark:text-yellow-200'
+                  : 'text-blue-800 dark:text-blue-200'
+              }`}>
+                {(subscription.aiUsage / subscription.features.aiLimit) >= 0.8 ? (
+                  <>⚠️ <strong>Atenção:</strong> Você está próximo do limite mensal de IA. Faça upgrade para uso ilimitado!</>
+                ) : (
+                  <>📊 <strong>Plano {subscription.plan === 'student' ? 'Estudante' : 'Atual'}:</strong> {subscription.aiUsage || 0}/{subscription.features.aiLimit} consultas usadas</>
+                )}
+              </p>
+            </div>
+          )}
 
           {/* Atalhos rápidos */}
           {messages.length <= 1 && (
