@@ -13,14 +13,14 @@ import {
 } from '@heroicons/react/24/outline';
 
 // Importar componentes
-import StudyQuestionnaire from '../components/Study/StudyQuestionnaire';
-import StudyPlanning from '../components/Study/StudyPlanning';
-import StudyPBL from '../components/Study/StudyPBL';
-import StudyTimer from '../components/Study/StudyTimer';
-import StudyProgress from '../components/Study/StudyProgress';
-import StudyQuestions from '../components/Study/StudyQuestions';
-import StudyReview from '../components/Study/StudyReview';
-import StudyWeeklyEval from '../components/Study/StudyWeeklyEval';
+import StudyQuestionnaire from '../components/StudyQuestionnaire';
+import StudyPlanning from '../components/StudyPlanning';
+import StudyPBL from '../components/StudyPBL';
+import StudyTimer from '../components/StudyTimer';
+import StudyProgress from '../components/StudyProgress';
+import StudyQuestions from '../components/study/StudyQuestions';
+import StudyReview from '../components/StudyReview';
+import StudyWeeklyEval from '../components/StudyWeeklyEval';
 
 export default function Study() {
   const { user } = useAuth();  // ⬅️ ESTA LINHA JÁ ESTÁ, MAS PRECISA DO IMPORT ACIMA
