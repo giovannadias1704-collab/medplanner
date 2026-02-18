@@ -12,16 +12,15 @@ import {
   ClipboardDocumentCheckIcon
 } from '@heroicons/react/24/outline';
 
-// Importar componentes
-import StudyQuestionnaire from '../components/StudyQuestionnaire';
-import StudyPlanning from '../components/StudyPlanning';
-import StudyPBL from '../components/StudyPBL';
-import StudyTimer from '../components/StudyTimer';
-import StudyProgress from '../components/StudyProgress';
+ // Importar componentes (CORRETO: todos em ../components/study/)
+import StudyQuestionnaire from '../components/study/StudyQuestionnaire';
+import StudyPlanning from '../components/study/StudyPlanning';
+import StudyPBL from '../components/study/StudyPBL';
+import StudyTimer from '../components/study/StudyTimer';
+import StudyProgress from '../components/study/StudyProgress';
 import StudyQuestions from '../components/study/StudyQuestions';
-import StudyReview from '../components/StudyReview';
-import StudyWeeklyEval from '../components/StudyWeeklyEval';
-
+import StudyReview from '../components/study/StudyReview';
+import StudyWeeklyEval from '../components/study/StudyWeeklyEval';
 export default function Study() {
   const { user } = useAuth();  // ⬅️ ESTA LINHA JÁ ESTÁ, MAS PRECISA DO IMPORT ACIMA
   const { userProfile } = useContext(AppContext);
