@@ -1,8 +1,13 @@
 import { useState, useContext, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AppContext } from '../context/AppContext';
+import { useSubscription } from '../hooks/useSubscription';
+import PremiumBlock from '../components/PremiumBlock';
 
 export default function Analytics() {
+  const navigate = useNavigate();
   const context = useContext(AppContext);
+  const { subscription, hasFeature, isFree } = useSubscription();
   
   // Destructure com fallbacks seguros
   const {
@@ -14,7 +19,7 @@ export default function Analytics() {
     studySessions = []
   } = context || {};
 
-  const [activeTab, setActiveTab] = useState('comparativo');
+  const [activeTab, setActiveTab] = useState('diario');
   const [timePeriod, setTimePeriod] = useState('semanal');
 
   // ========== FUNÇÕES DE FILTRAGEM POR PERÍODO ==========
@@ -260,6 +265,16 @@ export default function Analytics() {
     healthRecords.length > 0 ||
     studySessions.length > 0;
 
+  // Handler para tentar trocar para tab comparativo
+  const handleTabChange = (tab) => {
+    if (tab === 'comparativo' && !hasFeature('advancedAnalytics')) {
+      alert('⚠️ Analytics comparativo está disponível apenas nos planos Estudante e superiores.\n\nFaça upgrade para acessar!');
+      navigate('/pricing');
+      return;
+    }
+    setActiveTab(tab);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 md:p-6 pb-24">
       <div className="max-w-7xl mx-auto">
@@ -273,6 +288,25 @@ export default function Analytics() {
             Análise integrada de todas as suas atividades
           </p>
         </div>
+
+        {/* Aviso de plano gratuito */}
+        {isFree() && (
+          <div className="bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-300 dark:border-blue-700 rounded-xl p-4 mb-6">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <p className="text-sm text-blue-800 dark:text-blue-200">
+                  📊 <strong>Plano Gratuito:</strong> Você tem acesso à análise diária básica. Faça upgrade para desbloquear <strong>análises comparativas avançadas</strong> (semanal, mensal, anual) e <strong>score de produtividade</strong>!
+                </p>
+              </div>
+              <button
+                onClick={() => navigate('/pricing')}
+                className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-semibold hover:from-purple-700 hover:to-pink-700 transition-all text-sm whitespace-nowrap"
+              >
+                ⭐ Ver Planos
+              </button>
+            </div>
+          </div>
+        )}
 
         {!hasAnyData ? (
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-12 text-center">
@@ -300,7 +334,7 @@ export default function Analytics() {
             {/* Tabs */}
             <div className="flex border-b border-gray-200 dark:border-gray-700">
               <button
-                onClick={() => setActiveTab('diario')}
+                onClick={() => handleTabChange('diario')}
                 className={`flex-1 px-6 py-4 font-semibold transition-all ${
                   activeTab === 'diario'
                     ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600'
@@ -310,14 +344,19 @@ export default function Analytics() {
                 📅 Análise Diária
               </button>
               <button
-                onClick={() => setActiveTab('comparativo')}
-                className={`flex-1 px-6 py-4 font-semibold transition-all ${
+                onClick={() => handleTabChange('comparativo')}
+                className={`flex-1 px-6 py-4 font-semibold transition-all relative ${
                   activeTab === 'comparativo'
                     ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600'
                     : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
                 }`}
               >
                 📈 Análise Comparativa
+                {isFree() && (
+                  <span className="ml-2 text-xs bg-purple-500 text-white px-2 py-1 rounded-full">
+                    Premium
+                  </span>
+                )}
               </button>
             </div>
 
@@ -402,267 +441,288 @@ export default function Analytics() {
               {activeTab === 'comparativo' && (
                 <div>
                   
-                  {/* Filtros de Período */}
-                  <div className="mb-6">
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
-                      Período de Análise:
-                    </label>
-                    <div className="flex gap-3">
-                      {[
-                        { value: 'semanal', label: 'Última Semana', emoji: '📅' },
-                        { value: 'mensal', label: 'Último Mês', emoji: '📆' },
-                        { value: 'anual', label: 'Último Ano', emoji: '🗓️' }
-                      ].map((period) => (
-                        <button
-                          key={period.value}
-                          onClick={() => setTimePeriod(period.value)}
-                          className={`flex-1 p-4 rounded-xl border-2 flex items-center justify-center gap-2 font-semibold transition-all ${
-                            timePeriod === period.value
-                              ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
-                              : 'border-gray-300 dark:border-gray-600 hover:border-indigo-300 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-                          }`}
-                        >
-                          <span className="text-xl">{period.emoji}</span>
-                          <span className="hidden md:inline">{period.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="space-y-6">
-                    
-                    {/* Score Geral de Produtividade */}
-                    <div className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-xl p-6 border-2 border-purple-200 dark:border-purple-800">
-                      <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-                        🎯 Score de Produtividade: {getPeriodLabel()}
-                      </h2>
-                      <div className="flex items-center gap-6">
-                        <div className="flex-shrink-0">
-                          <div className="relative w-32 h-32">
-                            <svg className="w-full h-full transform -rotate-90">
-                              <circle
-                                cx="64"
-                                cy="64"
-                                r="56"
-                                stroke="currentColor"
-                                strokeWidth="12"
-                                fill="none"
-                                className="text-gray-200 dark:text-gray-700"
-                              />
-                              <circle
-                                cx="64"
-                                cy="64"
-                                r="56"
-                                stroke="currentColor"
-                                strokeWidth="12"
-                                fill="none"
-                                strokeDasharray={`${2 * Math.PI * 56}`}
-                                strokeDashoffset={`${2 * Math.PI * 56 * (1 - productivityScore / 100)}`}
-                                className={`${
-                                  productivityScore >= 80 ? 'text-green-500' :
-                                  productivityScore >= 60 ? 'text-blue-500' :
-                                  productivityScore >= 40 ? 'text-yellow-500' :
-                                  'text-red-500'
-                                }`}
-                                strokeLinecap="round"
-                              />
-                            </svg>
-                            <div className="absolute inset-0 flex items-center justify-center">
-                              <span className="text-4xl font-bold text-gray-900 dark:text-white">
-                                {productivityScore}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-lg text-gray-700 dark:text-gray-300 mb-2">
-                            {productivityScore >= 80 ? '🎉 Excelente desempenho!' :
-                             productivityScore >= 60 ? '👍 Bom trabalho!' :
-                             productivityScore >= 40 ? '📈 Continue melhorando!' :
-                             '💪 Vamos dar o nosso melhor!'}
-                          </p>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">
-                            Score calculado com base em bem-estar, conclusão de tarefas, eventos, PBLs e horas de estudo.
-                          </p>
+                  {/* Bloquear se não tem o recurso */}
+                  {!hasFeature('advancedAnalytics') ? (
+                    <PremiumBlock 
+                      feature="advancedAnalytics"
+                      requiredPlan="student"
+                      message="Analytics completo com comparativos (semanal, mensal, anual) e score de produtividade está disponível nos planos Estudante, Premium e Vitalício."
+                    />
+                  ) : (
+                    <>
+                      {/* Filtros de Período */}
+                      <div className="mb-6">
+                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                          Período de Análise:
+                        </label>
+                        <div className="flex gap-3">
+                          {[
+                            { value: 'semanal', label: 'Última Semana', emoji: '📅' },
+                            { value: 'mensal', label: 'Último Mês', emoji: '📆' },
+                            { value: 'anual', label: 'Último Ano', emoji: '🗓️' }
+                          ].map((period) => (
+                            <button
+                              key={period.value}
+                              onClick={() => setTimePeriod(period.value)}
+                              className={`flex-1 p-4 rounded-xl border-2 flex items-center justify-center gap-2 font-semibold transition-all ${
+                                timePeriod === period.value
+                                  ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
+                                  : 'border-gray-300 dark:border-gray-600 hover:border-indigo-300 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                              }`}
+                            >
+                              <span className="text-xl">{period.emoji}</span>
+                              <span className="hidden md:inline">{period.label}</span>
+                            </button>
+                          ))}
                         </div>
                       </div>
-                    </div>
 
-                    {/* Grid de Estatísticas por Área */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      
-                      {/* BEM-ESTAR */}
-                      {consolidatedStats.wellness && (
-                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-2 border-indigo-200 dark:border-indigo-700">
-                          <h3 className="text-lg font-bold text-indigo-600 dark:text-indigo-400 mb-4 flex items-center gap-2">
-                            💪 Bem-estar
-                          </h3>
-                          <div className="space-y-3">
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm text-gray-600 dark:text-gray-400">Registros:</span>
-                              <span className="font-bold text-gray-900 dark:text-white">{consolidatedStats.wellness.totalRecords}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm text-gray-600 dark:text-gray-400">Sono médio:</span>
-                              <span className="font-bold text-gray-900 dark:text-white">{consolidatedStats.wellness.avgSleep}h</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm text-gray-600 dark:text-gray-400">Hidratação:</span>
-                              <span className="font-bold text-gray-900 dark:text-white">{consolidatedStats.wellness.avgWater}L</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm text-gray-600 dark:text-gray-400">Exercício:</span>
-                              <span className="font-bold text-gray-900 dark:text-white">{consolidatedStats.wellness.avgExercise}min</span>
-                            </div>
-                            <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
-                              <div className="flex justify-between items-center">
-                                <span className="text-sm text-gray-600 dark:text-gray-400">Dias com metas:</span>
-                                <span className="font-bold text-green-600 dark:text-green-400">
-                                  {consolidatedStats.wellness.daysWithGoals}/{consolidatedStats.wellness.totalRecords}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
+                      {/* Aviso de exportação PDF */}
+                      {!hasFeature('exportPdf') && (
+                        <div className="bg-purple-50 dark:bg-purple-900/20 border-2 border-purple-300 dark:border-purple-700 rounded-xl p-4 mb-6">
+                          <p className="text-sm text-purple-800 dark:text-purple-200">
+                            📄 <strong>Exportação em PDF</strong> disponível apenas no Plano Premium e Vitalício
+                          </p>
                         </div>
                       )}
 
-                      {/* AGENDA/CALENDÁRIO */}
-                      {consolidatedStats.calendar && (
-                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-2 border-blue-200 dark:border-blue-700">
-                          <h3 className="text-lg font-bold text-blue-600 dark:text-blue-400 mb-4 flex items-center gap-2">
-                            📅 Calendário
-                          </h3>
-                          <div className="space-y-3">
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm text-gray-600 dark:text-gray-400">Total de eventos:</span>
-                              <span className="font-bold text-gray-900 dark:text-white">{consolidatedStats.calendar.totalEvents}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm text-gray-600 dark:text-gray-400">Concluídos:</span>
-                              <span className="font-bold text-green-600 dark:text-green-400">{consolidatedStats.calendar.completedEvents}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm text-gray-600 dark:text-gray-400">Próximos:</span>
-                              <span className="font-bold text-yellow-600 dark:text-yellow-400">{consolidatedStats.calendar.upcomingEvents}</span>
-                            </div>
-                            <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
-                              <div className="flex justify-between items-center">
-                                <span className="text-sm text-gray-600 dark:text-gray-400">Taxa de conclusão:</span>
-                                <span className="font-bold text-blue-600 dark:text-blue-400">{consolidatedStats.calendar.completionRate}%</span>
+                      <div className="space-y-6">
+                        
+                        {/* Score Geral de Produtividade */}
+                        <div className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-xl p-6 border-2 border-purple-200 dark:border-purple-800">
+                          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+                            🎯 Score de Produtividade: {getPeriodLabel()}
+                          </h2>
+                          <div className="flex items-center gap-6">
+                            <div className="flex-shrink-0">
+                              <div className="relative w-32 h-32">
+                                <svg className="w-full h-full transform -rotate-90">
+                                  <circle
+                                    cx="64"
+                                    cy="64"
+                                    r="56"
+                                    stroke="currentColor"
+                                    strokeWidth="12"
+                                    fill="none"
+                                    className="text-gray-200 dark:text-gray-700"
+                                  />
+                                  <circle
+                                    cx="64"
+                                    cy="64"
+                                    r="56"
+                                    stroke="currentColor"
+                                    strokeWidth="12"
+                                    fill="none"
+                                    strokeDasharray={`${2 * Math.PI * 56}`}
+                                    strokeDashoffset={`${2 * Math.PI * 56 * (1 - productivityScore / 100)}`}
+                                    className={`${
+                                      productivityScore >= 80 ? 'text-green-500' :
+                                      productivityScore >= 60 ? 'text-blue-500' :
+                                      productivityScore >= 40 ? 'text-yellow-500' :
+                                      'text-red-500'
+                                    }`}
+                                    strokeLinecap="round"
+                                  />
+                                </svg>
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <span className="text-4xl font-bold text-gray-900 dark:text-white">
+                                    {productivityScore}
+                                  </span>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* PBL */}
-                      {consolidatedStats.pbl && (
-                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-2 border-purple-200 dark:border-purple-700">
-                          <h3 className="text-lg font-bold text-purple-600 dark:text-purple-400 mb-4 flex items-center gap-2">
-                            🧠 PBL
-                          </h3>
-                          <div className="space-y-3">
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm text-gray-600 dark:text-gray-400">Total de casos:</span>
-                              <span className="font-bold text-gray-900 dark:text-white">{consolidatedStats.pbl.totalCases}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm text-gray-600 dark:text-gray-400">Concluídos:</span>
-                              <span className="font-bold text-green-600 dark:text-green-400">{consolidatedStats.pbl.completedCases}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm text-gray-600 dark:text-gray-400">Em progresso:</span>
-                              <span className="font-bold text-yellow-600 dark:text-yellow-400">{consolidatedStats.pbl.inProgressCases}</span>
-                            </div>
-                            <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
-                              <div className="flex justify-between items-center">
-                                <span className="text-sm text-gray-600 dark:text-gray-400">Taxa de conclusão:</span>
-                                <span className="font-bold text-purple-600 dark:text-purple-400">{consolidatedStats.pbl.completionRate}%</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* TAREFAS */}
-                      {consolidatedStats.tasks && (
-                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-2 border-green-200 dark:border-green-700">
-                          <h3 className="text-lg font-bold text-green-600 dark:text-green-400 mb-4 flex items-center gap-2">
-                            ✅ Tarefas
-                          </h3>
-                          <div className="space-y-3">
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm text-gray-600 dark:text-gray-400">Total de tarefas:</span>
-                              <span className="font-bold text-gray-900 dark:text-white">{consolidatedStats.tasks.totalTasks}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm text-gray-600 dark:text-gray-400">Concluídas:</span>
-                              <span className="font-bold text-green-600 dark:text-green-400">{consolidatedStats.tasks.completedTasks}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm text-gray-600 dark:text-gray-400">Pendentes:</span>
-                              <span className="font-bold text-yellow-600 dark:text-yellow-400">{consolidatedStats.tasks.pendingTasks}</span>
-                            </div>
-                            <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
-                              <div className="flex justify-between items-center">
-                                <span className="text-sm text-gray-600 dark:text-gray-400">Taxa de conclusão:</span>
-                                <span className="font-bold text-green-600 dark:text-green-400">{consolidatedStats.tasks.completionRate}%</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* SAÚDE */}
-                      {consolidatedStats.health && (
-                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-2 border-red-200 dark:border-red-700">
-                          <h3 className="text-lg font-bold text-red-600 dark:text-red-400 mb-4 flex items-center gap-2">
-                            🩺 Saúde
-                          </h3>
-                          <div className="space-y-3">
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm text-gray-600 dark:text-gray-400">Total de registros:</span>
-                              <span className="font-bold text-gray-900 dark:text-white">{consolidatedStats.health.totalRecords}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm text-gray-600 dark:text-gray-400">Registros urgentes:</span>
-                              <span className="font-bold text-red-600 dark:text-red-400">{consolidatedStats.health.urgentRecords}</span>
-                            </div>
-                            <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
-                              <p className="text-xs text-gray-500 dark:text-gray-400">
-                                Acompanhamento de consultas, exames e medicamentos
+                            <div className="flex-1">
+                              <p className="text-lg text-gray-700 dark:text-gray-300 mb-2">
+                                {productivityScore >= 80 ? '🎉 Excelente desempenho!' :
+                                 productivityScore >= 60 ? '👍 Bom trabalho!' :
+                                 productivityScore >= 40 ? '📈 Continue melhorando!' :
+                                 '💪 Vamos dar o nosso melhor!'}
+                              </p>
+                              <p className="text-sm text-gray-600 dark:text-gray-400">
+                                Score calculado com base em bem-estar, conclusão de tarefas, eventos, PBLs e horas de estudo.
                               </p>
                             </div>
                           </div>
                         </div>
-                      )}
 
-                      {/* ESTUDOS */}
-                      {consolidatedStats.study && (
-                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-2 border-orange-200 dark:border-orange-700">
-                          <h3 className="text-lg font-bold text-orange-600 dark:text-orange-400 mb-4 flex items-center gap-2">
-                            📚 Estudos
-                          </h3>
-                          <div className="space-y-3">
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm text-gray-600 dark:text-gray-400">Total de sessões:</span>
-                              <span className="font-bold text-gray-900 dark:text-white">{consolidatedStats.study.totalSessions}</span>
+                        {/* Grid de Estatísticas por Área */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          
+                          {/* BEM-ESTAR */}
+                          {consolidatedStats.wellness && (
+                            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-2 border-indigo-200 dark:border-indigo-700">
+                              <h3 className="text-lg font-bold text-indigo-600 dark:text-indigo-400 mb-4 flex items-center gap-2">
+                                💪 Bem-estar
+                              </h3>
+                              <div className="space-y-3">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-gray-600 dark:text-gray-400">Registros:</span>
+                                  <span className="font-bold text-gray-900 dark:text-white">{consolidatedStats.wellness.totalRecords}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-gray-600 dark:text-gray-400">Sono médio:</span>
+                                  <span className="font-bold text-gray-900 dark:text-white">{consolidatedStats.wellness.avgSleep}h</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-gray-600 dark:text-gray-400">Hidratação:</span>
+                                  <span className="font-bold text-gray-900 dark:text-white">{consolidatedStats.wellness.avgWater}L</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-gray-600 dark:text-gray-400">Exercício:</span>
+                                  <span className="font-bold text-gray-900 dark:text-white">{consolidatedStats.wellness.avgExercise}min</span>
+                                </div>
+                                <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-sm text-gray-600 dark:text-gray-400">Dias com metas:</span>
+                                    <span className="font-bold text-green-600 dark:text-green-400">
+                                      {consolidatedStats.wellness.daysWithGoals}/{consolidatedStats.wellness.totalRecords}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
                             </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm text-gray-600 dark:text-gray-400">Horas totais:</span>
-                              <span className="font-bold text-orange-600 dark:text-orange-400">{consolidatedStats.study.totalHours}h</span>
+                          )}
+
+                          {/* AGENDA/CALENDÁRIO */}
+                          {consolidatedStats.calendar && (
+                            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-2 border-blue-200 dark:border-blue-700">
+                              <h3 className="text-lg font-bold text-blue-600 dark:text-blue-400 mb-4 flex items-center gap-2">
+                                📅 Calendário
+                              </h3>
+                              <div className="space-y-3">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-gray-600 dark:text-gray-400">Total de eventos:</span>
+                                  <span className="font-bold text-gray-900 dark:text-white">{consolidatedStats.calendar.totalEvents}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-gray-600 dark:text-gray-400">Concluídos:</span>
+                                  <span className="font-bold text-green-600 dark:text-green-400">{consolidatedStats.calendar.completedEvents}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-gray-600 dark:text-gray-400">Próximos:</span>
+                                  <span className="font-bold text-yellow-600 dark:text-yellow-400">{consolidatedStats.calendar.upcomingEvents}</span>
+                                </div>
+                                <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-sm text-gray-600 dark:text-gray-400">Taxa de conclusão:</span>
+                                    <span className="font-bold text-blue-600 dark:text-blue-400">{consolidatedStats.calendar.completionRate}%</span>
+                                  </div>
+                                </div>
+                              </div>
                             </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm text-gray-600 dark:text-gray-400">Duração média:</span>
-                              <span className="font-bold text-gray-900 dark:text-white">{consolidatedStats.study.avgSessionDuration}min</span>
+                          )}
+
+                          {/* PBL */}
+                          {consolidatedStats.pbl && (
+                            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-2 border-purple-200 dark:border-purple-700">
+                              <h3 className="text-lg font-bold text-purple-600 dark:text-purple-400 mb-4 flex items-center gap-2">
+                                🧠 PBL
+                              </h3>
+                              <div className="space-y-3">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-gray-600 dark:text-gray-400">Total de casos:</span>
+                                  <span className="font-bold text-gray-900 dark:text-white">{consolidatedStats.pbl.totalCases}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-gray-600 dark:text-gray-400">Concluídos:</span>
+                                  <span className="font-bold text-green-600 dark:text-green-400">{consolidatedStats.pbl.completedCases}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-gray-600 dark:text-gray-400">Em progresso:</span>
+                                  <span className="font-bold text-yellow-600 dark:text-yellow-400">{consolidatedStats.pbl.inProgressCases}</span>
+                                </div>
+                                <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-sm text-gray-600 dark:text-gray-400">Taxa de conclusão:</span>
+                                    <span className="font-bold text-purple-600 dark:text-purple-400">{consolidatedStats.pbl.completionRate}%</span>
+                                  </div>
+                                </div>
+                              </div>
                             </div>
-                          </div>
+                          )}
+
+                          {/* TAREFAS */}
+                          {consolidatedStats.tasks && (
+                            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-2 border-green-200 dark:border-green-700">
+                              <h3 className="text-lg font-bold text-green-600 dark:text-green-400 mb-4 flex items-center gap-2">
+                                ✅ Tarefas
+                              </h3>
+                              <div className="space-y-3">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-gray-600 dark:text-gray-400">Total de tarefas:</span>
+                                  <span className="font-bold text-gray-900 dark:text-white">{consolidatedStats.tasks.totalTasks}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-gray-600 dark:text-gray-400">Concluídas:</span>
+                                  <span className="font-bold text-green-600 dark:text-green-400">{consolidatedStats.tasks.completedTasks}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-gray-600 dark:text-gray-400">Pendentes:</span>
+                                  <span className="font-bold text-yellow-600 dark:text-yellow-400">{consolidatedStats.tasks.pendingTasks}</span>
+                                </div>
+                                <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-sm text-gray-600 dark:text-gray-400">Taxa de conclusão:</span>
+                                    <span className="font-bold text-green-600 dark:text-green-400">{consolidatedStats.tasks.completionRate}%</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* SAÚDE */}
+                          {consolidatedStats.health && (
+                            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-2 border-red-200 dark:border-red-700">
+                              <h3 className="text-lg font-bold text-red-600 dark:text-red-400 mb-4 flex items-center gap-2">
+                                🩺 Saúde
+                              </h3>
+                              <div className="space-y-3">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-gray-600 dark:text-gray-400">Total de registros:</span>
+                                  <span className="font-bold text-gray-900 dark:text-white">{consolidatedStats.health.totalRecords}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-gray-600 dark:text-gray-400">Registros urgentes:</span>
+                                  <span className="font-bold text-red-600 dark:text-red-400">{consolidatedStats.health.urgentRecords}</span>
+                                </div>
+                                <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
+                                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                                    Acompanhamento de consultas, exames e medicamentos
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* ESTUDOS */}
+                          {consolidatedStats.study && (
+                            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-2 border-orange-200 dark:border-orange-700">
+                              <h3 className="text-lg font-bold text-orange-600 dark:text-orange-400 mb-4 flex items-center gap-2">
+                                📚 Estudos
+                              </h3>
+                              <div className="space-y-3">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-gray-600 dark:text-gray-400">Total de sessões:</span>
+                                  <span className="font-bold text-gray-900 dark:text-white">{consolidatedStats.study.totalSessions}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-gray-600 dark:text-gray-400">Horas totais:</span>
+                                  <span className="font-bold text-orange-600 dark:text-orange-400">{consolidatedStats.study.totalHours}h</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-gray-600 dark:text-gray-400">Duração média:</span>
+                                  <span className="font-bold text-gray-900 dark:text-white">{consolidatedStats.study.avgSessionDuration}min</span>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
                         </div>
-                      )}
 
-                    </div>
+                      </div>
+                    </>
+                  )}
 
-                  </div>
                 </div>
               )}
 
