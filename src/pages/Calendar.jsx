@@ -1,12 +1,18 @@
 import { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { useNavigate } from 'react-router-dom';
+import { collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc, increment } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../hooks/useAuth';
+import { useSubscription } from '../hooks/useSubscription';
+import LimitReached from '../components/LimitReached';
 import PageHeader from '../components/PageHeader';
 import { PlusIcon, ClockIcon, MapPinIcon, DocumentTextIcon, XMarkIcon } from '@heroicons/react/24/outline';
 
 export default function Calendar() {
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const { subscription, canCreateEvent, isFree } = useSubscription();
+  
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [events, setEvents] = useState([]);
@@ -40,6 +46,34 @@ export default function Calendar() {
       setEvents(eventsData);
     } catch (error) {
       console.error('Erro ao carregar eventos:', error);
+    }
+  };
+
+  // Incrementar contador de eventos no Firebase
+  const incrementEventCount = async () => {
+    if (!user || !isFree()) return; // Só controla para plano gratuito
+    
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      await updateDoc(userRef, {
+        eventsCount: increment(1)
+      });
+    } catch (error) {
+      console.error('Erro ao incrementar contador de eventos:', error);
+    }
+  };
+
+  // Decrementar contador de eventos no Firebase
+  const decrementEventCount = async () => {
+    if (!user || !isFree()) return; // Só controla para plano gratuito
+    
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      await updateDoc(userRef, {
+        eventsCount: increment(-1)
+      });
+    } catch (error) {
+      console.error('Erro ao decrementar contador de eventos:', error);
     }
   };
 
@@ -87,7 +121,34 @@ export default function Calendar() {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1));
   };
 
+  const handleCreateEvent = () => {
+    if (!canCreateEvent()) {
+      alert(`⚠️ Você atingiu o limite de ${subscription.features.maxEvents} eventos/mês do plano gratuito.\n\nFaça upgrade para ter eventos ilimitados!`);
+      navigate('/pricing');
+      return;
+    }
+
+    setNewEvent({
+      ...newEvent,
+      date: selectedDate.toISOString().split('T')[0]
+    });
+    setShowAddModal(true);
+  };
+
   const handleAddEvent = async () => {
+    if (!newEvent.title.trim()) {
+      alert('Por favor, preencha o título do evento.');
+      return;
+    }
+
+    // Verificar novamente antes de adicionar
+    if (!canCreateEvent()) {
+      alert(`⚠️ Você atingiu o limite de ${subscription.features.maxEvents} eventos/mês do plano gratuito.\n\nFaça upgrade para ter eventos ilimitados!`);
+      setShowAddModal(false);
+      navigate('/pricing');
+      return;
+    }
+
     try {
       await addDoc(collection(db, 'events'), {
         ...newEvent,
@@ -95,21 +156,32 @@ export default function Calendar() {
         createdAt: new Date().toISOString()
       });
 
+      // Incrementar contador
+      await incrementEventCount();
+
       setNewEvent({ title: '', date: '', time: '', location: '', description: '' });
       setShowAddModal(false);
       loadEvents();
     } catch (error) {
       console.error('Erro ao adicionar evento:', error);
+      alert('Erro ao adicionar evento. Tente novamente.');
     }
   };
 
   const handleDeleteEvent = async (eventId) => {
+    if (!confirm('Deseja realmente excluir este evento?')) return;
+
     try {
       await deleteDoc(doc(db, 'events', eventId));
+      
+      // Decrementar contador
+      await decrementEventCount();
+      
       loadEvents();
       setSelectedEvent(null);
     } catch (error) {
       console.error('Erro ao deletar evento:', error);
+      alert('Erro ao deletar evento. Tente novamente.');
     }
   };
 
@@ -122,6 +194,11 @@ export default function Calendar() {
 
   const selectedDateEvents = getEventsForDate(selectedDate);
 
+  // Calcular porcentagem de uso (plano gratuito)
+  const usagePercentage = isFree() 
+    ? ((subscription.eventsCount || 0) / subscription.features.maxEvents) * 100 
+    : 0;
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-32">
       <PageHeader 
@@ -133,6 +210,70 @@ export default function Calendar() {
 
       <div className="max-w-7xl mx-auto px-4 py-6">
         
+        {/* Aviso de limite - Plano Gratuito */}
+        {isFree() && (
+          <div className={`rounded-2xl p-6 mb-6 border-2 transition-all ${
+            usagePercentage >= 80
+              ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700'
+              : usagePercentage >= 60
+              ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-300 dark:border-yellow-700'
+              : 'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700'
+          }`}>
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div className="flex-1">
+                <h3 className={`text-lg font-bold mb-2 ${
+                  usagePercentage >= 80
+                    ? 'text-red-800 dark:text-red-200'
+                    : usagePercentage >= 60
+                    ? 'text-yellow-800 dark:text-yellow-200'
+                    : 'text-blue-800 dark:text-blue-200'
+                }`}>
+                  {usagePercentage >= 80 ? '⚠️ Atenção!' : '📊 Plano Gratuito'}
+                </h3>
+                <p className={`text-sm mb-3 ${
+                  usagePercentage >= 80
+                    ? 'text-red-700 dark:text-red-300'
+                    : usagePercentage >= 60
+                    ? 'text-yellow-700 dark:text-yellow-300'
+                    : 'text-blue-700 dark:text-blue-300'
+                }`}>
+                  <strong>{subscription.eventsCount || 0}/{subscription.features.maxEvents}</strong> eventos usados este mês
+                  {usagePercentage >= 80 && ' - Você está próximo do limite!'}
+                </p>
+
+                {/* Barra de progresso */}
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 overflow-hidden">
+                  <div 
+                    className={`h-full transition-all duration-500 ${
+                      usagePercentage >= 80
+                        ? 'bg-red-500'
+                        : usagePercentage >= 60
+                        ? 'bg-yellow-500'
+                        : 'bg-blue-500'
+                    }`}
+                    style={{ width: `${Math.min(usagePercentage, 100)}%` }}
+                  />
+                </div>
+              </div>
+
+              {usagePercentage >= 60 && (
+                <button
+                  onClick={() => navigate('/pricing')}
+                  className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-semibold hover:from-purple-700 hover:to-pink-700 transition-all text-sm whitespace-nowrap"
+                >
+                  ⭐ Fazer Upgrade
+                </button>
+              )}
+            </div>
+
+            {usagePercentage >= 80 && (
+              <p className="text-xs text-red-600 dark:text-red-400 mt-2">
+                💡 Faça upgrade para ter eventos ilimitados e nunca mais se preocupar com limites!
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Calendário */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mb-6">
           
@@ -224,13 +365,7 @@ export default function Calendar() {
             </h2>
             
             <button
-              onClick={() => {
-                setNewEvent({
-                  ...newEvent,
-                  date: selectedDate.toISOString().split('T')[0]
-                });
-                setShowAddModal(true);
-              }}
+              onClick={handleCreateEvent}
               className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-semibold hover:from-purple-700 hover:to-pink-700 transition-all flex items-center gap-2"
             >
               <PlusIcon className="h-5 w-5" />
@@ -305,7 +440,7 @@ export default function Calendar() {
             <div className="space-y-4">
               <input
                 type="text"
-                placeholder="Título"
+                placeholder="Título *"
                 value={newEvent.title}
                 onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })}
                 className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
@@ -339,20 +474,21 @@ export default function Calendar() {
                 value={newEvent.description}
                 onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })}
                 rows="3"
-                className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white resize-none"
               ></textarea>
             </div>
 
             <div className="flex gap-3 mt-6">
               <button
                 onClick={() => setShowAddModal(false)}
-                className="flex-1 px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl font-semibold hover:bg-gray-50 dark:hover:bg-gray-700"
+                className="flex-1 px-4 py-3 border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition-all"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleAddEvent}
-                className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-semibold hover:from-purple-700 hover:to-pink-700"
+                disabled={!newEvent.title.trim()}
+                className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-semibold hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
               >
                 Salvar
               </button>
