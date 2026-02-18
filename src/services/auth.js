@@ -1,6 +1,7 @@
 import { 
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
   signOut,
@@ -18,17 +19,12 @@ import { auth, googleProvider, db } from '../config/firebase';
 
 export async function registerWithEmail(email, password, displayName) {
   try {
-    // Criar usuário
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
-    // Atualizar perfil com nome
     await updateProfile(user, { displayName });
-
-    // Enviar email de verificação
     await sendEmailVerification(user);
 
-    // Criar documento do usuário no Firestore
     await setDoc(doc(db, 'users', user.uid), {
       uid: user.uid,
       email: user.email,
@@ -69,7 +65,6 @@ export async function loginWithEmail(email, password) {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
-    // Atualizar último login
     await setDoc(doc(db, 'users', user.uid), {
       lastLoginAt: serverTimestamp()
     }, { merge: true });
@@ -91,117 +86,27 @@ export async function loginWithEmail(email, password) {
   }
 }
 
-// ========== LOGIN COM GOOGLE (REDIRECT) ==========
+// ========== LOGIN COM GOOGLE (POPUP COM FALLBACK PARA REDIRECT) ==========
 
 export async function loginWithGoogle() {
   try {
-    // Usar redirect em vez de popup
-    await signInWithRedirect(auth, googleProvider);
+    console.log('🔵 Iniciando login com Google (popup)...');
     
-    // O redirect vai redirecionar o navegador
-    // O resultado será capturado pela função handleRedirectResult
-    return { success: true };
+    // Tentar popup primeiro
+    const result = await signInWithPopup(auth, googleProvider);
     
-  } catch (error) {
-    console.error('❌ Erro ao iniciar login com Google:', error);
-    return {
-      success: false,
-      error: error.code,
-      message: getErrorMessage(error.code)
-    };
-  }
-}
-
-// ========== CAPTURAR RESULTADO DO REDIRECT ==========
-
-export async function handleRedirectResult() {
-  try {
-    console.log('🔍 Buscando resultado do redirect...');
-    const result = await getRedirectResult(auth);
+    console.log('✅ Login com popup bem-sucedido:', result.user.email);
     
-    // Se não houver resultado do redirect, verificar se há usuário autenticado
-    if (!result) {
-      console.log('ℹ️ getRedirectResult retornou null');
-      console.log('🔍 Verificando se há usuário autenticado diretamente...');
-      
-      const currentUser = auth.currentUser;
-      console.log('👤 auth.currentUser:', currentUser);
-      
-      if (currentUser) {
-        console.log('⚠️ ATENÇÃO: Usuário está autenticado, mas getRedirectResult retornou null!');
-        console.log('📧 Email:', currentUser.email);
-        console.log('🆔 UID:', currentUser.uid);
-        console.log('🕐 Criado em:', currentUser.metadata.creationTime);
-        
-        // Verificar se é novo usuário (criado há menos de 30 segundos)
-        const accountAge = Date.now() - new Date(currentUser.metadata.creationTime).getTime();
-        const isNewUser = accountAge < 30000; // 30 segundos
-        
-        console.log('📅 Idade da conta:', accountAge, 'ms');
-        console.log('🆕 É novo usuário?', isNewUser);
-        
-        // Verificar/criar documento no Firestore
-        const userDocRef = doc(db, 'users', currentUser.uid);
-        const userDoc = await getDoc(userDocRef);
-        
-        if (!userDoc.exists()) {
-          console.log('👤 Criando documento do usuário no Firestore...');
-          
-          await setDoc(userDocRef, {
-            uid: currentUser.uid,
-            email: currentUser.email,
-            displayName: currentUser.displayName,
-            photoURL: currentUser.photoURL,
-            emailVerified: currentUser.emailVerified,
-            createdAt: serverTimestamp(),
-            lastLoginAt: serverTimestamp(),
-            provider: 'google',
-            subscription: {
-              plan: 'free',
-              status: 'active',
-              startDate: serverTimestamp()
-            }
-          });
-          
-          console.log('✅ Documento criado no Firestore');
-        } else {
-          console.log('📝 Atualizando último login...');
-          
-          await setDoc(userDocRef, {
-            lastLoginAt: serverTimestamp()
-          }, { merge: true });
-          
-          console.log('✅ Último login atualizado');
-        }
-        
-        console.log('✅ Login detectado via auth.currentUser');
-        
-        // RETORNAR SUCESSO COM O USUÁRIO
-        return {
-          success: true,
-          user: currentUser,
-          isNewUser: !userDoc.exists() || isNewUser
-        };
-      }
-      
-      console.log('🔓 Nenhum usuário autenticado - sem redirect pendente');
-      return { success: false, noRedirect: true };
-    }
-    
-    // Se chegou aqui, getRedirectResult retornou um resultado válido
-    console.log('✅ Resultado do redirect recebido:', result);
     const user = result.user;
-
-    // Verificar se é novo usuário
     const userDocRef = doc(db, 'users', user.uid);
     const userDoc = await getDoc(userDocRef);
     
-    console.log('📄 Documento do usuário existe?', userDoc.exists());
+    const isNewUser = !userDoc.exists();
+    console.log('🆕 É novo usuário?', isNewUser);
     
-    if (!userDoc.exists()) {
+    if (isNewUser) {
       console.log('👤 Criando novo usuário no Firestore...');
       
-      // Criar documento para novo usuário Google
       await setDoc(userDocRef, {
         uid: user.uid,
         email: user.email,
@@ -222,26 +127,152 @@ export async function handleRedirectResult() {
     } else {
       console.log('📝 Atualizando último login...');
       
-      // Atualizar último login
       await setDoc(userDocRef, {
         lastLoginAt: serverTimestamp()
       }, { merge: true });
       
       console.log('✅ Último login atualizado');
     }
-
-    console.log('✅ Login com Google realizado com sucesso via getRedirectResult!');
     
     return {
       success: true,
       user: user,
-      isNewUser: !userDoc.exists()
+      isNewUser: isNewUser
     };
     
   } catch (error) {
-    console.error('❌ Erro ao processar redirect do Google:', error);
-    console.error('Código do erro:', error.code);
-    console.error('Mensagem do erro:', error.message);
+    console.error('❌ Erro no login com Google:', error);
+    
+    // Se popup foi bloqueado, tentar redirect como fallback
+    if (error.code === 'auth/popup-blocked') {
+      console.log('⚠️ Popup bloqueado, tentando redirect...');
+      
+      try {
+        sessionStorage.setItem('googleLoginInProgress', 'true');
+        sessionStorage.setItem('googleLoginTimestamp', Date.now().toString());
+        
+        await signInWithRedirect(auth, googleProvider);
+        
+        return { success: true, redirecting: true };
+      } catch (redirectError) {
+        console.error('❌ Erro no redirect:', redirectError);
+        sessionStorage.removeItem('googleLoginInProgress');
+        sessionStorage.removeItem('googleLoginTimestamp');
+        
+        return {
+          success: false,
+          error: redirectError.code,
+          message: getErrorMessage(redirectError.code)
+        };
+      }
+    }
+    
+    // Popup foi fechado pelo usuário
+    if (error.code === 'auth/popup-closed-by-user') {
+      return {
+        success: false,
+        error: error.code,
+        message: 'Login cancelado. Tente novamente.'
+      };
+    }
+    
+    // Outros erros
+    return {
+      success: false,
+      error: error.code,
+      message: getErrorMessage(error.code)
+    };
+  }
+}
+
+// ========== CAPTURAR RESULTADO DO REDIRECT (APENAS COMO FALLBACK) ==========
+
+export async function handleRedirectResult() {
+  try {
+    // Só verificar redirect se havia um em progresso
+    const wasRedirecting = sessionStorage.getItem('googleLoginInProgress') === 'true';
+    
+    if (!wasRedirecting) {
+      console.log('ℹ️ Nenhum redirect pendente, pulando verificação');
+      return { success: false, noRedirect: true };
+    }
+    
+    console.log('🔍 Verificando resultado do redirect do Google...');
+    
+    const redirectTimestamp = sessionStorage.getItem('googleLoginTimestamp');
+    
+    if (redirectTimestamp) {
+      const elapsed = Date.now() - parseInt(redirectTimestamp);
+      const fiveMinutes = 5 * 60 * 1000;
+      
+      if (elapsed > fiveMinutes) {
+        console.log('⏰ Redirect expirado (>5min), limpando sessionStorage');
+        sessionStorage.removeItem('googleLoginInProgress');
+        sessionStorage.removeItem('googleLoginTimestamp');
+        return { success: false, noRedirect: true };
+      }
+      
+      console.log('⏱️ Tempo desde o redirect:', Math.round(elapsed / 1000), 'segundos');
+    }
+    
+    const result = await getRedirectResult(auth);
+    
+    if (result && result.user) {
+      console.log('✅ getRedirectResult retornou usuário:', result.user.email);
+      sessionStorage.removeItem('googleLoginInProgress');
+      sessionStorage.removeItem('googleLoginTimestamp');
+      
+      const user = result.user;
+      const userDocRef = doc(db, 'users', user.uid);
+      const userDoc = await getDoc(userDocRef);
+      
+      const isNewUser = !userDoc.exists();
+      
+      if (isNewUser) {
+        await setDoc(userDocRef, {
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName,
+          photoURL: user.photoURL,
+          emailVerified: user.emailVerified,
+          createdAt: serverTimestamp(),
+          lastLoginAt: serverTimestamp(),
+          provider: 'google',
+          subscription: {
+            plan: 'free',
+            status: 'active',
+            startDate: serverTimestamp()
+          }
+        });
+      } else {
+        await setDoc(userDocRef, {
+          lastLoginAt: serverTimestamp()
+        }, { merge: true });
+      }
+
+      return {
+        success: true,
+        user: user,
+        isNewUser: isNewUser
+      };
+    }
+    
+    // Se não retornou usuário mas estava redirecionando
+    console.log('❌ Redirect estava pendente mas nenhum usuário foi encontrado');
+    sessionStorage.removeItem('googleLoginInProgress');
+    sessionStorage.removeItem('googleLoginTimestamp');
+    
+    return { 
+      success: false, 
+      noRedirect: true,
+      error: 'redirect-failed',
+      message: 'Login não completado. Tente novamente.'
+    };
+    
+  } catch (error) {
+    console.error('❌ Erro ao processar redirect:', error);
+    sessionStorage.removeItem('googleLoginInProgress');
+    sessionStorage.removeItem('googleLoginTimestamp');
     
     return {
       success: false,
@@ -256,6 +287,8 @@ export async function handleRedirectResult() {
 export async function logout() {
   try {
     await signOut(auth);
+    sessionStorage.removeItem('googleLoginInProgress');
+    sessionStorage.removeItem('googleLoginTimestamp');
     console.log('✅ Logout realizado com sucesso!');
     return { success: true };
   } catch (error) {
@@ -344,11 +377,9 @@ export async function changePassword(currentPassword, newPassword) {
       };
     }
 
-    // Reautenticar usuário
     const credential = EmailAuthProvider.credential(user.email, currentPassword);
     await reauthenticateWithCredential(user, credential);
 
-    // Alterar senha
     await updatePassword(user, newPassword);
     
     console.log('✅ Senha alterada com sucesso!');
@@ -381,9 +412,12 @@ function getErrorMessage(errorCode) {
     'auth/invalid-credential': 'Credenciais inválidas. Verifique email e senha.',
     'auth/too-many-requests': 'Muitas tentativas. Tente novamente mais tarde.',
     'auth/network-request-failed': 'Erro de conexão. Verifique sua internet.',
-    'auth/popup-closed-by-user': 'Janela de login fechada. Tente novamente.',
+    'auth/popup-closed-by-user': 'Login cancelado.',
+    'auth/popup-blocked': 'Popup bloqueado pelo navegador. Permitindo redirects...',
     'auth/cancelled-popup-request': 'Login cancelado.',
-    'auth/requires-recent-login': 'Por segurança, faça login novamente para realizar esta ação.'
+    'auth/requires-recent-login': 'Por segurança, faça login novamente para realizar esta ação.',
+    'auth/account-exists-with-different-credential': 'Já existe uma conta com este email usando outro método de login.',
+    'redirect-failed': 'Login não completado. Tente novamente.'
   };
 
   return errors[errorCode] || 'Erro desconhecido. Tente novamente.';

@@ -14,93 +14,96 @@ export default function Auth() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const navigate = useNavigate();
 
-  // Capturar resultado do redirect do Google
+  // Função para limpar estado do Google Login
+  const clearGoogleLoginState = () => {
+    sessionStorage.removeItem('googleLoginInProgress');
+    sessionStorage.removeItem('googleLoginTimestamp');
+    setError('');
+    setLoading(false);
+    console.log('🧹 Estado do Google Login limpo');
+  };
+
+  // Verificar redirect do Google PRIMEIRO
   useEffect(() => {
     let isMounted = true;
     
-    const checkRedirectResult = async () => {
+    const checkGoogleRedirect = async () => {
       try {
-        console.log('🔍 Verificando resultado do redirect...');
+        console.log('🔍 Verificando redirect do Google...');
+        setLoading(true);
+        
         const result = await handleRedirectResult();
         
         if (!isMounted) return;
         
-        if (result.success) {
-          console.log('✅ Login com Google bem-sucedido!', result);
+        if (result.success && result.user) {
+          console.log('✅ Login com Google bem-sucedido!', result.user.email);
           
-          // Login bem-sucedido
+          // Dar um tempo para o Firebase processar
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
           if (result.isNewUser) {
-            console.log('👤 Novo usuário - redirecionando para onboarding');
-            navigate('/onboarding');
+            console.log('🆕 Novo usuário - indo para onboarding');
+            navigate('/onboarding', { replace: true });
           } else {
-            console.log('👤 Usuário existente - redirecionando para dashboard');
-            navigate('/dashboard');
+            console.log('👤 Usuário existente - indo para dashboard');
+            navigate('/dashboard', { replace: true });
           }
-        } else if (result.error) {
+        } else if (result.error || result.message) {
           console.error('❌ Erro no redirect:', result.message);
           setError(result.message);
+          setLoading(false);
         } else {
-          console.log('ℹ️ Sem redirect pendente');
+          console.log('ℹ️ Nenhum redirect pendente');
+          setLoading(false);
         }
       } catch (error) {
-        console.error('❌ Erro ao processar redirect:', error);
+        console.error('❌ Erro ao verificar redirect:', error);
         if (isMounted) {
           setError('Erro ao processar login. Tente novamente.');
+          setLoading(false);
         }
       } finally {
         if (isMounted) {
-          setLoading(false);
+          setCheckingAuth(false);
         }
       }
     };
     
-    checkRedirectResult();
+    checkGoogleRedirect();
     
     return () => {
       isMounted = false;
     };
   }, [navigate]);
 
-  // Listener de mudança de estado de autenticação
+  // Verificar usuário já autenticado (APÓS verificar redirect)
   useEffect(() => {
+    if (checkingAuth) return;
+    
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        console.log('🔐 Usuário autenticado detectado:', user.email);
+      if (user && !loading) {
+        console.log('🔐 Usuário já autenticado:', user.email);
         
-        // Se já estiver na página de auth e houver um usuário, redirecionar
         if (window.location.pathname === '/auth') {
           console.log('➡️ Redirecionando usuário autenticado...');
-          
-          // Verificar se é novo usuário (criado há menos de 10 segundos)
-          const accountAge = Date.now() - new Date(user.metadata.creationTime).getTime();
-          const isNewUser = accountAge < 10000; // 10 segundos
-          
-          console.log('📅 Idade da conta:', accountAge, 'ms');
-          console.log('🆕 É novo usuário?', isNewUser);
-          
-          if (isNewUser) {
-            navigate('/onboarding');
-          } else {
-            navigate('/dashboard');
-          }
+          navigate('/dashboard', { replace: true });
         }
-      } else {
-        console.log('🔓 Nenhum usuário autenticado');
       }
     });
 
     return () => unsubscribe();
-  }, [navigate]);
+  }, [navigate, loading, checkingAuth]);
 
   const handleEmailAuth = async (e) => {
     e.preventDefault();
     setError('');
     setSuccess('');
 
-    // Validações
     if (!isValidEmail(email)) {
       setError('Email inválido');
       return;
@@ -120,7 +123,6 @@ export default function Auth() {
 
     try {
       if (isLogin) {
-        // Login
         console.log('📧 Tentando login com email...');
         const result = await loginWithEmail(email, password);
         
@@ -129,29 +131,35 @@ export default function Auth() {
           if (!result.emailVerified) {
             setSuccess('Login realizado! Verifique seu email para ter acesso completo.');
           }
-          navigate('/dashboard');
+          
+          setTimeout(() => {
+            navigate('/dashboard', { replace: true });
+          }, 500);
         } else {
           console.error('❌ Erro no login:', result.message);
           setError(result.message);
+          setLoading(false);
         }
       } else {
-        // Registro
         console.log('📝 Tentando registro...');
         const result = await registerWithEmail(email, password, displayName);
         
         if (result.success) {
           console.log('✅ Registro bem-sucedido');
           setSuccess(result.message);
-          setTimeout(() => navigate('/onboarding'), 2000);
+          
+          setTimeout(() => {
+            navigate('/onboarding', { replace: true });
+          }, 2000);
         } else {
           console.error('❌ Erro no registro:', result.message);
           setError(result.message);
+          setLoading(false);
         }
       }
     } catch (error) {
       console.error('❌ Erro de autenticação:', error);
       setError('Erro ao autenticar. Tente novamente.');
-    } finally {
       setLoading(false);
     }
   };
@@ -162,27 +170,40 @@ export default function Auth() {
     setLoading(true);
 
     console.log('🔵 Iniciando login com Google...');
-    const result = await loginWithGoogle();
-
-    if (!result.success && result.message) {
-      console.error('❌ Erro ao iniciar login Google:', result.message);
-      setError(result.message);
-      setLoading(false);
-    } else {
-      console.log('✅ Redirect iniciado, aguardando retorno...');
-    }
     
-    // O loading vai continuar até o redirect acontecer
-    // Após o redirect, o useEffect vai capturar o resultado
+    try {
+      const result = await loginWithGoogle();
+
+      if (!result.success && result.message) {
+        console.error('❌ Erro ao iniciar login Google:', result.message);
+        setError(result.message);
+        setLoading(false);
+      } else if (result.redirecting) {
+        console.log('🔄 Redirecionando para o Google...');
+      }
+    } catch (error) {
+      console.error('❌ Erro inesperado:', error);
+      setError('Erro ao iniciar login. Tente novamente.');
+      setLoading(false);
+    }
   };
+
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 dark:from-gray-900 dark:to-gray-800">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">Carregando...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 dark:from-gray-900 dark:to-gray-800 px-4 py-12">
       <div className="max-w-md w-full">
-        {/* Card Principal */}
         <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 animate-fade-in">
           
-          {/* Header */}
           <div className="text-center mb-8">
             <div className="w-16 h-16 bg-gradient-to-br from-purple-600 to-pink-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
               <span className="text-3xl">🩺</span>
@@ -195,40 +216,29 @@ export default function Auth() {
             </p>
           </div>
 
-          {/* Botão Google */}
           <button
             onClick={handleGoogleLogin}
             disabled={loading}
             className="w-full flex items-center justify-center gap-3 px-6 py-3 bg-white dark:bg-gray-700 border-2 border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-200 font-medium hover:bg-gray-50 dark:hover:bg-gray-600 hover:border-gray-400 dark:hover:border-gray-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm mb-6"
           >
             {loading ? (
-              <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin"></div>
+              <>
+                <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin"></div>
+                <span>Processando...</span>
+              </>
             ) : (
               <>
                 <svg className="w-5 h-5" viewBox="0 0 24 24">
-                  <path
-                    fill="#4285F4"
-                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                  />
-                  <path
-                    fill="#EA4335"
-                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                  />
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
                 </svg>
                 <span>Continuar com Google</span>
               </>
             )}
           </button>
 
-          {/* Divisor */}
           <div className="relative mb-6">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-gray-300 dark:border-gray-600"></div>
@@ -240,9 +250,7 @@ export default function Auth() {
             </div>
           </div>
 
-          {/* Formulário */}
           <form onSubmit={handleEmailAuth} className="space-y-4">
-            {/* Nome (apenas no registro) */}
             {!isLogin && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -255,11 +263,11 @@ export default function Auth() {
                   className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                   placeholder="Seu nome"
                   required={!isLogin}
+                  disabled={loading}
                 />
               </div>
             )}
 
-            {/* Email */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Email
@@ -271,10 +279,10 @@ export default function Auth() {
                 className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                 placeholder="seu@email.com"
                 required
+                disabled={loading}
               />
             </div>
 
-            {/* Senha */}
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -285,6 +293,7 @@ export default function Auth() {
                     type="button"
                     onClick={() => setShowForgotPassword(true)}
                     className="text-sm text-purple-600 dark:text-purple-400 hover:underline font-medium"
+                    disabled={loading}
                   >
                     Esqueci minha senha
                   </button>
@@ -297,6 +306,7 @@ export default function Auth() {
                 className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                 placeholder="••••••••"
                 required
+                disabled={loading}
               />
               {!isLogin && (
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
@@ -305,10 +315,20 @@ export default function Auth() {
               )}
             </div>
 
-            {/* Mensagens de erro/sucesso */}
             {error && (
               <div className="p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200 rounded-xl text-sm animate-fade-in">
-                {error}
+                <div className="flex items-start justify-between gap-2">
+                  <p className="flex-1">{error}</p>
+                  {error.includes('Login cancelado') && (
+                    <button
+                      type="button"
+                      onClick={clearGoogleLoginState}
+                      className="text-xs underline hover:no-underline whitespace-nowrap font-semibold"
+                    >
+                      Tentar Novamente
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
@@ -318,7 +338,6 @@ export default function Auth() {
               </div>
             )}
 
-            {/* Botão Submit */}
             <button
               type="submit"
               disabled={loading}
@@ -335,7 +354,6 @@ export default function Auth() {
             </button>
           </form>
 
-          {/* Toggle Login/Registro */}
           <div className="mt-6 text-center">
             <button
               onClick={() => {
@@ -343,13 +361,13 @@ export default function Auth() {
                 setError('');
                 setSuccess('');
               }}
-              className="text-purple-600 dark:text-purple-400 hover:underline text-sm font-medium"
+              disabled={loading}
+              className="text-purple-600 dark:text-purple-400 hover:underline text-sm font-medium disabled:opacity-50"
             >
               {isLogin ? 'Não tem conta? Criar conta gratuitamente' : 'Já tem conta? Fazer login'}
             </button>
           </div>
 
-          {/* Termos (apenas no registro) */}
           {!isLogin && (
             <p className="text-xs text-center text-gray-500 dark:text-gray-400 mt-4">
               Ao criar uma conta, você concorda com nossos{' '}
@@ -364,13 +382,11 @@ export default function Auth() {
           )}
         </div>
 
-        {/* Footer */}
         <p className="text-center text-sm text-gray-600 dark:text-gray-400 mt-6">
           🩺 Planner completo para estudantes de medicina
         </p>
       </div>
 
-      {/* Modal de Recuperação de Senha */}
       <ForgotPasswordModal 
         isOpen={showForgotPassword}
         onClose={() => setShowForgotPassword(false)}
