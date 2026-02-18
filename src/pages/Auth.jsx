@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { registerWithEmail, loginWithEmail, loginWithGoogle } from '../services/auth';
+import { onAuthStateChanged } from 'firebase/auth';
+import { registerWithEmail, loginWithEmail, loginWithGoogle, handleRedirectResult } from '../services/auth';
+import { auth } from '../config/firebase';
 import { isValidEmail } from '../utils/helpers';
 import ForgotPasswordModal from '../components/ForgotPasswordModal';
 
@@ -14,6 +16,84 @@ export default function Auth() {
   const [loading, setLoading] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const navigate = useNavigate();
+
+  // Capturar resultado do redirect do Google
+  useEffect(() => {
+    let isMounted = true;
+    
+    const checkRedirectResult = async () => {
+      try {
+        console.log('🔍 Verificando resultado do redirect...');
+        const result = await handleRedirectResult();
+        
+        if (!isMounted) return;
+        
+        if (result.success) {
+          console.log('✅ Login com Google bem-sucedido!', result);
+          
+          // Login bem-sucedido
+          if (result.isNewUser) {
+            console.log('👤 Novo usuário - redirecionando para onboarding');
+            navigate('/onboarding');
+          } else {
+            console.log('👤 Usuário existente - redirecionando para dashboard');
+            navigate('/dashboard');
+          }
+        } else if (result.error) {
+          console.error('❌ Erro no redirect:', result.message);
+          setError(result.message);
+        } else {
+          console.log('ℹ️ Sem redirect pendente');
+        }
+      } catch (error) {
+        console.error('❌ Erro ao processar redirect:', error);
+        if (isMounted) {
+          setError('Erro ao processar login. Tente novamente.');
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+    
+    checkRedirectResult();
+    
+    return () => {
+      isMounted = false;
+    };
+  }, [navigate]);
+
+  // Listener de mudança de estado de autenticação
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        console.log('🔐 Usuário autenticado detectado:', user.email);
+        
+        // Se já estiver na página de auth e houver um usuário, redirecionar
+        if (window.location.pathname === '/auth') {
+          console.log('➡️ Redirecionando usuário autenticado...');
+          
+          // Verificar se é novo usuário (criado há menos de 10 segundos)
+          const accountAge = Date.now() - new Date(user.metadata.creationTime).getTime();
+          const isNewUser = accountAge < 10000; // 10 segundos
+          
+          console.log('📅 Idade da conta:', accountAge, 'ms');
+          console.log('🆕 É novo usuário?', isNewUser);
+          
+          if (isNewUser) {
+            navigate('/onboarding');
+          } else {
+            navigate('/dashboard');
+          }
+        }
+      } else {
+        console.log('🔓 Nenhum usuário autenticado');
+      }
+    });
+
+    return () => unsubscribe();
+  }, [navigate]);
 
   const handleEmailAuth = async (e) => {
     e.preventDefault();
@@ -41,29 +121,35 @@ export default function Auth() {
     try {
       if (isLogin) {
         // Login
+        console.log('📧 Tentando login com email...');
         const result = await loginWithEmail(email, password);
         
         if (result.success) {
+          console.log('✅ Login com email bem-sucedido');
           if (!result.emailVerified) {
             setSuccess('Login realizado! Verifique seu email para ter acesso completo.');
           }
           navigate('/dashboard');
         } else {
+          console.error('❌ Erro no login:', result.message);
           setError(result.message);
         }
       } else {
         // Registro
+        console.log('📝 Tentando registro...');
         const result = await registerWithEmail(email, password, displayName);
         
         if (result.success) {
+          console.log('✅ Registro bem-sucedido');
           setSuccess(result.message);
           setTimeout(() => navigate('/onboarding'), 2000);
         } else {
+          console.error('❌ Erro no registro:', result.message);
           setError(result.message);
         }
       }
     } catch (error) {
-      console.error('Erro de autenticação:', error);
+      console.error('❌ Erro de autenticação:', error);
       setError('Erro ao autenticar. Tente novamente.');
     } finally {
       setLoading(false);
@@ -75,19 +161,19 @@ export default function Auth() {
     setSuccess('');
     setLoading(true);
 
+    console.log('🔵 Iniciando login com Google...');
     const result = await loginWithGoogle();
 
-    if (result.success) {
-      if (result.isNewUser) {
-        navigate('/onboarding');
-      } else {
-        navigate('/dashboard');
-      }
-    } else {
+    if (!result.success && result.message) {
+      console.error('❌ Erro ao iniciar login Google:', result.message);
       setError(result.message);
+      setLoading(false);
+    } else {
+      console.log('✅ Redirect iniciado, aguardando retorno...');
     }
-
-    setLoading(false);
+    
+    // O loading vai continuar até o redirect acontecer
+    // Após o redirect, o useEffect vai capturar o resultado
   };
 
   return (

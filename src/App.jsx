@@ -9,11 +9,11 @@ import Auth from './pages/Auth';
 import Onboarding from './pages/Onboarding';
 import Dashboard from './pages/Dashboard';
 import Calendar from './pages/Calendar';
-import PBL from './pages/PBL';
 import Study from './pages/Study';
 import Health from './pages/Health';
 import Finances from './pages/Finances';
 import Home from './pages/Home';
+import Casa from './pages/Casa'; // 🆕 NOVO
 import Wellness from './pages/Wellness';
 import Analytics from './pages/Analytics';
 import Pricing from './pages/Pricing';
@@ -79,15 +79,15 @@ function AppContent() {
             </ProtectedRoute>
           } />
           
-          <Route path="/pbl" element={
-            <ProtectedRoute>
-              <PBL />
-            </ProtectedRoute>
-          } />
-          
           <Route path="/study" element={
             <ProtectedRoute>
               <Study />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/casa" element={
+            <ProtectedRoute>
+              <Casa />
             </ProtectedRoute>
           } />
           

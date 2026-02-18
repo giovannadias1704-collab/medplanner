@@ -17,6 +17,25 @@ const model = genAI.getGenerativeModel({
 
 console.log('🤖 Modelo configurado: gemini-2.5-flash');
 
+// FUNÇÃO: Gerar texto simples
+export async function generateText(prompt) {
+  try {
+    console.log('📤 Enviando prompt para Gemini:', prompt);
+    
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+
+    console.log('✅ Resposta recebida com sucesso!');
+
+    return text;
+  } catch (error) {
+    console.error('❌ Erro ao gerar texto:', error);
+    console.error('❌ Mensagem:', error.message);
+    throw error;
+  }
+}
+
 // FUNÇÃO: Chat simples
 export async function chatWithAI(message, context = '') {
   try {
@@ -148,6 +167,7 @@ IMPORTANTE:
 }
 
 export default {
+  generateText,
   chatWithAI,
   getStudySuggestions,
   analyzePBL,

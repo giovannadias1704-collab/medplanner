@@ -6,7 +6,7 @@ import {
   CurrencyDollarIcon,
   Cog6ToothIcon,
   BookOpenIcon,
-  BeakerIcon,
+  HomeModernIcon,
   ChartBarIcon,
   SparklesIcon
 } from '@heroicons/react/24/outline';
@@ -17,7 +17,7 @@ export default function Navigation() {
   const navItems = [
     { path: '/dashboard', icon: HomeIcon, label: 'Home' },
     { path: '/calendar', icon: CalendarIcon, label: 'Agenda' },
-    { path: '/pbl', icon: BeakerIcon, label: 'PBL' },
+    { path: '/casa', icon: HomeModernIcon, label: 'Casa' },
     { path: '/study', icon: BookOpenIcon, label: 'Estudos' },
     { path: '/health', icon: HeartIcon, label: 'Saúde' },
     { path: '/finances', icon: CurrencyDollarIcon, label: 'Finanças' },

@@ -36,6 +36,8 @@ export function AppProvider({ children }) {
   const [pblReadings, setPblReadings] = useState([]);
   const [homeTasks, setHomeTasks] = useState([]);
   const [wellBeingEntries, setWellBeingEntries] = useState([]);
+  const [studySessions, setStudySessions] = useState([]);
+  const [weeklyEvaluations, setWeeklyEvaluations] = useState([]);
   
   // ========== NOVO: NOTIFICAÇÕES ==========
   const [notifications, setNotifications] = useState([]);
@@ -157,6 +159,12 @@ export function AppProvider({ children }) {
     // Study Questions
     unsubscribes.push(createListener('studyQuestions', setStudyQuestions));
 
+    // Study Sessions
+    unsubscribes.push(createListener('studySessions', setStudySessions));
+
+    // Weekly Evaluations
+    unsubscribes.push(createListener('weeklyEvaluations', setWeeklyEvaluations));
+
     // ========== NOVO: NOTIFICATIONS ==========
     unsubscribes.push(createListener('notifications', setNotifications));
 
@@ -260,8 +268,7 @@ export function AppProvider({ children }) {
             title: '⚠️ Tarefa Atrasada',
             message: `"${task.title}" está atrasada!`,
             relatedId: task.id,
-            priority: 'high'
-          });
+            priority: 'high'          });
         }
       }
     }
@@ -1046,6 +1053,8 @@ export function AppProvider({ children }) {
       studySchedule,
       studyReviews,
       studyQuestions,
+      studySessions,
+      weeklyEvaluations,
       settings,
       userProfile,
       notifications,
@@ -1258,6 +1267,74 @@ export function AppProvider({ children }) {
     }
   };
 
+  const updateStudyQuestion = async (questionId, questionData) => {
+    if (!user) return;
+    try {
+      const questionRef = doc(db, 'users', user.uid, 'studyQuestions', questionId);
+      await updateDoc(questionRef, questionData);
+    } catch (error) {
+      console.error('Erro ao atualizar questão:', error);
+      throw error;
+    }
+  };
+
+  const deleteStudyQuestion = async (questionId) => {
+    if (!user) return;
+    try {
+      await deleteDoc(doc(db, 'users', user.uid, 'studyQuestions', questionId));
+    } catch (error) {
+      console.error('Erro ao deletar questão:', error);
+      throw error;
+    }
+  };
+
+  const updateStudyReview = async (reviewId, reviewData) => {
+    if (!user) return;
+    try {
+      const reviewRef = doc(db, 'users', user.uid, 'studyReviews', reviewId);
+      await updateDoc(reviewRef, reviewData);
+    } catch (error) {
+      console.error('Erro ao atualizar revisão:', error);
+      throw error;
+    }
+  };
+
+  const deleteStudyReview = async (reviewId) => {
+    if (!user) return;
+    try {
+      await deleteDoc(doc(db, 'users', user.uid, 'studyReviews', reviewId));
+    } catch (error) {
+      console.error('Erro ao deletar revisão:', error);
+      throw error;
+    }
+  };
+
+  const addStudySession = async (sessionData) => {
+    if (!user) return;
+    try {
+      await addDoc(collection(db, 'users', user.uid, 'studySessions'), {
+        ...sessionData,
+        createdAt: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Erro ao adicionar sessão de estudo:', error);
+      throw error;
+    }
+  };
+
+  const addWeeklyEvaluation = async (evaluationData) => {
+    if (!user) return;
+    try {
+      await addDoc(collection(db, 'users', user.uid, 'weeklyEvaluations'), {
+        ...evaluationData,
+        createdAt: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Erro ao adicionar avaliação semanal:', error);
+      throw error;
+    }
+  };
+
   const answerStudyQuestion = async (questionId, isCorrect) => {
     if (!user) return;
     try {
@@ -1313,6 +1390,8 @@ export function AppProvider({ children }) {
     studyTopics,
     studyReviews,
     studyQuestions,
+    studySessions,
+    weeklyEvaluations,
     settings,
     // ========== NOVO: NOTIFICATIONS ==========
     notifications,
@@ -1375,6 +1454,12 @@ export function AppProvider({ children }) {
     toggleReviewComplete,
     addStudyTopic,
     addStudyQuestion,
+    updateStudyQuestion,
+    deleteStudyQuestion,
+    addStudySession,
+    addWeeklyEvaluation,
+    updateStudyReview,
+    deleteStudyReview,
     answerStudyQuestion,
     getTodayReviews,
     getUpcomingExams,

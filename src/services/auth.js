@@ -1,7 +1,8 @@
 import { 
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut,
   sendPasswordResetEmail,
   sendEmailVerification,
@@ -90,19 +91,118 @@ export async function loginWithEmail(email, password) {
   }
 }
 
-// ========== LOGIN COM GOOGLE ==========
+// ========== LOGIN COM GOOGLE (REDIRECT) ==========
 
 export async function loginWithGoogle() {
   try {
-    const result = await signInWithPopup(auth, googleProvider);
+    // Usar redirect em vez de popup
+    await signInWithRedirect(auth, googleProvider);
+    
+    // O redirect vai redirecionar o navegador
+    // O resultado será capturado pela função handleRedirectResult
+    return { success: true };
+    
+  } catch (error) {
+    console.error('❌ Erro ao iniciar login com Google:', error);
+    return {
+      success: false,
+      error: error.code,
+      message: getErrorMessage(error.code)
+    };
+  }
+}
+
+// ========== CAPTURAR RESULTADO DO REDIRECT ==========
+
+export async function handleRedirectResult() {
+  try {
+    console.log('🔍 Buscando resultado do redirect...');
+    const result = await getRedirectResult(auth);
+    
+    // Se não houver resultado do redirect, verificar se há usuário autenticado
+    if (!result) {
+      console.log('ℹ️ getRedirectResult retornou null');
+      console.log('🔍 Verificando se há usuário autenticado diretamente...');
+      
+      const currentUser = auth.currentUser;
+      console.log('👤 auth.currentUser:', currentUser);
+      
+      if (currentUser) {
+        console.log('⚠️ ATENÇÃO: Usuário está autenticado, mas getRedirectResult retornou null!');
+        console.log('📧 Email:', currentUser.email);
+        console.log('🆔 UID:', currentUser.uid);
+        console.log('🕐 Criado em:', currentUser.metadata.creationTime);
+        
+        // Verificar se é novo usuário (criado há menos de 30 segundos)
+        const accountAge = Date.now() - new Date(currentUser.metadata.creationTime).getTime();
+        const isNewUser = accountAge < 30000; // 30 segundos
+        
+        console.log('📅 Idade da conta:', accountAge, 'ms');
+        console.log('🆕 É novo usuário?', isNewUser);
+        
+        // Verificar/criar documento no Firestore
+        const userDocRef = doc(db, 'users', currentUser.uid);
+        const userDoc = await getDoc(userDocRef);
+        
+        if (!userDoc.exists()) {
+          console.log('👤 Criando documento do usuário no Firestore...');
+          
+          await setDoc(userDocRef, {
+            uid: currentUser.uid,
+            email: currentUser.email,
+            displayName: currentUser.displayName,
+            photoURL: currentUser.photoURL,
+            emailVerified: currentUser.emailVerified,
+            createdAt: serverTimestamp(),
+            lastLoginAt: serverTimestamp(),
+            provider: 'google',
+            subscription: {
+              plan: 'free',
+              status: 'active',
+              startDate: serverTimestamp()
+            }
+          });
+          
+          console.log('✅ Documento criado no Firestore');
+        } else {
+          console.log('📝 Atualizando último login...');
+          
+          await setDoc(userDocRef, {
+            lastLoginAt: serverTimestamp()
+          }, { merge: true });
+          
+          console.log('✅ Último login atualizado');
+        }
+        
+        console.log('✅ Login detectado via auth.currentUser');
+        
+        // RETORNAR SUCESSO COM O USUÁRIO
+        return {
+          success: true,
+          user: currentUser,
+          isNewUser: !userDoc.exists() || isNewUser
+        };
+      }
+      
+      console.log('🔓 Nenhum usuário autenticado - sem redirect pendente');
+      return { success: false, noRedirect: true };
+    }
+    
+    // Se chegou aqui, getRedirectResult retornou um resultado válido
+    console.log('✅ Resultado do redirect recebido:', result);
     const user = result.user;
 
     // Verificar se é novo usuário
-    const userDoc = await getDoc(doc(db, 'users', user.uid));
+    const userDocRef = doc(db, 'users', user.uid);
+    const userDoc = await getDoc(userDocRef);
+    
+    console.log('📄 Documento do usuário existe?', userDoc.exists());
     
     if (!userDoc.exists()) {
+      console.log('👤 Criando novo usuário no Firestore...');
+      
       // Criar documento para novo usuário Google
-      await setDoc(doc(db, 'users', user.uid), {
+      await setDoc(userDocRef, {
         uid: user.uid,
         email: user.email,
         displayName: user.displayName,
@@ -117,22 +217,32 @@ export async function loginWithGoogle() {
           startDate: serverTimestamp()
         }
       });
+      
+      console.log('✅ Novo usuário criado no Firestore');
     } else {
+      console.log('📝 Atualizando último login...');
+      
       // Atualizar último login
-      await setDoc(doc(db, 'users', user.uid), {
+      await setDoc(userDocRef, {
         lastLoginAt: serverTimestamp()
       }, { merge: true });
+      
+      console.log('✅ Último login atualizado');
     }
 
-    console.log('✅ Login com Google realizado com sucesso!');
+    console.log('✅ Login com Google realizado com sucesso via getRedirectResult!');
     
     return {
       success: true,
       user: user,
       isNewUser: !userDoc.exists()
     };
+    
   } catch (error) {
-    console.error('❌ Erro ao fazer login com Google:', error);
+    console.error('❌ Erro ao processar redirect do Google:', error);
+    console.error('Código do erro:', error.code);
+    console.error('Mensagem do erro:', error.message);
+    
     return {
       success: false,
       error: error.code,
@@ -283,6 +393,7 @@ export default {
   registerWithEmail,
   loginWithEmail,
   loginWithGoogle,
+  handleRedirectResult,
   logout,
   resetPassword,
   resendVerificationEmail,
