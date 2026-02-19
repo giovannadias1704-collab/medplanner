@@ -12,8 +12,8 @@ import {
   reauthenticateWithCredential,
   EmailAuthProvider
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, googleProvider, db } from '../config/firebase';
+import { auth, googleProvider } from '../config/firebase';
+import { createOrUpdateUserProfile } from './userService';
 
 // ========== REGISTRO ==========
 
@@ -22,23 +22,16 @@ export async function registerWithEmail(email, password, displayName) {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
+    // Atualizar perfil do usuário
     await updateProfile(user, { displayName });
+    
+    // Enviar email de verificação
     await sendEmailVerification(user);
 
-    await setDoc(doc(db, 'users', user.uid), {
-      uid: user.uid,
-      email: user.email,
-      displayName: displayName,
-      photoURL: user.photoURL || null,
-      emailVerified: false,
-      createdAt: serverTimestamp(),
-      lastLoginAt: serverTimestamp(),
-      provider: 'email',
-      subscription: {
-        plan: 'free',
-        status: 'active',
-        startDate: serverTimestamp()
-      }
+    // Criar perfil no Firestore com estrutura de subscription
+    await createOrUpdateUserProfile({
+      ...user,
+      displayName
     });
 
     console.log('✅ Usuário registrado com sucesso!');
@@ -65,9 +58,8 @@ export async function loginWithEmail(email, password) {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
-    await setDoc(doc(db, 'users', user.uid), {
-      lastLoginAt: serverTimestamp()
-    }, { merge: true });
+    // Criar/atualizar perfil no Firestore (atualiza lastLoginAt e verifica reset mensal)
+    await createOrUpdateUserProfile(user);
 
     console.log('✅ Login realizado com sucesso!');
     
@@ -98,46 +90,16 @@ export async function loginWithGoogle() {
     console.log('✅ Login com popup bem-sucedido:', result.user.email);
     
     const user = result.user;
-    const userDocRef = doc(db, 'users', user.uid);
-    const userDoc = await getDoc(userDocRef);
     
-    const isNewUser = !userDoc.exists();
-    console.log('🆕 É novo usuário?', isNewUser);
+    // Criar/atualizar perfil no Firestore (cria se novo, atualiza se existente)
+    await createOrUpdateUserProfile(user);
     
-    if (isNewUser) {
-      console.log('👤 Criando novo usuário no Firestore...');
-      
-      await setDoc(userDocRef, {
-        uid: user.uid,
-        email: user.email,
-        displayName: user.displayName,
-        photoURL: user.photoURL,
-        emailVerified: user.emailVerified,
-        createdAt: serverTimestamp(),
-        lastLoginAt: serverTimestamp(),
-        provider: 'google',
-        subscription: {
-          plan: 'free',
-          status: 'active',
-          startDate: serverTimestamp()
-        }
-      });
-      
-      console.log('✅ Novo usuário criado no Firestore');
-    } else {
-      console.log('📝 Atualizando último login...');
-      
-      await setDoc(userDocRef, {
-        lastLoginAt: serverTimestamp()
-      }, { merge: true });
-      
-      console.log('✅ Último login atualizado');
-    }
+    console.log('✅ Perfil do usuário sincronizado com Firestore');
     
     return {
       success: true,
       user: user,
-      isNewUser: isNewUser
+      isNewUser: result._tokenResponse?.isNewUser || false
     };
     
   } catch (error) {
@@ -223,37 +185,16 @@ export async function handleRedirectResult() {
       sessionStorage.removeItem('googleLoginTimestamp');
       
       const user = result.user;
-      const userDocRef = doc(db, 'users', user.uid);
-      const userDoc = await getDoc(userDocRef);
       
-      const isNewUser = !userDoc.exists();
+      // Criar/atualizar perfil no Firestore
+      await createOrUpdateUserProfile(user);
       
-      if (isNewUser) {
-        await setDoc(userDocRef, {
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName,
-          photoURL: user.photoURL,
-          emailVerified: user.emailVerified,
-          createdAt: serverTimestamp(),
-          lastLoginAt: serverTimestamp(),
-          provider: 'google',
-          subscription: {
-            plan: 'free',
-            status: 'active',
-            startDate: serverTimestamp()
-          }
-        });
-      } else {
-        await setDoc(userDocRef, {
-          lastLoginAt: serverTimestamp()
-        }, { merge: true });
-      }
+      console.log('✅ Perfil do usuário sincronizado com Firestore');
 
       return {
         success: true,
         user: user,
-        isNewUser: isNewUser
+        isNewUser: result._tokenResponse?.isNewUser || false
       };
     }
     

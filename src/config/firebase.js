@@ -1,9 +1,9 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
-// Firebase configuration
+// Config
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -13,19 +13,17 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+// Evita múltiplas inicializações (Vite / HMR)
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-// Initialize services
-export const auth = getAuth(app);
+// 🔥 Use getFirestore aqui (sem initializeFirestore)
 export const db = getFirestore(app);
+
+export const auth = getAuth(app);
 export const storage = getStorage(app);
 
-// Google Auth Provider
 export const googleProvider = new GoogleAuthProvider();
-googleProvider.setCustomParameters({
-  prompt: 'select_account'
-});
+googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 console.log('🔥 Firebase inicializado com sucesso!');
 

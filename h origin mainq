@@ -1,0 +1,27 @@
+[1mdiff --git a/src/pages/Study.jsx b/src/pages/Study.jsx[m
+[1mindex f44adf5..e91d019 100644[m
+[1m--- a/src/pages/Study.jsx[m
+[1m+++ b/src/pages/Study.jsx[m
+[36m@@ -13,14 +13,14 @@[m [mimport {[m
+ } from '@heroicons/react/24/outline';[m
+ [m
+ // Importar componentes[m
+[31m-import StudyQuestionnaire from '../components/Study/StudyQuestionnaire';[m
+[31m-import StudyPlanning from '../components/Study/StudyPlanning';[m
+[31m-import StudyPBL from '../components/Study/StudyPBL';[m
+[31m-import StudyTimer from '../components/Study/StudyTimer';[m
+[31m-import StudyProgress from '../components/Study/StudyProgress';[m
+[31m-import StudyQuestions from '../components/Study/StudyQuestions';[m
+[31m-import StudyReview from '../components/Study/StudyReview';[m
+[31m-import StudyWeeklyEval from '../components/Study/StudyWeeklyEval';[m
+[32m+[m[32mimport StudyQuestionnaire from '../components/StudyQuestionnaire';[m
+[32m+[m[32mimport StudyPlanning from '../components/StudyPlanning';[m
+[32m+[m[32mimport StudyPBL from '../components/StudyPBL';[m
+[32m+[m[32mimport StudyTimer from '../components/StudyTimer';[m
+[32m+[m[32mimport StudyProgress from '../components/StudyProgress';[m
+[32m+[m[32mimport StudyQuestions from '../components/study/StudyQuestions';[m
+[32m+[m[32mimport StudyReview from '../components/StudyReview';[m
+[32m+[m[32mimport StudyWeeklyEval from '../components/StudyWeeklyEval';[m
+ [m
+ export default function Study() {[m
+   const { user } = useAuth();  // ⬅️ ESTA LINHA JÁ ESTÁ, MAS PRECISA DO IMPORT ACIMA[m

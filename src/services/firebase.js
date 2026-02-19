@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
 // Firebase configuration
@@ -20,6 +20,18 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
+
+// Enable offline persistence para Firestore
+// Permite que o app funcione offline e sincronize quando online
+enableIndexedDbPersistence(db).catch((err) => {
+  if (err.code === 'failed-precondition') {
+    // Múltiplas abas abertas, persistência só pode ser ativada em uma aba
+    console.warn('⚠️ Persistência offline não disponível: múltiplas abas abertas');
+  } else if (err.code === 'unimplemented') {
+    // Navegador não suporta persistência
+    console.warn('⚠️ Persistência offline não suportada neste navegador');
+  }
+});
 
 // Google Auth Provider
 export const googleProvider = new GoogleAuthProvider();
