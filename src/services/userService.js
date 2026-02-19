@@ -1,25 +1,35 @@
 import { doc, setDoc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
+// 🔐 DEFINA SEU EMAIL ADMIN AQUI
+const ADMIN_EMAIL = "medplanner@gmail.com";
+
 // Estrutura padrão de um novo usuário
 const getDefaultUserData = (user) => {
+  const isAdmin = user.email === ADMIN_EMAIL;
+
   return {
     uid: user.uid,
     email: user.email,
     displayName: user.displayName || '',
     photoURL: user.photoURL || '',
+
+    // 🔑 NOVO CAMPO DE CONTROLE
+    role: isAdmin ? 'admin' : 'user',
+
     subscription: {
-      plan: 'free',
+      plan: isAdmin ? 'admin' : 'free',
       status: 'active',
       startDate: serverTimestamp(),
-      endDate: null // null para plano gratuito
+      endDate: null
     },
+
     aiUsage: 0,
     questionsUsage: 0,
     eventsCount: 0,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
-    lastResetDate: new Date().toISOString().slice(0, 7) // YYYY-MM para controle mensal
+    lastResetDate: new Date().toISOString().slice(0, 7)
   };
 };
 
@@ -30,19 +40,27 @@ export const createOrUpdateUserProfile = async (user) => {
     const userDoc = await getDoc(userRef);
 
     if (!userDoc.exists()) {
-      // Usuário novo - criar perfil completo
+      // 🆕 Usuário novo
       await setDoc(userRef, getDefaultUserData(user));
       console.log('✅ Perfil de usuário criado:', user.uid);
     } else {
-      // Usuário existente - atualizar apenas informações básicas
-      await updateDoc(userRef, {
-        displayName: user.displayName || userDoc.data().displayName,
-        photoURL: user.photoURL || userDoc.data().photoURL,
+      // 🔄 Usuário existente
+      const existingData = userDoc.data();
+
+      const updates = {
+        displayName: user.displayName || existingData.displayName,
+        photoURL: user.photoURL || existingData.photoURL,
         updatedAt: serverTimestamp()
-      });
+      };
+
+      // Se ainda não existir role, adiciona automaticamente
+      if (!existingData.role) {
+        updates.role = user.email === ADMIN_EMAIL ? 'admin' : 'user';
+      }
+
+      await updateDoc(userRef, updates);
       console.log('✅ Perfil de usuário atualizado:', user.uid);
-      
-      // Verificar e resetar contadores mensais se necessário
+
       await checkAndResetMonthlyCounters(user.uid);
     }
   } catch (error) {
@@ -56,14 +74,13 @@ export const checkAndResetMonthlyCounters = async (userId) => {
   try {
     const userRef = doc(db, 'users', userId);
     const userDoc = await getDoc(userRef);
-    
+
     if (!userDoc.exists()) return;
-    
+
     const userData = userDoc.data();
-    const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+    const currentMonth = new Date().toISOString().slice(0, 7);
     const lastResetMonth = userData.lastResetDate;
 
-    // Se mudou o mês, resetar contadores
     if (lastResetMonth !== currentMonth) {
       await updateDoc(userRef, {
         aiUsage: 0,
@@ -72,6 +89,7 @@ export const checkAndResetMonthlyCounters = async (userId) => {
         lastResetDate: currentMonth,
         updatedAt: serverTimestamp()
       });
+
       console.log('🔄 Contadores mensais resetados para:', userId);
     }
   } catch (error) {
@@ -79,10 +97,11 @@ export const checkAndResetMonthlyCounters = async (userId) => {
   }
 };
 
-// Atualizar plano de assinatura
+// 👑 FUNÇÃO ADMIN PARA ALTERAR PLANO MANUALMENTE
 export const updateUserSubscription = async (userId, subscriptionData) => {
   try {
     const userRef = doc(db, 'users', userId);
+
     await updateDoc(userRef, {
       subscription: {
         plan: subscriptionData.plan,
@@ -92,6 +111,7 @@ export const updateUserSubscription = async (userId, subscriptionData) => {
       },
       updatedAt: serverTimestamp()
     });
+
     console.log('✅ Assinatura atualizada:', userId, subscriptionData.plan);
   } catch (error) {
     console.error('❌ Erro ao atualizar assinatura:', error);
@@ -104,7 +124,7 @@ export const getUserData = async (userId) => {
   try {
     const userRef = doc(db, 'users', userId);
     const userDoc = await getDoc(userRef);
-    
+
     if (userDoc.exists()) {
       return userDoc.data();
     }
@@ -120,10 +140,11 @@ export const incrementAIUsage = async (userId) => {
   try {
     const userRef = doc(db, 'users', userId);
     const userDoc = await getDoc(userRef);
-    
+
     if (!userDoc.exists()) return;
-    
+
     const currentUsage = userDoc.data().aiUsage || 0;
+
     await updateDoc(userRef, {
       aiUsage: currentUsage + 1,
       updatedAt: serverTimestamp()
@@ -138,10 +159,11 @@ export const incrementQuestionsUsage = async (userId) => {
   try {
     const userRef = doc(db, 'users', userId);
     const userDoc = await getDoc(userRef);
-    
+
     if (!userDoc.exists()) return;
-    
+
     const currentUsage = userDoc.data().questionsUsage || 0;
+
     await updateDoc(userRef, {
       questionsUsage: currentUsage + 1,
       updatedAt: serverTimestamp()
@@ -156,10 +178,11 @@ export const incrementEventsCount = async (userId) => {
   try {
     const userRef = doc(db, 'users', userId);
     const userDoc = await getDoc(userRef);
-    
+
     if (!userDoc.exists()) return;
-    
+
     const currentCount = userDoc.data().eventsCount || 0;
+
     await updateDoc(userRef, {
       eventsCount: currentCount + 1,
       updatedAt: serverTimestamp()
@@ -174,10 +197,11 @@ export const decrementEventsCount = async (userId) => {
   try {
     const userRef = doc(db, 'users', userId);
     const userDoc = await getDoc(userRef);
-    
+
     if (!userDoc.exists()) return;
-    
+
     const currentCount = userDoc.data().eventsCount || 0;
+
     if (currentCount > 0) {
       await updateDoc(userRef, {
         eventsCount: currentCount - 1,
