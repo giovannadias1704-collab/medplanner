@@ -4,6 +4,7 @@ import { useAuth } from './hooks/useAuth';
 import { useNotifications } from './hooks/useNotifications';
 import { useSubscription } from './context/SubscriptionContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import AdminRoute from './routes/AdminRoute'; // 🔥 IMPORTANTE
 import Landing from './pages/Landing';
 import Auth from './pages/Auth';
 import Onboarding from './pages/Onboarding';
@@ -13,7 +14,7 @@ import Study from './pages/Study';
 import Health from './pages/Health';
 import Finances from './pages/Finances';
 import Home from './pages/Home';
-import Casa from './pages/Casa'; // 🆕 NOVO
+import Casa from './pages/Casa';
 import Wellness from './pages/Wellness';
 import Analytics from './pages/Analytics';
 import Pricing from './pages/Pricing';
@@ -41,7 +42,7 @@ function AppContent() {
     );
   }
 
-  // BLOQUEIO POR FALTA DE PAGAMENTO
+  // 🔒 BLOQUEIO POR FALTA DE PAGAMENTO
   if (user && isAccessBlocked()) {
     return <PaymentBlockedScreen />;
   }
@@ -56,10 +57,10 @@ function AppContent() {
           <Route path="/landing" element={<Landing />} />
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/auth" element={!user ? <Auth /> : <Navigate to="/dashboard" />} />
-          
-          {/* ROTA DE APROVAÇÃO DE CUPONS (PÚBLICA - NÃO PRECISA DE LOGIN) */}
+
+          {/* APROVAÇÃO DE CUPOM (PÚBLICA) */}
           <Route path="/approve-discount" element={<ApproveDiscount />} />
-          
+
           {/* ROTAS PROTEGIDAS */}
           <Route path="/onboarding" element={
             <ProtectedRoute>
@@ -126,29 +127,28 @@ function AppContent() {
               <Settings />
             </ProtectedRoute>
           } />
-          
-          {/* PAINEL ADMIN - PROTEGIDO */}
+
+          {/* 🔐 PAINEL ADMIN (APENAS ADMIN) */}
           <Route path="/admin" element={
-            <ProtectedRoute>
+            <AdminRoute>
               <Admin />
-            </ProtectedRoute>
+            </AdminRoute>
           } />
-          
-          {/* VALIDAÇÃO DE PAGAMENTOS - PROTEGIDO */}
+
+          {/* 🔐 VALIDAÇÃO DE PAGAMENTOS (APENAS ADMIN) */}
           <Route path="/validate-payments" element={
-            <ProtectedRoute>
+            <AdminRoute>
               <ValidatePayments />
-            </ProtectedRoute>
+            </AdminRoute>
           } />
-          
-          {/* Rota raiz - Landing ou Dashboard */}
+
+          {/* ROTA RAIZ */}
           <Route path="/" element={user ? <Navigate to="/dashboard" /> : <Landing />} />
         </Routes>
 
         {/* COMPONENTES GLOBAIS */}
         {user && <InstallPWA />}
         
-        {/* Toast de Notificações */}
         {user && latestNotification && !latestNotification.read && (
           <div className="fixed top-4 right-4 z-50">
             <NotificationToast 
@@ -159,10 +159,7 @@ function AppContent() {
           </div>
         )}
 
-        {/* Modal de Upload de Comprovante */}
         {user && showPaymentModal && <PaymentProofModal />}
-
-        {/* Botão Global de IA - Aparece em todas as páginas autenticadas */}
         {user && <GlobalAIButton />}
       </div>
     </Router>

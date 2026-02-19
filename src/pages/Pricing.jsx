@@ -1,10 +1,14 @@
 import { useState } from 'react';
 import { CheckCircleIcon, XMarkIcon, SparklesIcon } from '@heroicons/react/24/outline';
 import { useAuth } from '../hooks/useAuth';
-import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import React from 'react';
+import { doc, updateDoc, setDoc } from 'firebase/firestore';
+
+const WHATSAPP_NUMBER = '5571992883976';
 
 export default function Pricing() {
+
   const { user } = useAuth();
   const [couponCode, setCouponCode] = useState('');
   const [couponError, setCouponError] = useState('');
@@ -12,7 +16,6 @@ export default function Pricing() {
   const [isProcessing, setIsProcessing] = useState(false);
 
   // ========== CONFIGURAÇÃO DO WHATSAPP ==========
-  const WHATSAPP_NUMBER = '5571992883976';
 
   // ========== CUPONS VÁLIDOS (OCULTOS) ==========
   const validCoupons = {
@@ -185,110 +188,111 @@ export default function Pricing() {
     return `R$ ${finalPrice.toFixed(2).replace('.', ',')}`;
   };
 
-  const handleSubscribe = async (plan) => {
-    if (plan.id === 'free') {
-      alert('✅ Você já está usando o plano gratuito!');
-      return;
+const handleSubscribe = async (plan) => {
+  if (plan.id === 'free') {
+    alert('✅ Você já está usando o plano gratuito!');
+    return;
+  }
+
+  if (!user) {
+    alert('⚠️ Faça login primeiro para assinar!');
+    return;
+  }
+
+  setIsProcessing(true);
+
+  try {
+    let message = '';
+    let finalPrice = plan.price;
+
+    // ===== VITALÍCIO =====
+    if (plan.id === 'lifetime') {
+      const choice = window.confirm(
+        '💎 PLANO VITALÍCIO:\n\nOK = R$ 480 PIX\nCancelar = 5x R$ 110'
+      );
+
+      message = choice
+        ? plan.whatsappMessagePix
+        : plan.whatsappMessageInstallment;
+
+      finalPrice = choice ? plan.pixPrice : plan.price;
+    } else {
+      message = plan.whatsappMessage;
     }
 
-    if (!user) {
-      alert('⚠️ Faça login primeiro para assinar!');
-      return;
-    }
+    // ===== SE TEM CUPOM =====
+    if (appliedCoupon) {
+      const discount = appliedCoupon.discount;
+      const discountedPrice = finalPrice * (1 - discount / 100);
 
-    setIsProcessing(true);
+      const token = crypto.randomUUID();
 
-    try {
-      let message = '';
-      let finalPrice = plan.price;
+      const approveLink = `${window.location.origin}/approve-discount?token=${token}&action=approve`;
+      const rejectLink = `${window.location.origin}/approve-discount?token=${token}&action=reject`;
 
-      // Se for plano vitalício
-      if (plan.id === 'lifetime') {
-        const choice = window.confirm(
-          '💎 PLANO VITALÍCIO - Escolha a forma de pagamento:\n\n' +
-          '✅ OK = R$ 480 à vista no PIX\n' +
-          '❌ CANCELAR = 5x de R$ 110 no cartão (total R$ 550)'
-        );
+      await setDoc(doc(db, 'couponRequests', token), {
+        uid: user.uid,
+        email: user.email,
+        requestedPlanId: plan.id,
+        requestedPlan: plan.name,
+        requestedCoupon: appliedCoupon.code,
+        requestedDiscount: discount,
+        requestedPrice: discountedPrice,
+        approvalStatus: 'waiting',
+        createdAt: new Date()
+      });
 
-        message = choice ? plan.whatsappMessagePix : plan.whatsappMessageInstallment;
-        finalPrice = choice ? plan.pixPrice : plan.price;
-      } else {
-        // Planos mensais
-        message = plan.whatsappMessage;
-      }
+      await updateDoc(doc(db, 'users', user.uid), {
+        subscriptionStatus: 'pending_approval'
+      });
 
-      // SE TEM CUPOM APLICADO
-      if (appliedCoupon) {
-        const discount = appliedCoupon.discount;
-        const discountedPrice = finalPrice * (1 - discount / 100);
-        
-        // Gerar token de segurança
-        const token = btoa(`${user.uid}-${appliedCoupon.code}-medplanner-secret-2024`);
-        
-        // Gerar links de aprovação e rejeição
-        const approveLink = `${window.location.origin}/approve-discount?user=${user.uid}&coupon=${appliedCoupon.code}&token=${token}&action=approve`;
-        const rejectLink = `${window.location.origin}/approve-discount?user=${user.uid}&coupon=${appliedCoupon.code}&token=${token}&action=reject`;
-        
-        // Mensagem formatada com cupom
-        message = `🎟️ *SOLICITAÇÃO DE ASSINATURA COM CUPOM*
+      message = `🎟️ NOVA SOLICITAÇÃO DE CUPOM
 
-━━━━━━━━━━━━━━━━━━━━
-👤 *USUÁRIO*
-Nome: ${user.displayName || 'Não informado'}
-Email: ${user.email}
+👤 ${user.email}
+Plano: ${plan.name}
+Cupom: ${appliedCoupon.code}
+Desconto: ${discount}%
 
-📦 *PLANO ESCOLHIDO*
-${plan.name}
+Valor final: R$ ${discountedPrice.toFixed(2)}
 
-🎫 *CUPOM APLICADO*
-Código: ${appliedCoupon.code}
-Desconto: ${discount}% OFF
-
-💰 *VALORES*
-Preço original: R$ ${finalPrice.toFixed(2).replace('.', ',')}
-Preço com desconto: R$ ${discountedPrice.toFixed(2).replace('.', ',')}
-Economia: R$ ${(finalPrice - discountedPrice).toFixed(2).replace('.', ',')}
-━━━━━━━━━━━━━━━━━━━━
-
-✅ *APROVAR (1 clique):*
+APROVAR:
 ${approveLink}
 
-❌ *REJEITAR (1 clique):*
-${rejectLink}
+REJEITAR:
+${rejectLink}`;
 
-_Clique em um dos links para processar!_`;
+      const encoded = encodeURIComponent(message);
+      window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encoded}`, '_blank');
 
-        // Salvar no Firebase
-        const userRef = doc(db, 'users', user.uid);
-        await updateDoc(userRef, {
-          subscriptionStatus: 'pending_approval',
-          requestedPlan: plan.name,
-          requestedDiscount: discount,
-          requestedCoupon: appliedCoupon.code,
-          requestedAt: new Date().toISOString(),
-          requestedPrice: discountedPrice,
-          approvalLink: approveLink,
-          rejectionLink: rejectLink
-        });
-      }
-
-      // Enviar para WhatsApp
-      const encodedMessage = encodeURIComponent(message);
-      const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodedMessage}`;
-      window.open(whatsappUrl, '_blank');
-
-      setIsProcessing(false);
-
-      if (appliedCoupon) {
-        alert(`✅ Solicitação enviada com cupom!\n\nAguarde aprovação via WhatsApp.`);
-      }
-
-    } catch (error) {
-      console.error('Erro:', error);
-      setIsProcessing(false);
-      alert('❌ Erro ao processar. Tente novamente.');
+      alert('✅ Solicitação enviada para aprovação!');
+      return;
     }
-  };
+
+    // ===== SEM CUPOM =====
+    if (!message) {
+      alert('Erro ao gerar mensagem.');
+      return;
+    }
+
+    const encoded = encodeURIComponent(message);
+    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encoded}`, '_blank');
+
+  } catch (error) {
+    console.error(error);
+    alert('Erro ao processar.');
+  } finally {
+    setIsProcessing(false);
+  }
+};
+
+  // ===== SEM CUPOM =====
+if (!message) {
+  alert('Erro ao gerar mensagem.');
+  setIsProcessing(false);
+  return;
+}
+const encoded = encodeURIComponent(message);
+window.location.href = `https://wa.me/${WHATSAPP_NUMBER}?text=${encoded}`;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-900 pb-32">
@@ -561,11 +565,11 @@ _Clique em um dos links para processar!_`;
             Junte-se a centenas de estudantes de medicina que já estão organizando melhor seu tempo!
           </p>
           <button 
-            onClick={() => {
-              const message = encodeURIComponent('Olá! Gostaria de conhecer melhor o MedPlanner e seus planos! 🩺');
-              window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${message}`, '_blank');
-            }}
-            className="bg-white text-purple-600 px-10 py-4 rounded-xl font-bold text-lg shadow-xl hover:shadow-2xl transition-all"
+           onClick={() => {
+  const text = 'Olá! Gostaria de conhecer melhor o MedPlanner e seus planos! 🩺';
+  const message = encodeURIComponent(text);
+  window.location.href = `https://wa.me/${WHATSAPP_NUMBER}?text=${message}`;
+}}
           >
             💬 Falar no WhatsApp
           </button>

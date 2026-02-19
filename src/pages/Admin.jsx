@@ -8,149 +8,132 @@ export default function Admin() {
   const [pendingRequests, setPendingRequests] = useState([]);
   const [approvedRequests, setApprovedRequests] = useState([]);
   const [rejectedRequests, setRejectedRequests] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
+  const [searchEmail, setSearchEmail] = useState('');
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('all'); // all, 30, 50, 100
+  const [filter, setFilter] = useState('all');
 
   useEffect(() => {
-    loadRequests();
+    loadAllData();
   }, []);
 
-  const loadRequests = async () => {
+  const loadAllData = async () => {
     try {
       const usersRef = collection(db, 'users');
-      
-      // Pendentes
-      const qPending = query(usersRef, where('subscriptionStatus', '==', 'pending_approval'));
-      const snapshotPending = await getDocs(qPending);
-      const pending = [];
-      snapshotPending.forEach((doc) => {
-        pending.push({ id: doc.id, ...doc.data() });
-      });
-      
-      // Aprovados
-      const qApproved = query(usersRef, where('subscriptionStatus', '==', 'active'));
-      const snapshotApproved = await getDocs(qApproved);
-      const approved = [];
-      snapshotApproved.forEach((doc) => {
-        const data = doc.data();
-        if (data.subscriptionDiscount > 0) {
-          approved.push({ id: doc.id, ...data });
-        }
-      });
 
-      // Rejeitados
-      const qRejected = query(usersRef, where('subscriptionStatus', '==', 'rejected'));
-      const snapshotRejected = await getDocs(qRejected);
-      const rejected = [];
-      snapshotRejected.forEach((doc) => {
-        rejected.push({ id: doc.id, ...doc.data() });
+      const snapshotAll = await getDocs(usersRef);
+      const usersData = [];
+      snapshotAll.forEach((docu) => {
+        usersData.push({ id: docu.id, ...docu.data() });
       });
-      
+      setAllUsers(usersData);
+
+      const pending = usersData.filter(u => u.subscriptionStatus === 'pending_approval');
+      const approved = usersData.filter(u => u.subscriptionStatus === 'active' && u.subscriptionDiscount > 0);
+      const rejected = usersData.filter(u => u.subscriptionStatus === 'rejected');
+
       setPendingRequests(pending);
       setApprovedRequests(approved);
       setRejectedRequests(rejected);
       setLoading(false);
+
     } catch (error) {
-      console.error('Erro ao carregar solicitações:', error);
+      console.error('Erro ao carregar dados:', error);
       setLoading(false);
     }
   };
 
+  const updateUser = async (userId, data) => {
+    try {
+      await updateDoc(doc(db, 'users', userId), data);
+      loadAllData();
+    } catch (error) {
+      console.error('Erro ao atualizar usuário:', error);
+    }
+  };
+
+  // =========================
+  // CUPONS
+  // =========================
+
   const handleQuickApprove = async (userId, userEmail, couponCode) => {
     const validCoupons = {
-      'MEDPLANNER30': { discount: 30, label: '30% OFF' },
-      'MEDPLANNER50': { discount: 50, label: '50% OFF' },
-      'MEDPLANNER100': { discount: 100, label: '100% OFF' }
+      'MEDPLANNER30': 30,
+      'MEDPLANNER50': 50,
+      'MEDPLANNER100': 100
     };
-    
-    const coupon = validCoupons[couponCode];
-    
-    if (!coupon) {
-      alert('❌ Cupom inválido!');
-      return;
-    }
 
-    if (!confirm(`Aprovar ${coupon.label} para ${userEmail}?`)) return;
+    const discount = validCoupons[couponCode];
+    if (!discount) return alert('Cupom inválido');
 
-    try {
-      const userRef = doc(db, 'users', userId);
-      const basePrice = 29.90;
-      const finalPrice = basePrice * (1 - coupon.discount / 100);
-      
-      await updateDoc(userRef, {
-        subscriptionStatus: 'active',
-        subscriptionPlan: 'premium',
-        subscriptionDiscount: coupon.discount,
-        subscriptionPrice: finalPrice,
-        subscriptionStartDate: new Date().toISOString(),
-        subscriptionEndDate: null,
-        approvedAt: new Date().toISOString(),
-        approvedBy: 'admin',
-        couponCode: couponCode,
-        couponApplied: true
-      });
+    if (!confirm(`Aprovar ${discount}% para ${userEmail}?`)) return;
 
-      alert(`✅ ${coupon.label} aprovado!\nNovo preço: R$ ${finalPrice.toFixed(2)}/mês`);
-      loadRequests();
-    } catch (error) {
-      console.error('Erro ao aprovar:', error);
-      alert('❌ Erro ao aprovar cupom');
-    }
+    const basePrice = 29.90;
+    const finalPrice = basePrice * (1 - discount / 100);
+
+    updateUser(userId, {
+      subscriptionStatus: 'active',
+      subscriptionPlan: 'premium',
+      subscriptionDiscount: discount,
+      subscriptionPrice: finalPrice,
+      approvedAt: new Date().toISOString(),
+      approvedBy: 'admin'
+    });
   };
 
   const handleReject = async (userId, userEmail) => {
-    const reason = prompt('Motivo da rejeição (opcional):');
-    
     if (!confirm(`Rejeitar solicitação de ${userEmail}?`)) return;
 
-    try {
-      const userRef = doc(db, 'users', userId);
-      
-      await updateDoc(userRef, {
-        subscriptionStatus: 'rejected',
-        rejectedAt: new Date().toISOString(),
-        rejectedBy: 'admin',
-        rejectionReason: reason || 'Não especificado'
-      });
-
-      alert('❌ Solicitação rejeitada');
-      loadRequests();
-    } catch (error) {
-      console.error('Erro ao rejeitar:', error);
-      alert('❌ Erro ao rejeitar solicitação');
-    }
+    updateUser(userId, {
+      subscriptionStatus: 'rejected',
+      rejectedAt: new Date().toISOString(),
+      rejectedBy: 'admin'
+    });
   };
 
-  const handleRevoke = async (userId, userEmail) => {
-    if (!confirm(`Revogar acesso premium de ${userEmail}?`)) return;
+  // =========================
+  // CONTROLE MANUAL
+  // =========================
 
-    try {
-      const userRef = doc(db, 'users', userId);
-      
-      await updateDoc(userRef, {
-        subscriptionStatus: 'inactive',
-        subscriptionPlan: 'free',
-        subscriptionDiscount: 0,
-        subscriptionPrice: 0,
-        revokedAt: new Date().toISOString(),
-        revokedBy: 'admin'
-      });
-
-      alert('🚫 Acesso revogado');
-      loadRequests();
-    } catch (error) {
-      console.error('Erro ao revogar:', error);
-      alert('❌ Erro ao revogar acesso');
-    }
+  const setFree = (userId) => {
+    updateUser(userId, {
+      subscriptionPlan: 'free',
+      subscriptionStatus: 'inactive',
+      subscriptionDiscount: 0,
+      subscriptionPrice: 0
+    });
   };
 
-  const filteredPending = filter === 'all' 
-    ? pendingRequests 
-    : pendingRequests.filter(r => r.requestedDiscount === parseInt(filter));
+  const setPremium = (userId) => {
+    updateUser(userId, {
+      subscriptionPlan: 'premium',
+      subscriptionStatus: 'active',
+      subscriptionDiscount: 0,
+      subscriptionPrice: 29.90
+    });
+  };
 
-  const filteredApproved = filter === 'all'
-    ? approvedRequests
-    : approvedRequests.filter(r => r.subscriptionDiscount === parseInt(filter));
+  const setLifetime = (userId) => {
+    updateUser(userId, {
+      subscriptionPlan: 'lifetime',
+      subscriptionStatus: 'active',
+      subscriptionDiscount: 100,
+      subscriptionPrice: 0,
+      lifetimeGrantedAt: new Date().toISOString()
+    });
+  };
+
+  const blockUser = (userId) => {
+    updateUser(userId, { accessBlocked: true });
+  };
+
+  const unblockUser = (userId) => {
+    updateUser(userId, { accessBlocked: false });
+  };
+
+  const filteredUsers = allUsers.filter(u =>
+    u.email?.toLowerCase().includes(searchEmail.toLowerCase())
+  );
 
   if (loading) {
     return (
@@ -162,208 +145,87 @@ export default function Admin() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-32">
-      <PageHeader 
-        title="Painel Admin"
-        subtitle="Gerenciar cupons e descontos"
-        emoji="👨‍💼"
-        imageQuery="admin,dashboard,management"
+      <PageHeader
+        title="Painel Administrativo"
+        subtitle="Controle total do sistema"
+        emoji="👑"
+        imageQuery="admin dashboard control"
       />
 
-      <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-        
-        {/* Estatísticas */}
+      <div className="max-w-7xl mx-auto px-4 py-6 space-y-10">
+
+        {/* ===================== */}
+        {/* ESTATÍSTICAS */}
+        {/* ===================== */}
+
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-yellow-100 dark:bg-yellow-900/30 rounded-xl flex items-center justify-center">
-                <ClockIcon className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
-              </div>
-              <div>
-                <p className="text-3xl font-bold text-gray-900 dark:text-white">
-                  {pendingRequests.length}
-                </p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Pendentes</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center">
-                <CheckCircleIcon className="h-6 w-6 text-green-600 dark:text-green-400" />
-              </div>
-              <div>
-                <p className="text-3xl font-bold text-gray-900 dark:text-white">
-                  {approvedRequests.length}
-                </p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Aprovados</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-xl flex items-center justify-center">
-                <XCircleIcon className="h-6 w-6 text-red-600 dark:text-red-400" />
-              </div>
-              <div>
-                <p className="text-3xl font-bold text-gray-900 dark:text-white">
-                  {rejectedRequests.length}
-                </p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Rejeitados</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center">
-                <UserGroupIcon className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div>
-                <p className="text-3xl font-bold text-gray-900 dark:text-white">
-                  {pendingRequests.length + approvedRequests.length}
-                </p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Total</p>
-              </div>
-            </div>
-          </div>
+          <StatCard icon={<ClockIcon />} label="Pendentes" value={pendingRequests.length} color="yellow" />
+          <StatCard icon={<CheckCircleIcon />} label="Aprovados" value={approvedRequests.length} color="green" />
+          <StatCard icon={<XCircleIcon />} label="Rejeitados" value={rejectedRequests.length} color="red" />
+          <StatCard icon={<UserGroupIcon />} label="Total Usuários" value={allUsers.length} color="blue" />
         </div>
 
-        {/* Filtros */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-4">
-          <div className="flex items-center gap-3">
-            <TagIcon className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-            <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-              Filtrar por cupom:
-            </span>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setFilter('all')}
-                className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                  filter === 'all'
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                }`}
-              >
-                Todos
-              </button>
-              <button
-                onClick={() => setFilter('30')}
-                className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                  filter === '30'
-                    ? 'bg-orange-600 text-white'
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                }`}
-              >
-                30% OFF
-              </button>
-              <button
-                onClick={() => setFilter('50')}
-                className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                  filter === '50'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                }`}
-              >
-                50% OFF
-              </button>
-              <button
-                onClick={() => setFilter('100')}
-                className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                  filter === '100'
-                    ? 'bg-green-600 text-white'
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                }`}
-              >
-                100% OFF
-              </button>
-            </div>
-          </div>
-        </div>
+        {/* ===================== */}
+        {/* GERENCIAMENTO MANUAL */}
+        {/* ===================== */}
 
-        {/* Lista de Solicitações Pendentes */}
-        <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700">
-          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-              📋 Solicitações Pendentes ({filteredPending.length})
-            </h2>
-          </div>
+        <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
+          <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">
+            🔧 Gerenciamento Manual de Usuários
+          </h2>
 
-          <div className="p-6">
-            {filteredPending.length === 0 ? (
-              <div className="text-center py-12">
-                <span className="text-6xl mb-4 block">✅</span>
-                <p className="text-gray-600 dark:text-gray-400 font-medium">
-                  Nenhuma solicitação pendente
-                </p>
+          <input
+            type="text"
+            placeholder="Buscar por email..."
+            value={searchEmail}
+            onChange={(e) => setSearchEmail(e.target.value)}
+            className="w-full mb-6 p-3 rounded-xl border"
+          />
+
+          <div className="space-y-4">
+            {filteredUsers.map(user => (
+              <div key={user.id} className="bg-gray-100 dark:bg-gray-700 rounded-xl p-4">
+                <div className="flex justify-between items-center mb-3">
+                  <div>
+                    <p className="font-bold">{user.email}</p>
+                    <p className="text-sm text-gray-500">
+                      Plano: {user.subscriptionPlan || 'free'}
+                    </p>
+                  </div>
+
+                  <div className="flex gap-2 flex-wrap">
+                    <button onClick={() => setFree(user.id)} className="px-3 py-1 bg-gray-300 rounded">Free</button>
+                    <button onClick={() => setPremium(user.id)} className="px-3 py-1 bg-blue-600 text-white rounded">Premium</button>
+                    <button onClick={() => setLifetime(user.id)} className="px-3 py-1 bg-purple-600 text-white rounded">Vitalício</button>
+
+                    {user.accessBlocked ? (
+                      <button onClick={() => unblockUser(user.id)} className="px-3 py-1 bg-green-500 text-white rounded">Desbloquear</button>
+                    ) : (
+                      <button onClick={() => blockUser(user.id)} className="px-3 py-1 bg-red-600 text-white rounded">Bloquear</button>
+                    )}
+                  </div>
+                </div>
               </div>
-            ) : (
-              <div className="space-y-4">
-                {filteredPending.map((request) => {
-                  const discount = request.requestedDiscount || 100;
-                  const basePrice = 29.90;
-                  const finalPrice = basePrice * (1 - discount / 100);
-                  
-                  return (
-                    <div
-                      key={request.id}
-                      className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-6 border-2 border-yellow-200 dark:border-yellow-800"
-                    >
-                      <div className="flex items-start justify-between mb-4">
-                        <div>
-                          <p className="font-bold text-gray-900 dark:text-white text-lg">
-                            {request.displayName || 'Sem nome'}
-                          </p>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">
-                            {request.email}
-                          </p>
-                        </div>
-                        
-                        <div className={`px-4 py-2 rounded-xl font-bold text-white ${
-                          discount === 30 ? 'bg-orange-600' :
-                          discount === 50 ? 'bg-blue-600' :
-                          'bg-green-600'
-                        }`}>
-                          {discount}% OFF
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4 mb-4">
-                        <div>
-                          <p className="text-xs text-gray-600 dark:text-gray-400">Desconto:</p>
-                          <p className="text-sm font-medium text-gray-900 dark:text-white">{discount}%</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-600 dark:text-gray-400">Preço final:</p>
-                          <p className="text-sm font-bold text-green-600 dark:text-green-400">
-                            R$ {finalPrice.toFixed(2)}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex gap-3">
-                        <button
-                          onClick={() => handleQuickApprove(request.id, request.email, request.requestedCoupon)}
-                          className="flex-1 px-6 py-3 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 transition-all"
-                        >
-                          ✅ Aprovar
-                        </button>
-                        <button
-                          onClick={() => handleReject(request.id, request.email)}
-                          className="flex-1 px-6 py-3 border-2 border-red-500 text-red-600 rounded-xl font-bold hover:bg-red-50 transition-all"
-                        >
-                          ❌ Rejeitar
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            ))}
           </div>
         </section>
 
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ icon, label, value, color }) {
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+      <div className="flex items-center gap-4">
+        <div className={`w-12 h-12 bg-${color}-100 rounded-xl flex items-center justify-center`}>
+          {icon}
+        </div>
+        <div>
+          <p className="text-3xl font-bold">{value}</p>
+          <p className="text-sm text-gray-600 dark:text-gray-400">{label}</p>
+        </div>
       </div>
     </div>
   );
