@@ -3,15 +3,14 @@ import { useEffect, useState } from "react";
 import { auth } from "../config/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../config/firebase";
+import { onAuthStateChanged } from "firebase/auth";
 
 export default function AdminRoute({ children }) {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    const checkAdmin = async () => {
-      const user = auth.currentUser;
-
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
         setLoading(false);
         return;
@@ -29,9 +28,9 @@ export default function AdminRoute({ children }) {
       }
 
       setLoading(false);
-    };
+    });
 
-    checkAdmin();
+    return () => unsubscribe();
   }, []);
 
   if (loading) {
