@@ -130,32 +130,44 @@ ${userContext.tasks ? `Tarefas pendentes: ${userContext.tasks.pending}` : ''}
 Data atual: ${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
 ========================`;
 
-    // Converte histórico para o formato do Gemini SDK
-    // O primeiro turn DEVE ser 'user', então inclui o system prompt junto à primeira msg do usuário
     const systemAndContext = `${INTENT_SYSTEM_PROMPT}\n\n${contextBlock}`;
 
-    const geminiHistory = [];
+    // Filtra histórico: remove mensagens de sistema/assistente iniciais até achar o primeiro 'user'
+    // O Gemini exige que o histórico comece com 'user' e alterne user/model corretamente
+    const filteredHistory = history.filter(m => m.role === 'user' || m.role === 'assistant');
 
-    for (let i = 0; i < history.length; i++) {
-      const msg = history[i];
-      const role = msg.role === 'assistant' ? 'model' : 'user';
+    // Descarta tudo antes do primeiro 'user'
+    const firstUserIndex = filteredHistory.findIndex(m => m.role === 'user');
+    const trimmedHistory = firstUserIndex >= 0 ? filteredHistory.slice(firstUserIndex) : [];
 
-      // Injeta system prompt junto à primeira mensagem do usuário no histórico
-      let text = msg.content;
-      if (i === 0 && role === 'user') {
-        text = `${systemAndContext}\n\nUsuário: ${msg.content}`;
+    // Garante alternância user/model — descarta duplicatas consecutivas do mesmo role
+    const alternatedHistory = [];
+    for (const msg of trimmedHistory) {
+      const lastRole = alternatedHistory[alternatedHistory.length - 1]?.role;
+      const currentRole = msg.role === 'assistant' ? 'model' : 'user';
+      if (currentRole !== lastRole) {
+        alternatedHistory.push({ role: currentRole, content: msg.content });
       }
-
-      geminiHistory.push({
-        role,
-        parts: [{ text }]
-      });
     }
+
+    // Se termina com 'model', remove o último (a msg atual vai ser o próximo 'user')
+    if (alternatedHistory[alternatedHistory.length - 1]?.role === 'model') {
+      alternatedHistory.pop();
+    }
+
+    // Converte para formato Gemini e injeta system prompt no primeiro user
+    const geminiHistory = alternatedHistory.map((msg, i) => ({
+      role: msg.role,
+      parts: [{
+        text: (i === 0 && msg.role === 'user')
+          ? `${systemAndContext}\n\nUsuário: ${msg.content}`
+          : msg.content
+      }]
+    }));
 
     // Monta a mensagem atual com arquivos
     const currentParts = [];
 
-    // Processa arquivos anexados
     for (const file of files) {
       if (file.type.startsWith('image/')) {
         const base64 = await fileToBase64(file);
@@ -171,14 +183,14 @@ Data atual: ${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-
       }
     }
 
-    // Se não há histórico ainda, injeta o system prompt na mensagem atual
+    // Se não há histórico, injeta o system prompt direto na mensagem atual
     if (geminiHistory.length === 0) {
       currentParts.push({ text: `${systemAndContext}\n\nUsuário: ${message || 'Analise os arquivos acima.'}` });
     } else {
       currentParts.push({ text: `Usuário: ${message || 'Analise os arquivos acima.'}` });
     }
 
-    // Inicia o chat com histórico e envia a mensagem atual
+    // Inicia o chat com histórico validado e envia a mensagem atual
     const chat = model.startChat({ history: geminiHistory });
     const result = await chat.sendMessage(currentParts);
     const text = result.response.text();
