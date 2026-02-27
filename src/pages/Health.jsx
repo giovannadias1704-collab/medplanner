@@ -9,7 +9,7 @@ import { generateText } from '../services/gemini';
 import {
   HeartIcon, FireIcon, ScaleIcon, BeakerIcon, XMarkIcon, PlusIcon,
   CheckCircleIcon, MoonIcon, SunIcon, DocumentIcon, CameraIcon,
-  SparklesIcon, PillIcon, ClipboardDocumentListIcon, ChartBarIcon,
+  SparklesIcon, ClipboardDocumentListIcon, ChartBarIcon,
   BellIcon, TrashIcon, ChevronDownIcon, ChevronUpIcon, ChatBubbleLeftIcon
 } from '@heroicons/react/24/outline';
 
