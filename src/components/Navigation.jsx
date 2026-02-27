@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
 import { 
   HomeIcon, 
   CalendarIcon, 
@@ -8,11 +9,16 @@ import {
   BookOpenIcon,
   HomeModernIcon,
   ChartBarIcon,
-  SparklesIcon
+  SparklesIcon,
+  ShieldCheckIcon
 } from '@heroicons/react/24/outline';
+
+const ADMIN_EMAIL = 'medplanner17@gmail.com';
 
 export default function Navigation() {
   const location = useLocation();
+  const { user } = useAuth();
+  const isAdmin = user?.email === ADMIN_EMAIL;
 
   const navItems = [
     { path: '/dashboard', icon: HomeIcon, label: 'Home' },
@@ -25,6 +31,7 @@ export default function Navigation() {
     { path: '/analytics', icon: ChartBarIcon, label: 'Analytics' },
     { path: '/pricing', icon: SparklesIcon, label: 'Planos' },
     { path: '/settings', icon: Cog6ToothIcon, label: 'Config' },
+    ...(isAdmin ? [{ path: '/admin', icon: ShieldCheckIcon, label: 'Admin' }] : []),
   ];
 
   return (
@@ -59,7 +66,11 @@ export default function Navigation() {
                     to={item.path}
                     style={{ pointerEvents: 'auto', position: 'relative', zIndex: 10000 }}
                     className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all whitespace-nowrap ${
-                      isActive
+                      item.path === '/admin'
+                        ? isActive
+                          ? 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 font-semibold'
+                          : 'text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 font-semibold'
+                        : isActive
                         ? 'bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400 font-semibold'
                         : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white'
                     }`}
@@ -102,8 +113,8 @@ export default function Navigation() {
           })}
         </div>
 
-        {/* Segunda linha - 5 itens */}
-        <div className="grid grid-cols-5">
+        {/* Segunda linha */}
+        <div className={`grid grid-cols-${navItems.slice(5).length}`}>
           {navItems.slice(5).map((item) => {
             const isActive = location.pathname === item.path;
             const Icon = item.icon;
@@ -113,7 +124,9 @@ export default function Navigation() {
                 to={item.path}
                 style={{ pointerEvents: 'auto', position: 'relative', zIndex: 10000 }}
                 className={`flex flex-col items-center justify-center py-3 transition-all ${
-                  isActive
+                  item.path === '/admin'
+                    ? 'text-red-600 dark:text-red-400'
+                    : isActive
                     ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400'
                     : 'text-gray-600 dark:text-gray-400 active:bg-gray-100 dark:active:bg-gray-700'
                 }`}
