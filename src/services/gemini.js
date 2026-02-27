@@ -10,42 +10,119 @@ if (!API_KEY) {
 
 const genAI = new GoogleGenerativeAI(API_KEY);
 
-// Usar gemini-2.5-flash (modelo mais recente e rápido)
-const model = genAI.getGenerativeModel({ 
-  model: 'gemini-2.5-flash'
-});
+const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
 console.log('🤖 Modelo configurado: gemini-2.5-flash');
+
+// ─── Converte File para base64 ─────────────────────────────────────────────────
+async function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      // Remove o prefixo "data:mime/type;base64," e retorna só o base64
+      const base64 = reader.result.split(',')[1];
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// ─── Extrai texto de PDF para enviar como contexto ────────────────────────────
+async function extractPDFText(file) {
+  if (!window.pdfjsLib) {
+    await new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      script.onload = resolve;
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+  let fullText = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const textContent = await page.getTextContent();
+    fullText += textContent.items.map(item => item.str).join(' ') + '\n';
+  }
+
+  return fullText;
+}
 
 // FUNÇÃO: Gerar texto simples
 export async function generateText(prompt) {
   try {
-    console.log('📤 Enviando prompt para Gemini:', prompt);
-    
+    console.log('📤 Enviando prompt para Gemini:', prompt.substring(0, 100) + '...');
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const text = response.text();
-
     console.log('✅ Resposta recebida com sucesso!');
-
     return text;
   } catch (error) {
     console.error('❌ Erro ao gerar texto:', error);
-    console.error('❌ Mensagem:', error.message);
     throw error;
   }
 }
 
-// FUNÇÃO: Chat simples
-export async function chatWithAI(message, context = '') {
+// FUNÇÃO: Chat com suporte real a arquivos (imagens e PDFs)
+export async function chatWithAI(message, context = '', files = []) {
   try {
     console.log('📤 Enviando mensagem para Gemini:', message);
-    
-    const prompt = context 
-      ? `Contexto: ${context}\n\nUsuário: ${message}\n\nResposta (seja conciso e útil):`
-      : message;
+    console.log('📎 Arquivos anexados:', files.length);
 
-    const result = await model.generateContent(prompt);
+    const parts = [];
+
+    // Processa cada arquivo
+    for (const file of files) {
+      if (file.type.startsWith('image/')) {
+        // Imagem: envia como inlineData (base64)
+        const base64 = await fileToBase64(file);
+        parts.push({
+          inlineData: {
+            mimeType: file.type,
+            data: base64
+          }
+        });
+        parts.push({ text: `[Imagem anexada: ${file.name}]` });
+
+      } else if (file.type === 'application/pdf') {
+        // PDF: extrai o texto e envia como contexto
+        try {
+          const pdfText = await extractPDFText(file);
+          parts.push({
+            text: `[Conteúdo do PDF "${file.name}"]\n${pdfText.substring(0, 10000)}\n[Fim do PDF]`
+          });
+        } catch (err) {
+          console.warn('Não foi possível extrair texto do PDF:', err);
+          parts.push({ text: `[PDF anexado: ${file.name} - não foi possível extrair o texto]` });
+        }
+      }
+    }
+
+    // Monta o prompt principal
+    const systemPrompt = `Você é um assistente especializado em medicina e estudos médicos para estudantes universitários brasileiros.
+
+Suas capacidades:
+- Analisar imagens médicas (radiografias, ECGs, histologia, etc.)
+- Ler e interpretar documentos PDF (cronogramas, artigos, casos clínicos)
+- Ajudar com PBL (Problem-Based Learning)
+- Criar flashcards e resumos
+- Montar cronogramas de estudo
+- Responder dúvidas médicas de forma didática
+
+IMPORTANTE: Quando o usuário enviar imagens ou PDFs, analise-os detalhadamente e responda com base no conteúdo real do arquivo.
+
+${context ? `Contexto adicional: ${context}` : ''}`;
+
+    parts.push({ text: `${systemPrompt}\n\nUsuário: ${message || 'Analise o(s) arquivo(s) acima e me diga o que você vê.'}` });
+
+    const result = await model.generateContent(parts);
     const response = await result.response;
     const text = response.text();
 
@@ -58,12 +135,10 @@ export async function chatWithAI(message, context = '') {
     };
   } catch (error) {
     console.error('❌ Erro ao chamar Gemini:', error);
-    console.error('❌ Mensagem:', error.message);
-    
     return {
       success: false,
       error: error.message,
-      response: 'Desculpe, não consegui processar sua mensagem. Erro: ' + error.message
+      response: `Desculpe, ocorreu um erro ao processar sua mensagem: ${error.message}`
     };
   }
 }
@@ -144,10 +219,7 @@ Retorne em formato de lista organizada por dia.`;
 
 // FUNÇÃO: Resumir texto
 export async function summarizeText(text, maxLength = 200) {
-  const prompt = `Resuma o seguinte texto em no máximo ${maxLength} palavras, mantendo as informações mais importantes:
-
-${text}`;
-
+  const prompt = `Resuma o seguinte texto em no máximo ${maxLength} palavras, mantendo as informações mais importantes:\n\n${text}`;
   return await chatWithAI(prompt);
 }
 
