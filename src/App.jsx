@@ -129,18 +129,21 @@ function AppContent() {
           } />
 
           {/* 🔐 PAINEL ADMIN (APENAS ADMIN) */}
-          <Route path="/admin" element={
-            <AdminRoute>
-              <Admin />
-            </AdminRoute>
-          } />
+         <Route path="/admin" element={
+  <ProtectedRoute>
+    <AdminRoute>
+      <Admin />
+    </AdminRoute>
+  </ProtectedRoute>
+} />
 
-          {/* 🔐 VALIDAÇÃO DE PAGAMENTOS (APENAS ADMIN) */}
-          <Route path="/validate-payments" element={
-            <AdminRoute>
-              <ValidatePayments />
-            </AdminRoute>
-          } />
+<Route path="/validate-payments" element={
+  <ProtectedRoute>
+    <AdminRoute>
+      <ValidatePayments />
+    </AdminRoute>
+  </ProtectedRoute>
+} />
 
           {/* ROTA RAIZ */}
           <Route path="/" element={user ? <Navigate to="/dashboard" /> : <Landing />} />
