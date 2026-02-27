@@ -4,7 +4,7 @@ import { useAuth } from './hooks/useAuth';
 import { useNotifications } from './hooks/useNotifications';
 import { useSubscription } from './context/SubscriptionContext';
 import ProtectedRoute from './components/ProtectedRoute';
-import AdminRoute from './routes/AdminRoute'; // 🔥 IMPORTANTE
+import AdminRoute from './routes/AdminRoute';
 import Landing from './pages/Landing';
 import Auth from './pages/Auth';
 import Onboarding from './pages/Onboarding';
@@ -16,7 +16,8 @@ import Finances from './pages/Finances';
 import Home from './pages/Home';
 import Casa from './pages/Casa';
 import Wellness from './pages/Wellness';
-import Analytics from './pages/Analytics';
+import Analytics from './pages/Analytics360';
+import Estrategia from './pages/Estrategia';
 import Pricing from './pages/Pricing';
 import Settings from './pages/Settings';
 import Admin from './pages/Admin';
@@ -42,7 +43,6 @@ function AppContent() {
     );
   }
 
-  // 🔒 BLOQUEIO POR FALTA DE PAGAMENTO
   if (user && isAccessBlocked()) {
     return <PaymentBlockedScreen />;
   }
@@ -54,107 +54,42 @@ function AppContent() {
         
         <Routes>
           {/* ROTAS PÚBLICAS */}
-          <Route path="/landing" element={<Landing />} />
-          <Route path="/pricing" element={<Pricing />} />
-          <Route path="/auth" element={!user ? <Auth /> : <Navigate to="/dashboard" />} />
-
-          {/* APROVAÇÃO DE CUPOM (PÚBLICA) */}
+          <Route path="/landing"  element={<Landing />} />
+          <Route path="/pricing"  element={<Pricing />} />
+          <Route path="/auth"     element={!user ? <Auth /> : <Navigate to="/dashboard" />} />
           <Route path="/approve-discount" element={<ApproveDiscount />} />
 
           {/* ROTAS PROTEGIDAS */}
-          <Route path="/onboarding" element={
-            <ProtectedRoute>
-              <Onboarding />
-            </ProtectedRoute>
+          <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
+          <Route path="/dashboard"  element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+          <Route path="/calendar"   element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
+          <Route path="/study"      element={<ProtectedRoute><Study /></ProtectedRoute>} />
+          <Route path="/casa"       element={<ProtectedRoute><Casa /></ProtectedRoute>} />
+          <Route path="/health"     element={<ProtectedRoute><Health /></ProtectedRoute>} />
+          <Route path="/finances"   element={<ProtectedRoute><Finances /></ProtectedRoute>} />
+          <Route path="/home"       element={<ProtectedRoute><Home /></ProtectedRoute>} />
+          <Route path="/wellness"   element={<ProtectedRoute><Wellness /></ProtectedRoute>} />
+          <Route path="/analytics"  element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
+          <Route path="/estrategia" element={<ProtectedRoute><Estrategia /></ProtectedRoute>} />
+          <Route path="/settings"   element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+
+          {/* ADMIN */}
+          <Route path="/admin" element={
+            <ProtectedRoute><AdminRoute><Admin /></AdminRoute></ProtectedRoute>
           } />
-          
-          <Route path="/dashboard" element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/calendar" element={
-            <ProtectedRoute>
-              <Calendar />
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/study" element={
-            <ProtectedRoute>
-              <Study />
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/casa" element={
-            <ProtectedRoute>
-              <Casa />
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/health" element={
-            <ProtectedRoute>
-              <Health />
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/finances" element={
-            <ProtectedRoute>
-              <Finances />
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/home" element={
-            <ProtectedRoute>
-              <Home />
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/wellness" element={
-            <ProtectedRoute>
-              <Wellness />
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/analytics" element={
-            <ProtectedRoute>
-              <Analytics />
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/settings" element={
-            <ProtectedRoute>
-              <Settings />
-            </ProtectedRoute>
+          <Route path="/validate-payments" element={
+            <ProtectedRoute><AdminRoute><ValidatePayments /></AdminRoute></ProtectedRoute>
           } />
 
-          {/* 🔐 PAINEL ADMIN (APENAS ADMIN) */}
-         <Route path="/admin" element={
-  <ProtectedRoute>
-    <AdminRoute>
-      <Admin />
-    </AdminRoute>
-  </ProtectedRoute>
-} />
-
-<Route path="/validate-payments" element={
-  <ProtectedRoute>
-    <AdminRoute>
-      <ValidatePayments />
-    </AdminRoute>
-  </ProtectedRoute>
-} />
-
-          {/* ROTA RAIZ */}
+          {/* RAIZ */}
           <Route path="/" element={user ? <Navigate to="/dashboard" /> : <Landing />} />
         </Routes>
 
-        {/* COMPONENTES GLOBAIS */}
         {user && <InstallPWA />}
-        
+
         {user && latestNotification && !latestNotification.read && (
           <div className="fixed top-4 right-4 z-50">
-            <NotificationToast 
+            <NotificationToast
               notification={latestNotification}
               onDismiss={dismissNotification}
               onRemove={removeNotification}

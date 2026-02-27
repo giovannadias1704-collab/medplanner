@@ -1,6 +1,8 @@
 import { useContext, useMemo, useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { AppContext } from '../context/AppContext';
 import { useOnboarding } from '../hooks/useOnboarding';
+import { useAuth } from '../hooks/useAuth';
 import QuickCaptureBar from '../components/QuickCaptureBar';
 import EventCard from '../components/EventCard';
 import InsightCard from '../components/InsightCard';
@@ -10,7 +12,6 @@ import { calculateDashboardStats, calculateTaskStats } from '../utils/statsCalcu
 import { addDays, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
-  AcademicCapIcon,
   HeartIcon,
   BanknotesIcon,
   SparklesIcon,
@@ -27,7 +28,10 @@ import {
   WrenchScrewdriverIcon,
   MapIcon,
   CalendarIcon,
+  ArrowRightOnRectangleIcon,
 } from '@heroicons/react/24/outline';
+
+const ADMIN_EMAIL = 'medplanner17@gmail.com';
 
 // ─── Pastel Safari Design System ──────────────────────────────────────────────
 const T = {
@@ -54,37 +58,37 @@ const GROUPS = [
   {
     label: 'PRINCIPAL',
     items: [
-      { id: 'home',      label: 'Home',        Icon: HomeIcon,      color: null },
-      { id: 'analytics', label: 'Visão 360°',  Icon: ChartBarIcon,  color: T.analytics },
-      { id: 'strategy',  label: 'Estratégia',  Icon: MapIcon,       color: T.strategy },
+      { id: 'dashboard',  route: '/dashboard',  label: 'Home',        Icon: HomeIcon,       color: null },
+      { id: 'analytics',  route: '/analytics',  label: 'Visão 360°',  Icon: ChartBarIcon,   color: T.analytics },
+      { id: 'strategy',   route: '/estrategia', label: 'Estratégia',  Icon: MapIcon,        color: T.strategy },
     ],
   },
   {
     label: 'VIDA',
     items: [
-      { id: 'calendar',  label: 'Calendário',      Icon: CalendarIcon,     color: T.analytics },
-      { id: 'hometask',  label: 'Casa',            Icon: HomeIcon,         color: T.home },
-      { id: 'finance',   label: 'Finanças',        Icon: BanknotesIcon,    color: T.finance },
-      { id: 'health',    label: 'Saúde Física',    Icon: HeartIcon,        color: T.health },
-      { id: 'wellness',  label: 'Bem-Estar Mental',Icon: FaceSmileIcon,    color: T.wellness },
+      { id: 'calendar',   route: '/calendar',   label: 'Calendário',       Icon: CalendarIcon,  color: T.analytics },
+      { id: 'casa',       route: '/casa',        label: 'Casa',             Icon: HomeIcon,      color: T.home },
+      { id: 'finances',   route: '/finances',    label: 'Finanças',         Icon: BanknotesIcon, color: T.finance },
+      { id: 'health',     route: '/health',      label: 'Saúde Física',     Icon: HeartIcon,     color: T.health },
+      { id: 'wellness',   route: '/wellness',    label: 'Bem-Estar Mental', Icon: FaceSmileIcon, color: T.wellness },
     ],
   },
   {
     label: 'SISTEMA',
     items: [
-      { id: 'plans',    label: 'Planos',         Icon: CreditCardIcon, color: null },
-      { id: 'settings', label: 'Configurações',  Icon: CogIcon,        color: null },
+      { id: 'pricing',    route: '/pricing',     label: 'Planos',         Icon: CreditCardIcon, color: null },
+      { id: 'settings',   route: '/settings',    label: 'Configurações',  Icon: CogIcon,        color: null },
     ],
   },
 ];
-const ADMIN_ITEM = { id: 'admin', label: 'ADM', Icon: WrenchScrewdriverIcon, color: T.strategy };
+const ADMIN_ITEM = { id: 'admin', route: '/admin', label: 'ADM', Icon: WrenchScrewdriverIcon, color: T.strategy };
 
 // ─── Small reusable pieces ─────────────────────────────────────────────────────
 function NavItem({ item, active, collapsed, onClick }) {
   const c = item.color;
   return (
     <button
-      onClick={() => onClick(item.id)}
+      onClick={() => onClick(item)}
       title={collapsed ? item.label : ''}
       style={{
         display: 'flex', alignItems: 'center',
@@ -171,15 +175,23 @@ export default function Dashboard() {
   const {
     events = [], tasks = [], bills = [],
     homeTasks = [], studySchedule = [],
-    waterLogs = [], settings = {}, isAdmin = false,
+    waterLogs = [], settings = {},
   } = useContext(AppContext);
 
   const { onboardingData } = useOnboarding();
-  const [showAIChat, setShowAIChat]     = useState(false);
-  const [collapsed, setCollapsed]       = useState(false);
-  const [active, setActive]             = useState('home');
-  const [profileOpen, setProfileOpen]   = useState(false);
-  const [searchFocus, setSearchFocus]   = useState(false);
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const isAdmin = user?.email === ADMIN_EMAIL;
+  const activeRoute = location.pathname;
+
+  const [showAIChat, setShowAIChat]   = useState(false);
+  const [collapsed, setCollapsed]     = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [searchFocus, setSearchFocus] = useState(false);
+
+  const handleNav = (item) => navigate(item.route);
 
   const DS = useMemo(() =>
     calculateDashboardStats(events, tasks, homeTasks, bills, studySchedule, waterLogs, settings),
@@ -265,16 +277,35 @@ export default function Dashboard() {
             justifyContent: collapsed ? 'center' : 'space-between',
           }}>
             {!collapsed && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+              <button
+                onClick={() => navigate('/dashboard')}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 9,
+                  background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                }}
+              >
                 <div style={{
-                  width: 32, height: 32, borderRadius: 10, fontSize: 16,
-                  background: `linear-gradient(135deg,${T.strategy.p},${T.finance.p})`,
+                  width: 32, height: 32, borderRadius: 10, fontSize: 16, flexShrink: 0,
+                  background: 'linear-gradient(135deg, #B8D4B2, #8FA889)',
+                  boxShadow: '0 2px 8px rgba(143,168,137,0.35)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>🌿</div>
-                <span style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 15, color: T.text, letterSpacing: '-0.3px' }}>
-                  Meu Centro
-                </span>
-              </div>
+                }}>⚕️</div>
+                <span style={{
+                  fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 15,
+                  color: '#5C7A57', letterSpacing: '-0.3px',
+                }}>MedPlanner</span>
+              </button>
+            )}
+            {collapsed && (
+              <button
+                onClick={() => navigate('/dashboard')}
+                style={{
+                  width: 32, height: 32, borderRadius: 10, fontSize: 16,
+                  background: 'linear-gradient(135deg, #B8D4B2, #8FA889)',
+                  boxShadow: '0 2px 8px rgba(143,168,137,0.35)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  border: 'none', cursor: 'pointer',
+                }}>⚕️</button>
             )}
             <button onClick={() => setCollapsed(!collapsed)} style={{
               background: T.badge, border: `1px solid ${T.border}`,
@@ -300,13 +331,13 @@ export default function Dashboard() {
                   }}>{g.label}</div>
                 )}
                 {g.items.map(item => (
-                  <NavItem key={item.id} item={item} active={active === item.id} collapsed={collapsed} onClick={setActive} />
+                  <NavItem key={item.id} item={item} active={activeRoute === item.route} collapsed={collapsed} onClick={handleNav} />
                 ))}
                 <div style={{ borderTop: `1px solid ${T.border}`, margin: '8px 0' }} />
               </div>
             ))}
             {isAdmin && (
-              <NavItem item={ADMIN_ITEM} active={active === 'admin'} collapsed={collapsed} onClick={setActive} />
+              <NavItem item={ADMIN_ITEM} active={activeRoute === ADMIN_ITEM.route} collapsed={collapsed} onClick={handleNav} />
             )}
           </div>
         </aside>
@@ -386,12 +417,12 @@ export default function Dashboard() {
                   borderRadius: 12, boxShadow: T.shadowMd, overflow: 'hidden', zIndex: 100,
                 }}>
                   {[
-                    ['👤','Meu Perfil'],
-                    ['⚙️','Configurações'],
-                    ...(isAdmin ? [['🛠','ADM']] : []),
-                    ['🚪','Sair'],
-                  ].map(([ico, lbl]) => (
-                    <button key={lbl} className="hl" style={{
+                    { ico: '👤', lbl: 'Meu Perfil',      action: () => navigate('/settings') },
+                    { ico: '⚙️', lbl: 'Configurações',   action: () => navigate('/settings') },
+                    ...(isAdmin ? [{ ico: '🛠', lbl: 'ADM', action: () => navigate('/admin') }] : []),
+                    { ico: '🚪', lbl: 'Sair',            action: () => signOut?.() },
+                  ].map(({ ico, lbl, action }) => (
+                    <button key={lbl} className="hl" onClick={() => { action(); setProfileOpen(false); }} style={{
                       display: 'flex', alignItems: 'center', gap: 9,
                       width: '100%', padding: '10px 14px',
                       background: 'transparent', border: 'none', cursor: 'pointer',
