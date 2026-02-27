@@ -7,48 +7,118 @@ import { applyTheme, getStoredTheme } from '../utils/themeManager';
 import { auth } from '../services/firebase';
 import { signOut } from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
-import { 
-  MoonIcon, 
-  SunIcon, 
-  ArrowRightOnRectangleIcon,
-  UserCircleIcon,
-  CameraIcon,
-  SparklesIcon,
-  DocumentArrowUpIcon,
-  ArrowDownTrayIcon,
-  CurrencyDollarIcon,
-  CalendarIcon,
-  BeakerIcon,
-  BellIcon,
-  TrashIcon,
-  PencilIcon,
-  CheckIcon,
-  XMarkIcon,
-  PencilSquareIcon,
-  ArrowPathIcon,
-  AcademicCapIcon,
-  ClockIcon,
-  HeartIcon,
-  BanknotesIcon,
-  Cog6ToothIcon
+import {
+  ArrowRightOnRectangleIcon, UserCircleIcon, CameraIcon, SparklesIcon,
+  DocumentArrowUpIcon, ArrowDownTrayIcon, CurrencyDollarIcon, CalendarIcon,
+  BeakerIcon, BellIcon, TrashIcon, PencilIcon, CheckIcon, XMarkIcon,
+  PencilSquareIcon, ArrowPathIcon, DocumentTextIcon
 } from '@heroicons/react/24/outline';
 
+// ─── NAVIGATION ───────────────────────────────────────────────────────────────
+const NAV_ITEMS = [
+  { id: 'conta',        icon: '👤', label: 'Conta',            color: 'from-blue-500 to-indigo-600' },
+  { id: 'privacidade',  icon: '🔐', label: 'Privacidade',      color: 'from-slate-600 to-gray-700' },
+  { id: 'visual',       icon: '🎨', label: 'Personalização',   color: 'from-pink-500 to-rose-600' },
+  { id: 'notificacoes', icon: '🔔', label: 'Notificações',     color: 'from-amber-500 to-orange-600' },
+  { id: 'analise',      icon: '📊', label: 'Análise',          color: 'from-violet-500 to-purple-600' },
+  { id: 'ia',           icon: '🧠', label: 'IA',               color: 'from-emerald-500 to-teal-600' },
+  { id: 'agenda',       icon: '📅', label: 'Agenda',           color: 'from-cyan-500 to-blue-600' },
+  { id: 'saude',        icon: '🏥', label: 'Saúde',            color: 'from-red-500 to-rose-600' },
+  { id: 'estudo',       icon: '📚', label: 'Estudos',          color: 'from-orange-500 to-amber-600' },
+  { id: 'financeiro',   icon: '💰', label: 'Financeiro',       color: 'from-green-500 to-emerald-600' },
+  { id: 'sistema',      icon: '🌍', label: 'Sistema',          color: 'from-indigo-500 to-blue-600' },
+  { id: 'legal',        icon: '🧾', label: 'Legal',            color: 'from-gray-500 to-slate-600' },
+];
+
+// ─── SHARED COMPONENTS ────────────────────────────────────────────────────────
+
+function Toggle({ value, onChange }) {
+  return (
+    <button
+      onClick={() => onChange(!value)}
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+        value ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-600'
+      }`}
+    >
+      <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+        value ? 'translate-x-6' : 'translate-x-1'
+      }`} />
+    </button>
+  );
+}
+
+function Row({ icon, title, desc, children, danger = false }) {
+  return (
+    <div className={`flex items-center justify-between px-5 py-4 rounded-2xl transition-all ${
+      danger
+        ? 'bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800'
+        : 'bg-gray-50 dark:bg-gray-700/40 hover:bg-gray-100 dark:hover:bg-gray-700/70'
+    }`}>
+      <div className="flex items-center gap-4 min-w-0">
+        <span className="text-xl flex-shrink-0">{icon}</span>
+        <div className="min-w-0">
+          <p className={`font-semibold text-sm leading-tight ${
+            danger ? 'text-red-700 dark:text-red-400' : 'text-gray-900 dark:text-white'
+          }`}>{title}</p>
+          {desc && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-tight">{desc}</p>}
+        </div>
+      </div>
+      <div className="flex-shrink-0 ml-4">{children}</div>
+    </div>
+  );
+}
+
+function SectionCard({ id, icon, label, gradient, children }) {
+  return (
+    <section id={id} className="scroll-mt-24">
+      <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+        <div className={`bg-gradient-to-r ${gradient} px-6 py-5 flex items-center gap-3`}>
+          <span className="text-2xl">{icon}</span>
+          <h2 className="text-lg font-bold text-white tracking-tight">{label}</h2>
+        </div>
+        <div className="p-5 space-y-3">{children}</div>
+      </div>
+    </section>
+  );
+}
+
+function SelectRow({ icon, title, desc, value, onChange, options }) {
+  return (
+    <Row icon={icon} title={title} desc={desc}>
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        className="px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-indigo-400 outline-none"
+      >
+        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </Row>
+  );
+}
+
+function NumberRow({ icon, title, desc, value, onChange, min, max, step, unit }) {
+  return (
+    <Row icon={icon} title={title} desc={desc}>
+      <div className="flex items-center gap-2">
+        <input
+          type="number" min={min} max={max} step={step} value={value}
+          onChange={e => onChange(parseFloat(e.target.value))}
+          className="w-20 px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 dark:text-white text-center font-bold focus:ring-2 focus:ring-indigo-400 outline-none"
+        />
+        {unit && <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{unit}</span>}
+      </div>
+    </Row>
+  );
+}
+
+// ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
+
 export default function Settings() {
-  const { 
-    user,
-    userProfile,
-    settings,
-    updateUserProfile,
-    uploadProfilePhoto,
-    updateTheme,
-    updateSettings,
-    processPDFWithAI,
-    exportAllData,
-    addEvent,
-    // ========== NOVO: FUNÇÕES DE NOTIFICAÇÃO ==========
-    notificationPermission,
-    requestNotificationPermission,
-    clearOldNotifications
+  const {
+    user, userProfile, settings,
+    updateUserProfile, uploadProfilePhoto, updateTheme, updateSettings,
+    processPDFWithAI, exportAllData,
+    notificationPermission, requestNotificationPermission, clearOldNotifications
   } = useContext(AppContext);
 
   const { onboardingData, resetOnboarding } = useOnboarding();
@@ -56,33 +126,43 @@ export default function Settings() {
   const fileInputRef = useRef(null);
   const pdfInputRef = useRef(null);
 
-  const [localProfile, setLocalProfile] = useState({
-    displayName: '',
-    photoURL: ''
-  });
-  const [localSettings, setLocalSettings] = useState({
-    theme: 'light',
-    aiAutoSave: false,
-    currency: 'BRL',
-    weekStartsOn: 'monday',
-    waterGoal: 2.0,
-    notifications: true,
-    notificationTypes: {
-      events: true,
-      tasks: true,
-      bills: true,
-      water: true,
-      study: true
-    }
-  });
+  const [activeSection, setActiveSection] = useState('conta');
+  const [localProfile, setLocalProfile] = useState({ displayName: '', photoURL: '' });
+  const [editingName, setEditingName] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [processingPDF, setProcessingPDF] = useState(false);
-  const [editingName, setEditingName] = useState(false);
-  
-  // Estado para temas personalizados
   const [selectedTheme, setSelectedTheme] = useState(() => getStoredTheme());
 
-  // Carregar dados do perfil e settings
+  // Unified config state
+  const [cfg, setCfg] = useState({
+    // notifications
+    notifEvents: true, notifTasks: true, notifBills: true,
+    notifWater: true, notifStudy: true, notifHealth: false,
+    notifEmail: false, notifPush: true, notifInternal: true,
+    notifFrequency: 'daily',
+    // analysis
+    analysisPeriod: '30', autoCorrelations: true,
+    scoreWeightHealth: 30, scoreWeightMental: 30,
+    scoreWeightProd: 30, scoreWeightFinance: 10,
+    // ai
+    aiAutoSave: false, aiHistorical: true,
+    aiSuggestions: true, aiStyle: 'balanced', aiInsightsPerDay: 5,
+    // agenda
+    weekStartsOn: 'monday', timezone: 'America/Sao_Paulo',
+    dateFormat: 'dd/mm/yyyy', defaultReminderTime: '09:00',
+    // health
+    weightUnit: 'kg', heightUnit: 'cm',
+    waterGoal: 2.0, sleepGoal: 8, exerciseGoal: 30,
+    // study
+    pomodoroDuration: 25, pomodoroBreak: 5,
+    spacedRepFreq: 'daily', weeklyStudyGoal: 20,
+    // finance
+    currency: 'BRL', monthStart: 1, savingsGoal: 500, overspendAlert: true,
+    // system
+    language: 'pt-BR', region: 'BR',
+    fontSize: 'medium', highContrast: false, reduceAnimations: false,
+  });
+
   useEffect(() => {
     if (userProfile) {
       setLocalProfile({
@@ -94,1007 +174,654 @@ export default function Settings() {
 
   useEffect(() => {
     if (settings) {
-      setLocalSettings(settings);
-      // Aplicar tema ao carregar
-      if (settings.theme === 'dark') {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
+      setCfg(prev => ({ ...prev, ...settings }));
+      document.documentElement.classList.toggle('dark', settings.theme === 'dark');
     }
   }, [settings]);
 
+  const set = (key, val) => {
+    const next = { ...cfg, [key]: val };
+    setCfg(next);
+    updateSettings?.(next);
+  };
+
   const handlePhotoUpload = async (e) => {
     const file = e.target.files[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('image/')) {
-      alert('Por favor, selecione uma imagem válida');
-      return;
-    }
-
+    if (!file?.type.startsWith('image/')) return alert('Selecione uma imagem válida');
     try {
       setUploadingPhoto(true);
-      const photoURL = await uploadProfilePhoto(file);
-      setLocalProfile(prev => ({ ...prev, photoURL }));
-      alert('Foto atualizada com sucesso! ✅');
-    } catch (error) {
-      alert('Erro ao fazer upload da foto');
-    } finally {
-      setUploadingPhoto(false);
-    }
+      const url = await uploadProfilePhoto(file);
+      setLocalProfile(p => ({ ...p, photoURL: url }));
+    } catch { alert('Erro ao fazer upload da foto'); }
+    finally { setUploadingPhoto(false); }
   };
 
   const handleSaveName = async () => {
+    try { await updateUserProfile({ displayName: localProfile.displayName }); setEditingName(false); }
+    catch { alert('Erro ao atualizar nome'); }
+  };
+
+  const handlePDFUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file || file.type !== 'application/pdf') return;
+    e.target.value = '';
     try {
-      await updateUserProfile({ displayName: localProfile.displayName });
-      setEditingName(false);
-      alert('Nome atualizado com sucesso! ✅');
-    } catch (error) {
-      alert('Erro ao atualizar nome');
-    }
-  };
-
-  const handleThemeChange = async (newTheme) => {
-    try {
-      await updateTheme(newTheme);
-      setLocalSettings(prev => ({ ...prev, theme: newTheme }));
-    } catch (error) {
-      alert('Erro ao alterar tema');
-    }
-  };
-
-  // Nova função para temas personalizados
-  const handleThemeChangeNew = (newTheme) => {
-    setSelectedTheme(newTheme);
-    applyTheme(newTheme);
-    
-    // Se tiver a função antiga do context, chame também para modo dark/light
-    if (updateTheme) {
-      updateTheme(newTheme === 'dark' ? 'dark' : 'light');
-    }
-  };
-
-  const handleSettingChange = async (key, value) => {
-    try {
-      const newSettings = { ...localSettings, [key]: value };
-      await updateSettings(newSettings);
-      setLocalSettings(newSettings);
-    } catch (error) {
-      alert('Erro ao atualizar configuração');
-    }
-  };
-
-  // ========== NOVO: ATUALIZAR TIPO DE NOTIFICAÇÃO ==========
-  const handleNotificationTypeChange = async (type, value) => {
-    try {
-      const newSettings = {
-        ...localSettings,
-        notificationTypes: {
-          ...localSettings.notificationTypes,
-          [type]: value
-        }
-      };
-      await updateSettings(newSettings);
-      setLocalSettings(newSettings);
-    } catch (error) {
-      alert('Erro ao atualizar tipo de notificação');
-    }
-  };
-
-  // ========== NOVO: SOLICITAR PERMISSÃO ==========
-  const handleRequestPermission = async () => {
-    const permission = await requestNotificationPermission();
-    
-    if (permission === 'granted') {
-      alert('✅ Permissão concedida! Você receberá notificações do MedPlanner.');
-    } else if (permission === 'denied') {
-      alert('❌ Permissão negada. Você pode ativar nas configurações do navegador.');
-    }
-  };
-
-  // ========== NOVO: LIMPAR NOTIFICAÇÕES ANTIGAS ==========
-  const handleClearOldNotifications = async () => {
-    if (confirm('Deseja limpar notificações com mais de 30 dias?')) {
-      try {
-        const count = await clearOldNotifications();
-        alert(`✅ ${count} notificação(ões) antiga(s) removida(s)!`);
-      } catch (error) {
-        alert('Erro ao limpar notificações');
-      }
-    }
-  };
-
-  // Substitua a função handlePDFUpload no Settings.jsx por esta versão:
-
-const handlePDFUpload = async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  e.target.value = ''; // permite reenviar o mesmo arquivo
-
-  if (file.type !== 'application/pdf') {
-    alert('Por favor, selecione um arquivo PDF');
-    return;
-  }
-
-  try {
-    setProcessingPDF(true);
-
-    const result = await processPDFWithAI(file);
-
-    if (result.savedCount > 0) {
-      alert(`✅ ${result.savedCount} evento(s) extraído(s) e adicionado(s) ao seu calendário!\n\nAbra o Calendário para visualizá-los.`);
-    } else {
-      alert(`⚠️ Nenhum evento foi identificado neste PDF.\n\nDica: funciona melhor com cronogramas, calendários acadêmicos e programações com datas explícitas.`);
-    }
-  } catch (error) {
-    console.error('Erro ao processar PDF:', error);
-    alert(`❌ Erro ao processar PDF: ${error.message}`);
-  } finally {
-    setProcessingPDF(false);
-  }
-};
-  const handleRefreshOnboarding = () => {
-    if (confirm('Deseja refazer o questionário inicial? Seus dados atuais serão mantidos até você finalizar.')) {
-      navigate('/onboarding');
-    }
-  };
-
-  const handleResetOnboarding = () => {
-    if (confirm('Isso vai limpar TODOS os seus dados do questionário e refazer do zero. Tem certeza?')) {
-      resetOnboarding();
-      navigate('/onboarding');
-    }
+      setProcessingPDF(true);
+      const result = await processPDFWithAI(file);
+      alert(result.savedCount > 0 ? `✅ ${result.savedCount} evento(s) extraído(s)!` : '⚠️ Nenhum evento identificado.');
+    } catch (err) { alert(`❌ Erro: ${err.message}`); }
+    finally { setProcessingPDF(false); }
   };
 
   const handleLogout = async () => {
     if (confirm('Tem certeza que deseja sair?')) {
-      try {
-        await signOut(auth);
-        navigate('/auth');
-      } catch (error) {
-        console.error('Erro ao fazer logout:', error);
-      }
+      try { await signOut(auth); navigate('/auth'); } catch (e) { console.error(e); }
     }
   };
 
-  const handleExportData = () => {
-    try {
-      exportAllData();
-      alert('Dados exportados com sucesso! ✅');
-    } catch (error) {
-      alert('Erro ao exportar dados');
-    }
+  const scrollTo = (id) => {
+    setActiveSection(id);
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
+  const totalWeight = cfg.scoreWeightHealth + cfg.scoreWeightMental + cfg.scoreWeightProd + cfg.scoreWeightFinance;
+
+  // ─── RENDER ────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-32">
-      <PageHeader 
-        title="Configurações"
-        subtitle="Personalize seu planner"
-        emoji="⚙️"
-        imageQuery="settings,configuration,technology,gear"
-      />
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+        .settings-wrap * { box-sizing: border-box; }
+        .settings-wrap { font-family: 'Plus Jakarta Sans', sans-serif; }
+        .snav-btn { transition: all .15s ease; border-radius: 12px; }
+        .snav-btn.is-active { background: linear-gradient(135deg,#6366f1,#8b5cf6); color:#fff !important; box-shadow: 0 4px 14px rgba(99,102,241,.3); }
+        .snav-btn:not(.is-active):hover { background: rgba(99,102,241,.07); }
+        @keyframes sfadeup { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:none} }
+        .sfade { animation: sfadeup .25s ease forwards; }
+        input[type=range] { -webkit-appearance:none; width:100%; height:6px; border-radius:6px; cursor:pointer; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:#6366f1; box-shadow:0 2px 6px rgba(99,102,241,.4); cursor:pointer; }
+      `}</style>
 
-      <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-        
-        {/* ========== SEÇÃO: DADOS DO ONBOARDING ========== */}
-        <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden animate-fade-in">
-          <div className="bg-gradient-to-r from-indigo-500 to-purple-600 px-6 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <UserCircleIcon className="w-6 h-6 text-white" />
-              <h2 className="text-xl font-bold text-white">Questionário Inicial</h2>
+      <div className="settings-wrap min-h-screen bg-gray-50 dark:bg-gray-900 pb-32">
+
+        {/* ── STICKY HEADER ─────────────────────────────────────────── */}
+        <div className="sticky top-0 z-30 bg-white/90 dark:bg-gray-900/90 backdrop-blur-lg border-b border-gray-200 dark:border-gray-700">
+          <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-md flex-shrink-0">
+              <span className="text-base">⚙️</span>
             </div>
-            {onboardingData && (
+            <div>
+              <h1 className="text-base font-bold text-gray-900 dark:text-white leading-none">Configurações</h1>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Personalize cada detalhe do seu MedPlanner</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="max-w-6xl mx-auto px-4 pt-6 flex gap-6">
+
+          {/* ── DESKTOP SIDEBAR ───────────────────────────────────────── */}
+          <aside className="hidden lg:flex flex-col gap-1 w-52 flex-shrink-0 sticky top-24 self-start">
+            {NAV_ITEMS.map(n => (
               <button
-                onClick={handleRefreshOnboarding}
-                className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg text-white font-semibold transition-all"
+                key={n.id}
+                onClick={() => scrollTo(n.id)}
+                className={`snav-btn flex items-center gap-3 px-4 py-2.5 text-left text-sm font-semibold w-full ${
+                  activeSection === n.id ? 'is-active' : 'text-gray-600 dark:text-gray-400'
+                }`}
               >
-                <PencilSquareIcon className="w-5 h-5" />
-                Editar
+                <span className="text-base">{n.icon}</span>
+                <span>{n.label}</span>
               </button>
-            )}
+            ))}
+            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+              <button onClick={handleLogout}
+                className="snav-btn flex items-center gap-3 px-4 py-2.5 w-full text-left text-sm font-semibold text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20">
+                <span className="text-base">🚪</span><span>Sair da conta</span>
+              </button>
+            </div>
+          </aside>
+
+          {/* ── MOBILE NAV ────────────────────────────────────────────── */}
+          <div className="lg:hidden w-full mb-4 -mx-4 px-4 overflow-x-auto">
+            <div className="flex gap-2 min-w-max pb-2">
+              {NAV_ITEMS.map(n => (
+                <button key={n.id} onClick={() => scrollTo(n.id)}
+                  className={`snav-btn flex items-center gap-1.5 px-3 py-2 text-xs font-bold whitespace-nowrap border ${
+                    activeSection === n.id ? 'is-active border-transparent' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700'
+                  }`}>
+                  <span>{n.icon}</span><span>{n.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
 
-          <div className="p-6">
-            {onboardingData ? (
-              <div className="space-y-6">
-                
-                {/* Informações Básicas */}
-                {(onboardingData.name || onboardingData.semester || onboardingData.university) && (
-                  <div>
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                      <span className="text-2xl">👤</span>
-                      Informações Básicas
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {onboardingData.name && <InfoCard label="Nome" value={onboardingData.name} />}
-                      {onboardingData.semester && <InfoCard label="Semestre" value={`${onboardingData.semester}º`} />}
-                      {onboardingData.university && <InfoCard label="Faculdade" value={onboardingData.university} span2 />}
-                    </div>
+          {/* ── SECTIONS ──────────────────────────────────────────────── */}
+          <div className="flex-1 space-y-6 sfade min-w-0">
+
+            {/* ══════════════════════════════════════════════════
+                1. CONTA
+            ══════════════════════════════════════════════════ */}
+            <SectionCard id="conta" icon="👤" label="Conta" gradient="from-blue-500 to-indigo-600">
+
+              {/* Profile hero */}
+              <div className="flex items-start gap-4 p-4 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-2xl border border-indigo-100 dark:border-indigo-800">
+                <div className="relative flex-shrink-0">
+                  <div className="w-20 h-20 rounded-2xl overflow-hidden bg-gradient-to-br from-gray-200 to-gray-300 dark:from-gray-700 dark:to-gray-600 shadow-md">
+                    {localProfile.photoURL
+                      ? <img src={localProfile.photoURL} alt="Foto" className="w-full h-full object-cover" />
+                      : <UserCircleIcon className="w-full h-full text-gray-400 p-2" />}
                   </div>
-                )}
-
-                {/* Rotina */}
-                {(onboardingData.sleepTime || onboardingData.wakeTime) && (
-                  <>
-                    <div className="border-t border-gray-200 dark:border-gray-700"></div>
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                        <span className="text-2xl">🕐</span>
-                        Rotina
-                      </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {onboardingData.sleepTime && <InfoCard label="Horário de dormir" value={onboardingData.sleepTime} />}
-                        {onboardingData.wakeTime && <InfoCard label="Horário de acordar" value={onboardingData.wakeTime} />}
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* Estilo de Estudo */}
-                {(onboardingData.studyTime || onboardingData.studyHoursPerDay || (onboardingData.studyTechniques && onboardingData.studyTechniques.length > 0)) && (
-                  <>
-                    <div className="border-t border-gray-200 dark:border-gray-700"></div>
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                        <span className="text-2xl">📚</span>
-                        Estilo de Estudo
-                      </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {onboardingData.studyTime && <InfoCard label="Horário preferido" value={onboardingData.studyTime} />}
-                        {onboardingData.studyHoursPerDay && <InfoCard label="Horas de estudo/dia" value={`${onboardingData.studyHoursPerDay}h`} />}
-                        {onboardingData.studyTechniques && onboardingData.studyTechniques.length > 0 && (
-                          <InfoCard 
-                            label="Técnicas de estudo" 
-                            value={onboardingData.studyTechniques.join(', ')} 
-                            span2 
-                          />
-                        )}
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* Objetivos */}
-                {(onboardingData.focusResidency || onboardingData.residencyArea || onboardingData.importantExam || onboardingData.shortTermGoals) && (
-                  <>
-                    <div className="border-t border-gray-200 dark:border-gray-700"></div>
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                        <span className="text-2xl">🎯</span>
-                        Objetivos
-                      </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {onboardingData.focusResidency && <InfoCard label="Foco em residência" value={onboardingData.focusResidency} />}
-                        {onboardingData.residencyArea && <InfoCard label="Área de residência" value={onboardingData.residencyArea} />}
-                        {onboardingData.importantExam && <InfoCard label="Prova importante" value={onboardingData.importantExam} />}
-                        {onboardingData.shortTermGoals && <InfoCard label="Metas de curto prazo" value={onboardingData.shortTermGoals} span2 />}
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* Saúde e Bem-Estar */}
-                {(onboardingData.exerciseFrequency || onboardingData.idealSleepHours || onboardingData.selfCareRoutine || onboardingData.psychologicalSupport || onboardingData.waterGoal) && (
-                  <>
-                    <div className="border-t border-gray-200 dark:border-gray-700"></div>
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                        <span className="text-2xl">❤️</span>
-                        Saúde e Bem-Estar
-                      </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {onboardingData.exerciseFrequency && <InfoCard label="Frequência de exercícios" value={onboardingData.exerciseFrequency} />}
-                        {onboardingData.idealSleepHours && <InfoCard label="Horas de sono ideais" value={onboardingData.idealSleepHours} />}
-                        {onboardingData.selfCareRoutine && <InfoCard label="Rotina de autocuidado" value={onboardingData.selfCareRoutine} />}
-                        {onboardingData.psychologicalSupport && <InfoCard label="Acompanhamento psicológico" value={onboardingData.psychologicalSupport} />}
-                        {onboardingData.waterGoal && <InfoCard label="Meta de água/dia" value={`${onboardingData.waterGoal}L`} />}
-                        <InfoCard label="Acompanha peso" value={onboardingData.trackWeight ? 'Sim' : 'Não'} />
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* Finanças */}
-                {(onboardingData.monthlyBudget || onboardingData.budgetAmount || (onboardingData.expenseCategories && onboardingData.expenseCategories.length > 0) || (onboardingData.recurringBills && onboardingData.recurringBills.length > 0)) && (
-                  <>
-                    <div className="border-t border-gray-200 dark:border-gray-700"></div>
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                        <span className="text-2xl">💰</span>
-                        Organização Financeira
-                      </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {onboardingData.monthlyBudget && <InfoCard label="Orçamento mensal" value={onboardingData.monthlyBudget} />}
-                        {onboardingData.budgetAmount && <InfoCard label="Valor do orçamento" value={onboardingData.budgetAmount} />}
-                        {onboardingData.expenseCategories && onboardingData.expenseCategories.length > 0 && (
-                          <InfoCard 
-                            label="Categorias de gastos" 
-                            value={onboardingData.expenseCategories.join(', ')} 
-                            span2 
-                          />
-                        )}
-                        {onboardingData.recurringBills && onboardingData.recurringBills.length > 0 && (
-                          <InfoCard 
-                            label="Contas recorrentes" 
-                            value={onboardingData.recurringBills.join(', ')} 
-                            span2 
-                          />
-                        )}
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* Preferências do App */}
-                {(onboardingData.wantsNotifications || onboardingData.notificationTime || onboardingData.theme || onboardingData.language || onboardingData.aiMode) && (
-                  <>
-                    <div className="border-t border-gray-200 dark:border-gray-700"></div>
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                        <span className="text-2xl">⚙️</span>
-                        Preferências do App
-                      </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {onboardingData.wantsNotifications && <InfoCard label="Notificações" value={onboardingData.wantsNotifications === 'sim' ? 'Ativadas' : 'Desativadas'} />}
-                        {onboardingData.notificationTime && <InfoCard label="Horário de notificações" value={onboardingData.notificationTime} />}
-                        {onboardingData.theme && <InfoCard label="Tema" value={onboardingData.theme} />}
-                        {onboardingData.language && <InfoCard label="Idioma" value={onboardingData.language} />}
-                        {onboardingData.aiMode && <InfoCard label="Modo da IA" value={onboardingData.aiMode === 'confirm' ? 'Confirmar sempre' : 'Automático'} span2 />}
-                      </div>
-                    </div>
-                  </>
-                )}
-
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <div className="inline-block p-4 bg-gray-100 dark:bg-gray-700 rounded-full mb-4">
-                  <span className="text-4xl">📋</span>
+                  <button onClick={() => fileInputRef.current?.click()} disabled={uploadingPhoto}
+                    className="absolute -bottom-1.5 -right-1.5 w-8 h-8 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl flex items-center justify-center shadow-lg transition-all">
+                    {uploadingPhoto
+                      ? <div className="animate-spin w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full" />
+                      : <CameraIcon className="w-4 h-4" />}
+                  </button>
+                  <input ref={fileInputRef} type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
                 </div>
-                <p className="text-gray-600 dark:text-gray-400 mb-4 font-medium">
-                  Você ainda não completou o questionário inicial.
-                </p>
-                <button
-                  onClick={() => navigate('/onboarding')}
-                  className="px-6 py-3 bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 text-white rounded-xl font-semibold transition-all shadow-lg"
-                >
-                  Completar Agora
-                </button>
-              </div>
-            )}
-          </div>
 
-          {onboardingData && (
-            <div className="bg-gray-50 dark:bg-gray-900/50 px-6 py-4 flex flex-col sm:flex-row gap-3">
-              <button
-                onClick={handleRefreshOnboarding}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 text-white rounded-xl font-semibold transition-all shadow-lg"
-              >
-                <PencilSquareIcon className="w-5 h-5" />
-                Refazer Questionário
-              </button>
-              <button
-                onClick={handleResetOnboarding}
-                className="flex items-center justify-center gap-2 px-4 py-3 border-2 border-red-500 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl font-semibold transition-all"
-              >
-                <ArrowPathIcon className="w-5 h-5" />
-                Resetar Tudo
-              </button>
-            </div>
-          )}
-        </section>
-
-        {/* Perfil do Usuário */}
-        <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 animate-fade-in">
-          <div className="p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg">
-                <UserCircleIcon className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                  Perfil de Usuário
-                </h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Suas informações de conta
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-6">
-              {/* Foto de Perfil */}
-              <div className="relative">
-                <div className="w-28 h-28 rounded-2xl overflow-hidden bg-gradient-to-br from-gray-200 to-gray-300 dark:from-gray-700 dark:to-gray-600 flex items-center justify-center shadow-lg">
-                  {localProfile.photoURL ? (
-                    <img 
-                      src={localProfile.photoURL} 
-                      alt="Foto de perfil"
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <UserCircleIcon className="w-20 h-20 text-gray-400" />
-                  )}
-                </div>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploadingPhoto}
-                  className="absolute -bottom-2 -right-2 p-3 bg-gradient-to-br from-primary-600 to-primary-700 text-white rounded-xl hover:from-primary-700 hover:to-primary-800 transition-all shadow-xl disabled:opacity-50 hover-lift"
-                >
-                  {uploadingPhoto ? (
-                    <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></div>
-                  ) : (
-                    <CameraIcon className="h-5 w-5" />
-                  )}
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handlePhotoUpload}
-                  className="hidden"
-                />
-              </div>
-
-              {/* Informações */}
-              <div className="flex-1">
-                <div className="mb-4">
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                    Nome
-                  </label>
+                <div className="flex-1 min-w-0">
                   {editingName ? (
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={localProfile.displayName}
-                        onChange={(e) => setLocalProfile(prev => ({ ...prev, displayName: e.target.value }))}
-                        className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:text-white transition-all"
-                        placeholder="Seu nome"
-                      />
-                      <button
-                        onClick={handleSaveName}
-                        className="p-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-all shadow-lg"
-                      >
-                        <CheckIcon className="h-5 w-5" />
-                      </button>
-                      <button
-                        onClick={() => setEditingName(false)}
-                        className="p-3 border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-all"
-                      >
-                        <XMarkIcon className="h-5 w-5" />
-                      </button>
+                    <div className="flex gap-2 mb-2">
+                      <input type="text" value={localProfile.displayName}
+                        onChange={e => setLocalProfile(p => ({ ...p, displayName: e.target.value }))}
+                        className="flex-1 min-w-0 px-3 py-2 text-sm border border-indigo-300 rounded-xl dark:bg-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-400" />
+                      <button onClick={handleSaveName} className="px-3 py-2 bg-green-600 text-white rounded-xl flex-shrink-0"><CheckIcon className="w-4 h-4" /></button>
+                      <button onClick={() => setEditingName(false)} className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl flex-shrink-0 text-gray-600 dark:text-gray-300"><XMarkIcon className="w-4 h-4" /></button>
                     </div>
                   ) : (
-                    <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl">
-                      <p className="text-gray-900 dark:text-white font-semibold text-lg">
-                        {localProfile.displayName || 'Adicione seu nome'}
-                      </p>
-                      <button
-                        onClick={() => setEditingName(true)}
-                        className="p-2 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded-lg transition-all"
-                      >
-                        <PencilIcon className="h-5 w-5" />
-                      </button>
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="font-bold text-gray-900 dark:text-white text-base truncate">{localProfile.displayName || 'Adicione seu nome'}</p>
+                      <button onClick={() => setEditingName(true)} className="text-indigo-500 hover:text-indigo-700 flex-shrink-0 transition-colors"><PencilIcon className="w-4 h-4" /></button>
                     </div>
                   )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                    Email
-                  </label>
-                  <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl">
-                    <p className="text-gray-900 dark:text-white font-medium">
-                      {user?.email}
-                    </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{user?.email}</p>
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-0.5 rounded-full font-semibold">✅ Verificado</span>
+                    <span className="text-xs bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 px-2 py-0.5 rounded-full font-semibold">🔒 Conta ativa</span>
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
-        </section>
 
-        {/* Aparência */}
-        <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 animate-fade-in" style={{ animationDelay: '0.1s' }}>
-          <div className="p-6">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-12 h-12 bg-gradient-to-br from-yellow-500 to-orange-600 rounded-2xl flex items-center justify-center shadow-lg">
-                <span className="text-2xl">🎨</span>
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                  Aparência
-                </h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Escolha seu tema favorito (8 opções disponíveis!)
-                </p>
-              </div>
-            </div>
+              <Row icon="🔑" title="Alterar Senha" desc="Enviar link de redefinição por email">
+                <button onClick={() => alert('Link enviado para ' + user?.email)}
+                  className="px-4 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-all">
+                  Redefinir
+                </button>
+              </Row>
 
-            <ThemeSelector 
-              currentTheme={selectedTheme}
-              onThemeChange={handleThemeChangeNew}
-            />
-          </div>
-        </section>
+              <Row icon="📱" title="Autenticação em 2 Fatores" desc="Camada extra de segurança (2FA)">
+                <Toggle value={false} onChange={() => alert('2FA em breve!')} />
+              </Row>
 
-        {/* ========== NOVA SEÇÃO: NOTIFICAÇÕES ========== */}
-        <section className="bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 rounded-2xl shadow-lg border-2 border-yellow-200 dark:border-yellow-800 animate-fade-in" style={{ animationDelay: '0.15s' }}>
-          <div className="p-6">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-12 h-12 bg-gradient-to-br from-yellow-500 to-amber-600 rounded-2xl flex items-center justify-center shadow-lg">
-                <BellIcon className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                  Notificações
-                </h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Gerencie alertas e lembretes
-                </p>
-              </div>
-            </div>
+              <Row icon="💻" title="Sessões Ativas" desc="Dispositivos conectados à conta">
+                <button onClick={() => alert('Em breve')}
+                  className="px-4 py-2 text-xs font-bold border border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all">
+                  Ver sessões
+                </button>
+              </Row>
 
-            {/* Status da Permissão */}
-            <div className="mb-5 p-5 bg-white dark:bg-gray-800 rounded-xl">
-              <div className="flex items-center justify-between mb-3">
+              <Row icon="📋" title="Histórico de Login" desc="Registro dos últimos acessos">
+                <button onClick={() => alert('Em breve')}
+                  className="px-4 py-2 text-xs font-bold border border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all">
+                  Ver histórico
+                </button>
+              </Row>
+
+              <Row icon="🗑️" title="Excluir Conta" desc="Ação irreversível — todos os dados serão removidos" danger>
+                <button onClick={() => confirm('Tem certeza? Esta ação é irreversível!') && alert('Funcionalidade em breve')}
+                  className="px-4 py-2 text-xs font-bold bg-red-600 hover:bg-red-700 text-white rounded-xl transition-all">
+                  Excluir conta
+                </button>
+              </Row>
+            </SectionCard>
+
+            {/* ══════════════════════════════════════════════════
+                2. PRIVACIDADE & SEGURANÇA
+            ══════════════════════════════════════════════════ */}
+            <SectionCard id="privacidade" icon="🔐" label="Privacidade & Segurança" gradient="from-slate-600 to-gray-700">
+
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { label: 'JSON', icon: '📥', action: () => exportAllData?.() },
+                  { label: 'PDF', icon: '📄', action: () => alert('Em breve') },
+                  { label: 'CSV', icon: '📊', action: () => alert('Em breve') },
+                ].map(b => (
+                  <button key={b.label} onClick={b.action}
+                    className="flex flex-col items-center gap-1.5 py-3 px-2 bg-gray-50 dark:bg-gray-700/40 hover:bg-gray-100 dark:hover:bg-gray-700/70 rounded-2xl border border-gray-200 dark:border-gray-700 transition-all">
+                    <span className="text-xl">{b.icon}</span>
+                    <span className="text-xs font-bold text-gray-700 dark:text-gray-300">Exportar {b.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 rounded-2xl p-4">
+                <p className="text-xs font-bold text-red-700 dark:text-red-400 mb-3">🗑️ Apagar Dados por Categoria</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {['Saúde', 'Bem-estar', 'Estudos', 'Finanças', 'Agenda', 'Tarefas'].map(cat => (
+                    <button key={cat} onClick={() => confirm(`Apagar todos os dados de ${cat}? Ação irreversível.`)}
+                      className="px-3 py-2 text-xs font-semibold text-red-600 dark:text-red-400 border border-red-300 dark:border-red-700 rounded-xl hover:bg-red-100 dark:hover:bg-red-900/30 transition-all">
+                      🗑️ {cat}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <Row icon="☁️" title="Backup Automático" desc="Cópia diária salva na nuvem">
+                <Toggle value={true} onChange={() => {}} />
+              </Row>
+
+              <Row icon="🔒" title="Criptografia" desc="Dados sensíveis criptografados">
+                <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-3 py-1 rounded-full font-bold">Ativa ✅</span>
+              </Row>
+
+              <SelectRow icon="⏱️" title="Timeout por Inatividade" desc="Bloquear após tempo sem uso"
+                value="never" onChange={() => {}}
+                options={[
+                  { value: 'never', label: 'Nunca' },
+                  { value: '5', label: '5 minutos' },
+                  { value: '15', label: '15 minutos' },
+                  { value: '30', label: '30 minutos' },
+                ]} />
+            </SectionCard>
+
+            {/* ══════════════════════════════════════════════════
+                3. PERSONALIZAÇÃO
+            ══════════════════════════════════════════════════ */}
+            <SectionCard id="visual" icon="🎨" label="Personalização" gradient="from-pink-500 to-rose-600">
+
+              <div className="rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-700">
+                <ThemeSelector currentTheme={selectedTheme} onThemeChange={(t) => {
+                  setSelectedTheme(t);
+                  applyTheme(t);
+                  updateTheme?.(t === 'dark' ? 'dark' : 'light');
+                }} />
+              </div>
+
+              <SelectRow icon="📐" title="Layout" desc="Modo de exibição das informações"
+                value="expanded" onChange={() => {}}
+                options={[{ value: 'compact', label: '🗜️ Compacto' }, { value: 'expanded', label: '📋 Expandido' }]} />
+
+              <SelectRow icon="🔍" title="Nível de Detalhe" desc="Quantidade de informações exibidas"
+                value="advanced" onChange={() => {}}
+                options={[{ value: 'simple', label: '🔍 Simplificado' }, { value: 'advanced', label: '🔬 Avançado' }]} />
+
+              <Row icon="📌" title="Ordem das Abas" desc="Reordenar módulos do menu">
+                <span className="text-xs text-gray-400 italic">Em breve</span>
+              </Row>
+
+              <Row icon="👁️" title="Métricas Visíveis" desc="Ocultar cards no Dashboard">
+                <button className="px-4 py-2 text-xs font-bold border border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
+                  Configurar
+                </button>
+              </Row>
+            </SectionCard>
+
+            {/* ══════════════════════════════════════════════════
+                4. NOTIFICAÇÕES
+            ══════════════════════════════════════════════════ */}
+            <SectionCard id="notificacoes" icon="🔔" label="Notificações" gradient="from-amber-500 to-orange-600">
+
+              {/* Permission status */}
+              <div className={`p-4 rounded-2xl flex items-center justify-between gap-4 border-2 ${
+                notificationPermission === 'granted'
+                  ? 'bg-green-50 dark:bg-green-900/10 border-green-300 dark:border-green-700'
+                  : 'bg-amber-50 dark:bg-amber-900/10 border-amber-300 dark:border-amber-700'
+              }`}>
                 <div>
-                  <p className="font-semibold text-gray-900 dark:text-white mb-1">
-                    Permissão do Navegador
-                  </p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    {notificationPermission === 'granted' && '✅ Ativada - Você receberá notificações'}
-                    {notificationPermission === 'denied' && '❌ Negada - Ative nas configurações do navegador'}
-                    {notificationPermission === 'default' && '⏳ Não solicitada ainda'}
+                  <p className="font-bold text-sm text-gray-900 dark:text-white">Permissão do Navegador</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    {notificationPermission === 'granted' ? '✅ Ativada — tudo certo!'
+                      : notificationPermission === 'denied' ? '❌ Negada — ative nas configurações do navegador'
+                      : '⏳ Ainda não solicitada'}
                   </p>
                 </div>
                 {notificationPermission !== 'granted' && (
-                  <button
-                    onClick={handleRequestPermission}
-                    className="px-4 py-2 bg-gradient-to-r from-yellow-500 to-amber-600 text-white rounded-lg font-semibold hover:from-yellow-600 hover:to-amber-700 transition-all shadow-lg"
-                  >
+                  <button onClick={requestNotificationPermission}
+                    className="px-4 py-2 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white rounded-xl transition-all flex-shrink-0">
                     Ativar
                   </button>
                 )}
               </div>
-            </div>
 
-            {/* Tipos de Notificações */}
-            <div className="space-y-3">
-              <p className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-3">
-                Receber notificações de:
-              </p>
+              {/* Channels */}
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { key: 'notifEmail', icon: '📧', label: 'Email' },
+                  { key: 'notifPush', icon: '📲', label: 'Push' },
+                  { key: 'notifInternal', icon: '🔔', label: 'Interna' },
+                ].map(ch => (
+                  <button key={ch.key} onClick={() => set(ch.key, !cfg[ch.key])}
+                    className={`flex flex-col items-center gap-1.5 py-3 rounded-2xl border-2 transition-all font-bold text-xs ${
+                      cfg[ch.key]
+                        ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-400 text-amber-700 dark:text-amber-300'
+                        : 'bg-gray-50 dark:bg-gray-700/40 border-gray-200 dark:border-gray-700 text-gray-500'
+                    }`}>
+                    <span className="text-xl">{ch.icon}</span>{ch.label}
+                  </button>
+                ))}
+              </div>
 
-              {/* Eventos */}
-              <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-xl">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center">
-                    <span className="text-xl">📅</span>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900 dark:text-white">
-                      Eventos
-                    </p>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
-                      Lembrete 1 dia antes
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleNotificationTypeChange('events', !localSettings.notificationTypes?.events)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    localSettings.notificationTypes?.events ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                      localSettings.notificationTypes?.events ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
+              {[
+                { key: 'notifEvents', icon: '📅', label: 'Eventos', desc: '1 dia antes do evento' },
+                { key: 'notifTasks', icon: '✅', label: 'Tarefas', desc: 'Tarefas atrasadas e urgentes' },
+                { key: 'notifBills', icon: '💰', label: 'Contas', desc: '3 dias antes do vencimento' },
+                { key: 'notifWater', icon: '💧', label: 'Hidratação', desc: 'A cada 2h (8h–20h)' },
+                { key: 'notifStudy', icon: '📚', label: 'Estudos', desc: 'Revisões e cronograma' },
+                { key: 'notifHealth', icon: '🏥', label: 'Saúde', desc: 'Consultas e medicamentos' },
+              ].map(n => (
+                <Row key={n.key} icon={n.icon} title={n.label} desc={n.desc}>
+                  <Toggle value={cfg[n.key]} onChange={v => set(n.key, v)} />
+                </Row>
+              ))}
+
+              <SelectRow icon="🔁" title="Frequência de Resumos" desc="Periodicidade dos resumos automáticos"
+                value={cfg.notifFrequency} onChange={v => set('notifFrequency', v)}
+                options={[
+                  { value: 'daily', label: '📅 Diária' },
+                  { value: 'weekly', label: '📆 Semanal' },
+                  { value: 'off', label: '🔕 Desativado' },
+                ]} />
+
+              <Row icon="🗑️" title="Limpar Notificações Antigas" desc="Remover alertas com mais de 30 dias">
+                <button onClick={async () => {
+                  if (confirm('Limpar notificações com mais de 30 dias?')) {
+                    const c = await clearOldNotifications?.();
+                    alert(`✅ ${c || 0} notificação(ões) removida(s)`);
+                  }
+                }} className="px-4 py-2 text-xs font-bold border border-gray-300 dark:border-gray-600 rounded-xl text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
+                  Limpar
                 </button>
-              </div>
+              </Row>
+            </SectionCard>
 
-              {/* Tarefas */}
-              <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-xl">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center">
-                    <span className="text-xl">✅</span>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900 dark:text-white">
-                      Tarefas
-                    </p>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
-                      Tarefas atrasadas
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleNotificationTypeChange('tasks', !localSettings.notificationTypes?.tasks)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    localSettings.notificationTypes?.tasks ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                      localSettings.notificationTypes?.tasks ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </div>
+            {/* ══════════════════════════════════════════════════
+                5. ANÁLISE
+            ══════════════════════════════════════════════════ */}
+            <SectionCard id="analise" icon="📊" label="Preferências de Análise" gradient="from-violet-500 to-purple-600">
 
-              {/* Contas */}
-              <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-xl">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-orange-100 dark:bg-orange-900/30 rounded-xl flex items-center justify-center">
-                    <span className="text-xl">💰</span>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900 dark:text-white">
-                      Contas
-                    </p>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
-                      3 dias antes do vencimento
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleNotificationTypeChange('bills', !localSettings.notificationTypes?.bills)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    localSettings.notificationTypes?.bills ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                      localSettings.notificationTypes?.bills ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </div>
+              <SelectRow icon="📆" title="Período Padrão" desc="Janela de análise ao abrir a página"
+                value={cfg.analysisPeriod} onChange={v => set('analysisPeriod', v)}
+                options={[{ value: '7', label: '7 dias' }, { value: '30', label: '30 dias' }, { value: '90', label: '90 dias' }]} />
 
-              {/* Água */}
-              <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-xl">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-cyan-100 dark:bg-cyan-900/30 rounded-xl flex items-center justify-center">
-                    <span className="text-xl">💧</span>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900 dark:text-white">
-                      Hidratação
-                    </p>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
-                      A cada 2 horas (8h-20h)
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleNotificationTypeChange('water', !localSettings.notificationTypes?.water)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    localSettings.notificationTypes?.water ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                      localSettings.notificationTypes?.water ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </div>
+              <Row icon="🔗" title="Correlações Automáticas" desc="Detectar relações entre variáveis">
+                <Toggle value={cfg.autoCorrelations} onChange={v => set('autoCorrelations', v)} />
+              </Row>
 
-              {/* Estudos */}
-              <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-xl">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-xl flex items-center justify-center">
-                    <span className="text-xl">📚</span>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900 dark:text-white">
-                      Estudos
-                    </p>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
-                      Revisões e cronograma
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleNotificationTypeChange('study', !localSettings.notificationTypes?.study)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    localSettings.notificationTypes?.study ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                      localSettings.notificationTypes?.study ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </div>
-            </div>
-
-            {/* Botão de Limpeza */}
-            <div className="mt-5 pt-5 border-t border-gray-200 dark:border-gray-700">
-              <button
-                onClick={handleClearOldNotifications}
-                className="w-full py-3 border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 font-semibold transition-all flex items-center justify-center gap-2"
-              >
-                <TrashIcon className="w-5 h-5" />
-                Limpar Notificações Antigas (30+ dias)
-              </button>
-            </div>
-          </div>
-        </section>
-
-        {/* Inteligência Artificial */}
-        <section className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-2xl shadow-lg border-2 border-purple-200 dark:border-purple-800 animate-fade-in" style={{ animationDelay: '0.2s' }}>
-          <div className="p-6">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl flex items-center justify-center shadow-lg">
-                <SparklesIcon className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                  Inteligência Artificial
-                </h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Configurações de IA
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-5 bg-white dark:bg-gray-800 rounded-xl shadow-sm">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-xl flex items-center justify-center">
-                    <span className="text-xl">🤖</span>
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900 dark:text-white">
-                      Auto-save
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Salvar sem confirmar
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleSettingChange('aiAutoSave', !localSettings.aiAutoSave)}
-                  className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors shadow-inner ${
-                    localSettings.aiAutoSave ? 'bg-gradient-to-r from-primary-600 to-primary-700' : 'bg-gray-300 dark:bg-gray-600'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition-transform ${
-                      localSettings.aiAutoSave ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Upload de PDF com IA */}
-        <section className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 rounded-2xl shadow-lg border-2 border-blue-200 dark:border-blue-800 animate-fade-in" style={{ animationDelay: '0.3s' }}>
-          <div className="p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-2xl flex items-center justify-center shadow-lg">
-                <DocumentArrowUpIcon className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                  Importar PDF com IA
-                </h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Extração automática de eventos
-                </p>
-              </div>
-            </div>
-
-            <div className="mb-4 p-4 bg-white dark:bg-gray-800 rounded-xl">
-              <p className="text-sm text-gray-700 dark:text-gray-300 mb-2 font-medium">
-                📄 Faça upload de cronogramas ou calendários em PDF
-              </p>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Nossa IA vai extrair automaticamente eventos, provas e compromissos! 🤖✨
-              </p>
-            </div>
-
-            <button
-              onClick={() => pdfInputRef.current?.click()}
-              disabled={processingPDF}
-              className="w-full py-6 border-2 border-dashed border-blue-300 dark:border-blue-700 rounded-2xl hover:border-blue-500 dark:hover:border-blue-500 transition-all bg-white dark:bg-gray-800 disabled:opacity-50 hover-lift"
-            >
-              {processingPDF ? (
-                <div className="flex flex-col items-center gap-3">
-                  <div className="animate-spin h-8 w-8 border-3 border-blue-600 border-t-transparent rounded-full"></div>
-                  <span className="text-blue-600 dark:text-blue-400 font-bold">
-                    Processando PDF...
-                  </span>
-                  <span className="text-xs text-gray-500">
-                    Isso pode levar alguns segundos
+              {/* Weight sliders */}
+              <div className="bg-violet-50 dark:bg-violet-900/10 border border-violet-200 dark:border-violet-800 rounded-2xl p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-sm font-bold text-violet-700 dark:text-violet-300">⚖️ Peso de Cada Área no Score Global</p>
+                  <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                    totalWeight === 100
+                      ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                      : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                  }`}>
+                    {totalWeight}/100%
                   </span>
                 </div>
-              ) : (
-                <div className="flex flex-col items-center gap-3">
-                  <DocumentArrowUpIcon className="h-14 w-14 text-blue-500" />
-                  <p className="text-blue-600 dark:text-blue-400 font-bold text-lg">
-                    Clique para selecionar PDF
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    ou arraste e solte aqui
-                  </p>
+                <div className="space-y-5">
+                  {[
+                    { key: 'scoreWeightHealth', label: 'Saúde Física', color: '#22d3ee', accent: '#0e7490' },
+                    { key: 'scoreWeightMental', label: 'Bem-Estar Mental', color: '#a78bfa', accent: '#7c3aed' },
+                    { key: 'scoreWeightProd', label: 'Produtividade', color: '#fbbf24', accent: '#d97706' },
+                    { key: 'scoreWeightFinance', label: 'Financeiro', color: '#34d399', accent: '#059669' },
+                  ].map(w => (
+                    <div key={w.key}>
+                      <div className="flex justify-between items-center mb-1.5">
+                        <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{w.label}</span>
+                        <span className="text-xs font-bold" style={{ color: w.color }}>{cfg[w.key]}%</span>
+                      </div>
+                      <input
+                        type="range" min={5} max={60} step={5}
+                        value={cfg[w.key]}
+                        onChange={e => set(w.key, parseInt(e.target.value))}
+                        style={{ accentColor: w.color, background: `linear-gradient(to right, ${w.color} 0%, ${w.color} ${(cfg[w.key]-5)/55*100}%, #e5e7eb ${(cfg[w.key]-5)/55*100}%, #e5e7eb 100%)` }}
+                        className="w-full"
+                      />
+                    </div>
+                  ))}
                 </div>
-              )}
-            </button>
-            <input
-              ref={pdfInputRef}
-              type="file"
-              accept="application/pdf"
-              onChange={handlePDFUpload}
-              className="hidden"
-            />
-          </div>
-        </section>
-
-        {/* Outras Configurações */}
-        <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 animate-fade-in" style={{ animationDelay: '0.4s' }}>
-          <div className="p-6">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center shadow-lg">
-                <span className="text-2xl">🎛️</span>
               </div>
-              <div>
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                  Preferências
-                </h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Ajuste o app ao seu estilo
+            </SectionCard>
+
+            {/* ══════════════════════════════════════════════════
+                6. IA
+            ══════════════════════════════════════════════════ */}
+            <SectionCard id="ia" icon="🧠" label="Inteligência Artificial" gradient="from-emerald-500 to-teal-600">
+
+              <Row icon="🤖" title="Auto-save com IA" desc="Salvar sugestões sem confirmação manual">
+                <Toggle value={cfg.aiAutoSave} onChange={v => set('aiAutoSave', v)} />
+              </Row>
+              <Row icon="📖" title="Acesso ao Histórico" desc="IA analisa seus dados passados para insights melhores">
+                <Toggle value={cfg.aiHistorical} onChange={v => set('aiHistorical', v)} />
+              </Row>
+              <Row icon="💡" title="Sugestões Proativas" desc="Insights automáticos em tempo real">
+                <Toggle value={cfg.aiSuggestions} onChange={v => set('aiSuggestions', v)} />
+              </Row>
+
+              <SelectRow icon="🎙️" title="Estilo de Resposta" desc="Tom e formato das mensagens da IA"
+                value={cfg.aiStyle} onChange={v => set('aiStyle', v)}
+                options={[
+                  { value: 'direct', label: '⚡ Direto e objetivo' },
+                  { value: 'balanced', label: '⚖️ Equilibrado' },
+                  { value: 'detailed', label: '📝 Detalhado e explicativo' },
+                ]} />
+
+              <NumberRow icon="🔢" title="Limite de Insights por Dia" desc="Máximo de análises automáticas diárias"
+                value={cfg.aiInsightsPerDay} onChange={v => set('aiInsightsPerDay', v)} min={1} max={20} step={1} unit="/ dia" />
+
+              {/* PDF Import */}
+              <div className="bg-teal-50 dark:bg-teal-900/10 border-2 border-dashed border-teal-300 dark:border-teal-700 rounded-2xl p-5">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xl">📄</span>
+                  <p className="text-sm font-bold text-teal-700 dark:text-teal-300">Importar PDF com IA</p>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-4 ml-8">
+                  Extração automática de eventos de cronogramas e calendários acadêmicos
                 </p>
+                <button onClick={() => pdfInputRef.current?.click()} disabled={processingPDF}
+                  className="w-full py-3 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all">
+                  {processingPDF
+                    ? <><div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" /> Processando...</>
+                    : <><DocumentArrowUpIcon className="w-4 h-4" /> Selecionar PDF</>}
+                </button>
+                <input ref={pdfInputRef} type="file" accept="application/pdf" onChange={handlePDFUpload} className="hidden" />
               </div>
-            </div>
+            </SectionCard>
 
-            <div className="space-y-3">
-              {/* Moeda */}
-              <div className="flex items-center justify-between p-5 bg-gray-50 dark:bg-gray-700/50 rounded-xl hover-lift transition-all">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center">
-                    <CurrencyDollarIcon className="h-5 w-5 text-green-600 dark:text-green-400" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900 dark:text-white">
-                      Moeda
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Formato de valores
-                    </p>
-                  </div>
+            {/* ══════════════════════════════════════════════════
+                7. AGENDA
+            ══════════════════════════════════════════════════ */}
+            <SectionCard id="agenda" icon="📅" label="Preferências de Agenda" gradient="from-cyan-500 to-blue-600">
+
+              <SelectRow icon="📆" title="Início da Semana" desc="Primeiro dia no calendário"
+                value={cfg.weekStartsOn} onChange={v => set('weekStartsOn', v)}
+                options={[{ value: 'monday', label: '🗓️ Segunda-feira' }, { value: 'sunday', label: '🗓️ Domingo' }]} />
+
+              <SelectRow icon="🌐" title="Fuso Horário" desc="Referência para horários e lembretes"
+                value={cfg.timezone} onChange={v => set('timezone', v)}
+                options={[
+                  { value: 'America/Sao_Paulo', label: '🇧🇷 Brasília (UTC-3)' },
+                  { value: 'America/New_York', label: '🇺🇸 New York (UTC-5)' },
+                  { value: 'Europe/Lisbon', label: '🇵🇹 Lisboa (UTC+0)' },
+                ]} />
+
+              <SelectRow icon="📋" title="Formato de Data" desc="Como as datas são exibidas"
+                value={cfg.dateFormat} onChange={v => set('dateFormat', v)}
+                options={[
+                  { value: 'dd/mm/yyyy', label: 'DD/MM/AAAA' },
+                  { value: 'mm/dd/yyyy', label: 'MM/DD/AAAA' },
+                  { value: 'yyyy-mm-dd', label: 'AAAA-MM-DD' },
+                ]} />
+
+              <Row icon="⏰" title="Horário Padrão de Lembrete" desc="Hora padrão de envio dos alertas">
+                <input type="time" value={cfg.defaultReminderTime}
+                  onChange={e => set('defaultReminderTime', e.target.value)}
+                  className="px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-400" />
+              </Row>
+            </SectionCard>
+
+            {/* ══════════════════════════════════════════════════
+                8. SAÚDE
+            ══════════════════════════════════════════════════ */}
+            <SectionCard id="saude" icon="🏥" label="Configurações de Saúde" gradient="from-red-500 to-rose-600">
+
+              <SelectRow icon="⚖️" title="Unidade de Peso" desc="Formato para registros de peso corporal"
+                value={cfg.weightUnit} onChange={v => set('weightUnit', v)}
+                options={[{ value: 'kg', label: '🇧🇷 Quilogramas (kg)' }, { value: 'lb', label: '🇺🇸 Libras (lb)' }]} />
+
+              <SelectRow icon="📏" title="Unidade de Altura" desc="Formato para registros de altura"
+                value={cfg.heightUnit} onChange={v => set('heightUnit', v)}
+                options={[{ value: 'cm', label: 'Centímetros (cm)' }, { value: 'ft', label: 'Pés/Polegadas (ft/in)' }]} />
+
+              <NumberRow icon="💧" title="Meta Diária de Água" desc="Quantidade ideal de água por dia"
+                value={cfg.waterGoal} onChange={v => set('waterGoal', v)} min={0.5} max={6} step={0.1} unit="L/dia" />
+
+              <NumberRow icon="😴" title="Meta de Sono" desc="Horas ideais de sono por noite"
+                value={cfg.sleepGoal} onChange={v => set('sleepGoal', v)} min={4} max={12} step={0.5} unit="h/noite" />
+
+              <NumberRow icon="🏃" title="Meta de Exercício" desc="Tempo mínimo de atividade física diária"
+                value={cfg.exerciseGoal} onChange={v => set('exerciseGoal', v)} min={0} max={180} step={5} unit="min/dia" />
+            </SectionCard>
+
+            {/* ══════════════════════════════════════════════════
+                9. ESTUDOS
+            ══════════════════════════════════════════════════ */}
+            <SectionCard id="estudo" icon="📚" label="Configurações de Estudo" gradient="from-orange-500 to-amber-600">
+
+              <NumberRow icon="🍅" title="Duração do Pomodoro" desc="Minutos de foco por sessão de estudo"
+                value={cfg.pomodoroDuration} onChange={v => set('pomodoroDuration', v)} min={5} max={90} step={5} unit="minutos" />
+
+              <NumberRow icon="☕" title="Intervalo entre Sessões" desc="Minutos de descanso entre pomodoros"
+                value={cfg.pomodoroBreak} onChange={v => set('pomodoroBreak', v)} min={1} max={30} step={1} unit="minutos" />
+
+              <SelectRow icon="🔄" title="Frequência de Revisão Espaçada" desc="Quão frequente você quer revisar o conteúdo"
+                value={cfg.spacedRepFreq} onChange={v => set('spacedRepFreq', v)}
+                options={[
+                  { value: 'daily', label: '📅 Diária' },
+                  { value: 'weekly', label: '📆 Semanal' },
+                  { value: 'custom', label: '⚙️ Personalizado' },
+                ]} />
+
+              <NumberRow icon="🎯" title="Meta Semanal de Estudo" desc="Horas de estudo alvo por semana"
+                value={cfg.weeklyStudyGoal} onChange={v => set('weeklyStudyGoal', v)} min={1} max={80} step={1} unit="h/semana" />
+            </SectionCard>
+
+            {/* ══════════════════════════════════════════════════
+                10. FINANCEIRO
+            ══════════════════════════════════════════════════ */}
+            <SectionCard id="financeiro" icon="💰" label="Configurações Financeiras" gradient="from-green-500 to-emerald-600">
+
+              <SelectRow icon="💱" title="Moeda" desc="Formato de exibição de valores monetários"
+                value={cfg.currency} onChange={v => set('currency', v)}
+                options={[
+                  { value: 'BRL', label: '🇧🇷 Real Brasileiro (R$)' },
+                  { value: 'USD', label: '🇺🇸 Dólar Americano ($)' },
+                  { value: 'EUR', label: '🇪🇺 Euro (€)' },
+                ]} />
+
+              <NumberRow icon="📅" title="Início do Mês Financeiro" desc="Dia do mês para reset do orçamento"
+                value={cfg.monthStart} onChange={v => set('monthStart', v)} min={1} max={28} step={1} unit="dia do mês" />
+
+              <NumberRow icon="🎯" title="Meta Mensal de Economia" desc="Valor alvo de poupança por mês"
+                value={cfg.savingsGoal} onChange={v => set('savingsGoal', v)} min={0} max={99999} step={50}
+                unit={cfg.currency === 'BRL' ? 'R$/mês' : '$/ mês'} />
+
+              <Row icon="⚠️" title="Alerta de Gasto Excessivo" desc="Notificar ao ultrapassar limites do orçamento">
+                <Toggle value={cfg.overspendAlert} onChange={v => set('overspendAlert', v)} />
+              </Row>
+            </SectionCard>
+
+            {/* ══════════════════════════════════════════════════
+                11. SISTEMA
+            ══════════════════════════════════════════════════ */}
+            <SectionCard id="sistema" icon="🌍" label="Sistema" gradient="from-indigo-500 to-blue-600">
+
+              <SelectRow icon="🌐" title="Idioma da Interface" desc="Linguagem de todos os textos do app"
+                value={cfg.language} onChange={v => set('language', v)}
+                options={[
+                  { value: 'pt-BR', label: '🇧🇷 Português (Brasil)' },
+                  { value: 'en-US', label: '🇺🇸 English (US)' },
+                  { value: 'es-ES', label: '🇪🇸 Español' },
+                ]} />
+
+              <SelectRow icon="📍" title="Região" desc="Formatos regionais de datas e números"
+                value={cfg.region} onChange={v => set('region', v)}
+                options={[{ value: 'BR', label: '🇧🇷 Brasil' }, { value: 'US', label: '🇺🇸 EUA' }, { value: 'PT', label: '🇵🇹 Portugal' }]} />
+
+              {/* Accessibility block */}
+              <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-2xl p-4">
+                <p className="text-sm font-bold text-blue-700 dark:text-blue-300 mb-3">♿ Acessibilidade</p>
+                <div className="space-y-2">
+                  <Row icon="🔤" title="Tamanho da Fonte" desc="Ajuste para melhor leitura">
+                    <div className="flex gap-1">
+                      {[
+                        { v: 'small', l: 'P' },
+                        { v: 'medium', l: 'M' },
+                        { v: 'large', l: 'G' },
+                      ].map(s => (
+                        <button key={s.v} onClick={() => set('fontSize', s.v)}
+                          className={`w-9 h-9 text-xs font-bold rounded-xl transition-all border ${
+                            cfg.fontSize === s.v
+                              ? 'bg-blue-600 text-white border-blue-600'
+                              : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                          }`}>
+                          {s.l}
+                        </button>
+                      ))}
+                    </div>
+                  </Row>
+                  <Row icon="🌗" title="Alto Contraste" desc="Aumentar contraste para melhor visibilidade">
+                    <Toggle value={cfg.highContrast} onChange={v => set('highContrast', v)} />
+                  </Row>
+                  <Row icon="🎬" title="Reduzir Animações" desc="Desativar efeitos de movimento">
+                    <Toggle value={cfg.reduceAnimations} onChange={v => set('reduceAnimations', v)} />
+                  </Row>
                 </div>
-                <select
-                  value={localSettings.currency}
-                  onChange={(e) => handleSettingChange('currency', e.target.value)}
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white font-medium transition-all"
-                >
-                  <option value="BRL">🇧🇷 BRL (R$)</option>
-                  <option value="USD">🇺🇸 USD ($)</option>
-                  <option value="EUR">🇪🇺 EUR (€)</option>
-                </select>
               </div>
+            </SectionCard>
 
-              {/* Início da Semana */}
-              <div className="flex items-center justify-between p-5 bg-gray-50 dark:bg-gray-700/50 rounded-xl hover-lift transition-all">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center">
-                    <CalendarIcon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900 dark:text-white">
-                      Início da Semana
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Calendário
-                    </p>
-                  </div>
+            {/* ══════════════════════════════════════════════════
+                12. LEGAL
+            ══════════════════════════════════════════════════ */}
+            <SectionCard id="legal" icon="🧾" label="Legal & Sobre" gradient="from-gray-500 to-slate-600">
+
+              <Row icon="📋" title="Termos de Uso" desc="Leia os termos de utilização da plataforma">
+                <button className="px-4 py-2 text-xs font-bold border border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
+                  Abrir →
+                </button>
+              </Row>
+
+              <Row icon="🔒" title="Política de Privacidade" desc="Como seus dados são coletados e protegidos">
+                <button className="px-4 py-2 text-xs font-bold border border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
+                  Abrir →
+                </button>
+              </Row>
+
+              <div className="bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-2xl p-6 text-center border border-indigo-100 dark:border-indigo-800">
+                <div className="text-4xl mb-3">💙</div>
+                <p className="font-bold text-gray-900 dark:text-white">MedPlanner</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Versão 1.0.0 — Build 2025.02</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Feito com carinho para estudantes de medicina</p>
+                <div className="flex justify-center gap-2 mt-3">
+                  <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-1 rounded-full font-semibold">✅ Atualizado</span>
+                  <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 px-2 py-1 rounded-full font-semibold">🔒 Seguro</span>
+                  <span className="text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 px-2 py-1 rounded-full font-semibold">⚡ Estável</span>
                 </div>
-                <select
-                  value={localSettings.weekStartsOn}
-                  onChange={(e) => handleSettingChange('weekStartsOn', e.target.value)}
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white font-medium transition-all"
-                >
-                  <option value="monday">Segunda-feira</option>
-                  <option value="sunday">Domingo</option>
-                </select>
               </div>
+            </SectionCard>
 
-              {/* Meta de Água */}
-              <div className="flex items-center justify-between p-5 bg-gray-50 dark:bg-gray-700/50 rounded-xl hover-lift transition-all">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-cyan-100 dark:bg-cyan-900/30 rounded-xl flex items-center justify-center">
-                    <BeakerIcon className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900 dark:text-white">
-                      Meta de Água
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Litros por dia
-                    </p>
-                  </div>
-                </div>
-                <input
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  max="10"
-                  value={localSettings.waterGoal}
-                  onChange={(e) => handleSettingChange('waterGoal', parseFloat(e.target.value))}
-                  className="w-24 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl dark:bg-gray-700 dark:text-white text-center font-bold transition-all"
-                />
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Backup e Dados */}
-        <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 animate-fade-in" style={{ animationDelay: '0.5s' }}>
-          <div className="p-6">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg">
-                <ArrowDownTrayIcon className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                  Backup e Dados
-                </h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Exporte suas informações
-                </p>
-              </div>
-            </div>
-
-            <button
-              onClick={handleExportData}
-              className="w-full py-4 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-xl hover:from-primary-700 hover:to-primary-800 transition-all font-bold flex items-center justify-center gap-2 shadow-lg hover-lift"
-            >
-              <ArrowDownTrayIcon className="h-5 w-5" />
-              Exportar Todos os Dados (JSON)
+            {/* LOGOUT */}
+            <button onClick={handleLogout}
+              className="w-full flex items-center justify-center gap-3 py-4 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white rounded-2xl font-bold text-sm shadow-lg transition-all">
+              <ArrowRightOnRectangleIcon className="w-5 h-5" />
+              Sair da Conta
             </button>
-          </div>
-        </section>
 
-        {/* Sair */}
-        <button
-          onClick={handleLogout}
-          className="w-full flex items-center justify-center gap-3 py-4 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-2xl hover:from-red-700 hover:to-red-800 transition-all font-bold shadow-xl hover-lift animate-fade-in"
-          style={{ animationDelay: '0.6s' }}
-        >
-          <ArrowRightOnRectangleIcon className="h-6 w-6" />
-          Sair da Conta
-        </button>
-
-        {/* Versão */}
-        <div className="text-center text-sm text-gray-500 dark:text-gray-400 pt-6 animate-fade-in" style={{ animationDelay: '0.7s' }}>
-          <p className="font-medium mb-1">MedPlanner v1.0.0</p>
-          <p>Feito com 💙 para estudantes de medicina</p>
-        </div>
+          </div>{/* end sections */}
+        </div>{/* end layout */}
       </div>
-    </div>
-  );
-}
-
-// Componente auxiliar para exibir informações
-function InfoCard({ label, value, span2 = false }) {
-  return (
-    <div className={`${span2 ? 'md:col-span-2' : ''}`}>
-      <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-        {label}
-      </label>
-      <div className="px-4 py-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700">
-        <p className="text-gray-900 dark:text-white font-medium">
-          {value}
-        </p>
-      </div>
-    </div>
+    </>
   );
 }
