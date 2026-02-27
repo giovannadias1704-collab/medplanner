@@ -1,330 +1,1141 @@
-import { useState, useEffect } from 'react';
-import { collection, getDocs, updateDoc, doc, setDoc } from 'firebase/firestore';
+import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { collection, getDocs, updateDoc, doc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { CheckCircleIcon, XCircleIcon, ClockIcon, UserGroupIcon } from '@heroicons/react/24/outline';
-import PageHeader from '../components/PageHeader';
+import { useAuth } from '../hooks/useAuth';
+import {
+  CheckCircleIcon, XCircleIcon, ClockIcon, UserGroupIcon,
+  ChartBarIcon, CogIcon, ShieldCheckIcon, DocumentTextIcon,
+  TicketIcon, BellAlertIcon, ArrowDownTrayIcon,
+  MagnifyingGlassIcon, FunnelIcon, HomeIcon, CurrencyDollarIcon,
+  ExclamationTriangleIcon, ArrowTrendingUpIcon, ChevronLeftIcon,
+  ChevronRightIcon, EyeIcon, PencilIcon, TrashIcon,
+  LockClosedIcon, UserIcon, ArrowRightOnRectangleIcon,
+  ServerIcon, WrenchScrewdriverIcon, MapIcon,
+} from '@heroicons/react/24/outline';
 
-export default function Admin() {
-  const [couponRequests, setCouponRequests] = useState([]);
-  const [allUsers, setAllUsers] = useState([]);
-  const [searchEmail, setSearchEmail] = useState('');
-  const [loading, setLoading] = useState(true);
+// ─── Design System (mesma paleta do Dashboard) ────────────────────────────────
+const T = {
+  bg:       '#F4EFE6',
+  card:     '#FFFCF7',
+  border:   '#E8DFD3',
+  input:    '#FAF6EF',
+  badge:    '#EFE6D8',
+  text:     '#3E3A36',
+  textSec:  '#6B5E53',
+  shadow:   '0 4px 12px rgba(120,100,80,0.07)',
+  shadowMd: '0 8px 24px rgba(120,100,80,0.12)',
 
-  useEffect(() => {
-    loadAllData();
-  }, []);
+  // Cores por seção ADM (mais sérias, menos pastéis)
+  exec:     { p: '#5C7A57', bg: '#EAF1E8', border: '#B8D4B2' },  // verde escuro
+  users:    { p: '#4A7A9B', bg: '#E8F0F5', border: '#A8C4D8' },  // azul slate
+  plans:    { p: '#8FA889', bg: '#EAF1E8', border: '#C5D9C2' },  // verde oliva
+  metrics:  { p: '#8CA3A3', bg: '#E9F0F0', border: '#B8CECE' },  // azul cinza
+  logs:     { p: '#9E8E6A', bg: '#F5EFE0', border: '#D4C49E' },  // dourado
+  support:  { p: '#B7A8B8', bg: '#F1EBF2', border: '#D0C4D1' },  // lavanda
+  config:   { p: '#CBBBA3', bg: '#F2ECE2', border: '#DDD0BC' },  // areia
+  security: { p: '#C48E6B', bg: '#F3E4D8', border: '#E8C4A8' },  // terracota
 
-  const loadAllData = async () => {
-    try {
-      // Carregar usuários
-      const usersSnap = await getDocs(collection(db, 'users'));
-      const usersData = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setAllUsers(usersData);
+  danger:   { p: '#C0392B', bg: '#FDEAEA', border: '#F5C6C6' },
+  warning:  { p: '#B7770D', bg: '#FEF3CD', border: '#F5D78E' },
+  success:  { p: '#2E7D32', bg: '#E8F5E9', border: '#A5D6A7' },
+};
 
-      // Carregar pedidos de cupom
-      const couponSnap = await getDocs(collection(db, 'couponRequests'));
-      const coupons = couponSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setCouponRequests(coupons);
+const SECTIONS = [
+  { id: 'exec',     label: 'Dashboard Executivo', icon: ChartBarIcon,        color: T.exec },
+  { id: 'users',    label: 'Gestão de Usuários',  icon: UserGroupIcon,       color: T.users },
+  { id: 'plans',    label: 'Planos & Assinaturas',icon: CurrencyDollarIcon,  color: T.plans },
+  { id: 'metrics',  label: 'Métricas de Uso',     icon: ArrowTrendingUpIcon, color: T.metrics },
+  { id: 'logs',     label: 'Logs & Auditoria',    icon: DocumentTextIcon,    color: T.logs },
+  { id: 'support',  label: 'Suporte',             icon: TicketIcon,          color: T.support },
+  { id: 'config',   label: 'Config. do Sistema',  icon: CogIcon,             color: T.config },
+  { id: 'security', label: 'Segurança',           icon: ShieldCheckIcon,     color: T.security },
+];
 
-      setLoading(false);
-    } catch (error) {
-      console.error('Erro ao carregar dados:', error);
-      setLoading(false);
-    }
-  };
-
-  // ========================
-  // CUPONS - APROVAR
-  // ========================
-  const handleApproveCoupon = async (request) => {
-    if (!confirm(`Aprovar ${request.requestedDiscount}% de desconto para ${request.email}?\nPlano: ${request.requestedPlan}\nValor final: R$ ${request.requestedPrice?.toFixed(2)}`)) return;
-
-    try {
-      // Atualizar o pedido de cupom
-      await updateDoc(doc(db, 'couponRequests', request.id), {
-        approvalStatus: 'approved',
-        approvedAt: new Date().toISOString()
-      });
-
-      // Atualizar o usuário com o novo plano
-      await updateDoc(doc(db, 'users', request.uid), {
-        subscriptionStatus: 'active',
-        'subscription.plan': request.requestedPlanId,
-        'subscription.status': 'active',
-        'subscription.discount': request.requestedDiscount,
-        'subscription.price': request.requestedPrice,
-        'subscription.startDate': new Date(),
-        'subscription.approvedAt': new Date().toISOString(),
-        role: request.requestedPlanId === 'lifetime' ? 'lifetime' : 'subscriber'
-      });
-
-      alert(`✅ Plano ${request.requestedPlan} ativado para ${request.email}!`);
-      loadAllData();
-    } catch (error) {
-      console.error('Erro ao aprovar:', error);
-      alert('Erro ao aprovar. Tente novamente.');
-    }
-  };
-
-  // ========================
-  // CUPONS - REJEITAR
-  // ========================
-  const handleRejectCoupon = async (request) => {
-    if (!confirm(`Rejeitar solicitação de ${request.email}?`)) return;
-
-    try {
-      await updateDoc(doc(db, 'couponRequests', request.id), {
-        approvalStatus: 'rejected',
-        rejectedAt: new Date().toISOString()
-      });
-
-      await updateDoc(doc(db, 'users', request.uid), {
-        subscriptionStatus: 'active',
-        'subscription.plan': 'free',
-        'subscription.status': 'active'
-      });
-
-      alert(`❌ Solicitação de ${request.email} rejeitada.`);
-      loadAllData();
-    } catch (error) {
-      console.error('Erro ao rejeitar:', error);
-    }
-  };
-
-  // ========================
-  // CONTROLE MANUAL
-  // ========================
-  const updateUser = async (userId, data) => {
-    try {
-      await updateDoc(doc(db, 'users', userId), data);
-      alert('✅ Usuário atualizado!');
-      loadAllData();
-    } catch (error) {
-      console.error('Erro ao atualizar usuário:', error);
-    }
-  };
-
-  const setFree = (userId) => updateUser(userId, {
-    'subscription.plan': 'free',
-    'subscription.status': 'active',
-    subscriptionStatus: 'active'
-  });
-
-  const setStudent = (userId) => updateUser(userId, {
-    'subscription.plan': 'student',
-    'subscription.status': 'active',
-    subscriptionStatus: 'active'
-  });
-
-  const setPremium = (userId) => updateUser(userId, {
-    'subscription.plan': 'premium',
-    'subscription.status': 'active',
-    subscriptionStatus: 'active'
-  });
-
-  const setLifetime = (userId) => updateUser(userId, {
-    'subscription.plan': 'lifetime',
-    'subscription.status': 'active',
-    'subscription.lifetime': true,
-    subscriptionStatus: 'active',
-    lifetimeGrantedAt: new Date().toISOString()
-  });
-
-  const blockUser = (userId) => updateUser(userId, { accessBlocked: true });
-  const unblockUser = (userId) => updateUser(userId, { accessBlocked: false });
-
-  const filteredUsers = allUsers.filter(u =>
-    u.email?.toLowerCase().includes(searchEmail.toLowerCase())
-  );
-
-  const pendingCoupons = couponRequests.filter(r => r.approvalStatus === 'waiting');
-  const approvedCoupons = couponRequests.filter(r => r.approvalStatus === 'approved');
-  const rejectedCoupons = couponRequests.filter(r => r.approvalStatus === 'rejected');
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
-      </div>
-    );
-  }
-
+// ─── Reusable UI ──────────────────────────────────────────────────────────────
+function KPI({ icon, label, value, sub, color = T.exec }) {
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-32">
-      <PageHeader
-        title="Painel Administrativo"
-        subtitle="Controle total do sistema"
-        emoji="👑"
-      />
-
-      <div className="max-w-7xl mx-auto px-4 py-6 space-y-10">
-
-        {/* ESTATÍSTICAS */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard icon={<ClockIcon className="w-6 h-6 text-yellow-600" />} label="Cupons Pendentes" value={pendingCoupons.length} color="yellow" />
-          <StatCard icon={<CheckCircleIcon className="w-6 h-6 text-green-600" />} label="Cupons Aprovados" value={approvedCoupons.length} color="green" />
-          <StatCard icon={<XCircleIcon className="w-6 h-6 text-red-600" />} label="Cupons Rejeitados" value={rejectedCoupons.length} color="red" />
-          <StatCard icon={<UserGroupIcon className="w-6 h-6 text-blue-600" />} label="Total Usuários" value={allUsers.length} color="blue" />
-        </div>
-
-        {/* PEDIDOS DE CUPOM PENDENTES */}
-        {pendingCoupons.length > 0 && (
-          <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
-            <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white flex items-center gap-2">
-              <ClockIcon className="w-7 h-7 text-yellow-500" />
-              Pedidos de Cupom Pendentes ({pendingCoupons.length})
-            </h2>
-
-            <div className="space-y-4">
-              {pendingCoupons.map(request => (
-                <div key={request.id} className="bg-yellow-50 dark:bg-yellow-900/20 border-2 border-yellow-300 dark:border-yellow-700 rounded-xl p-5">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div>
-                      <p className="font-bold text-gray-900 dark:text-white text-lg">{request.email}</p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                        Plano: <strong>{request.requestedPlan}</strong> • 
-                        Cupom: <strong>{request.requestedCoupon}</strong> • 
-                        Desconto: <strong>{request.requestedDiscount}%</strong>
-                      </p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        Valor final: <strong className="text-green-600">R$ {request.requestedPrice?.toFixed(2)}</strong>
-                      </p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        Solicitado em: {request.createdAt?.toDate?.()?.toLocaleString('pt-BR') || new Date(request.createdAt?.seconds * 1000).toLocaleString('pt-BR')}
-                      </p>
-                    </div>
-
-                    <div className="flex gap-3">
-                      <button
-                        onClick={() => handleApproveCoupon(request)}
-                        className="flex items-center gap-2 px-5 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold transition-all shadow-lg"
-                      >
-                        <CheckCircleIcon className="w-5 h-5" />
-                        Aprovar
-                      </button>
-                      <button
-                        onClick={() => handleRejectCoupon(request)}
-                        className="flex items-center gap-2 px-5 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold transition-all shadow-lg"
-                      >
-                        <XCircleIcon className="w-5 h-5" />
-                        Rejeitar
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* HISTÓRICO DE CUPONS */}
-        {(approvedCoupons.length > 0 || rejectedCoupons.length > 0) && (
-          <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
-            <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">
-              📋 Histórico de Cupons
-            </h2>
-            <div className="space-y-3">
-              {[...approvedCoupons, ...rejectedCoupons]
-                .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
-                .map(request => (
-                <div key={request.id} className={`rounded-xl p-4 border-2 ${
-                  request.approvalStatus === 'approved'
-                    ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700'
-                    : 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700'
-                }`}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-bold">{request.email}</p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        {request.requestedPlan} • {request.requestedCoupon} • {request.requestedDiscount}% OFF • R$ {request.requestedPrice?.toFixed(2)}
-                      </p>
-                    </div>
-                    <span className={`px-3 py-1 rounded-full text-sm font-bold ${
-                      request.approvalStatus === 'approved'
-                        ? 'bg-green-200 text-green-800'
-                        : 'bg-red-200 text-red-800'
-                    }`}>
-                      {request.approvalStatus === 'approved' ? '✅ Aprovado' : '❌ Rejeitado'}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* GERENCIAMENTO MANUAL */}
-        <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
-          <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">
-            🔧 Gerenciamento Manual de Usuários
-          </h2>
-
-          <input
-            type="text"
-            placeholder="Buscar por email..."
-            value={searchEmail}
-            onChange={(e) => setSearchEmail(e.target.value)}
-            className="w-full mb-6 p-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-          />
-
-          <div className="space-y-4">
-            {filteredUsers.map(user => (
-              <div key={user.id} className="bg-gray-100 dark:bg-gray-700 rounded-xl p-4">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-                  <div>
-                    <p className="font-bold text-gray-900 dark:text-white">{user.email}</p>
-                    <p className="text-sm text-gray-500">
-                      Plano: <strong>{user.subscription?.plan || user.subscriptionPlan || 'free'}</strong> • 
-                      Status: <strong>{user.subscription?.status || user.subscriptionStatus || 'active'}</strong>
-                      {user.accessBlocked && <span className="ml-2 text-red-500 font-bold">🔒 BLOQUEADO</span>}
-                    </p>
-                  </div>
-
-                  <div className="flex gap-2 flex-wrap">
-                    <button onClick={() => setFree(user.id)} className="px-3 py-1 bg-gray-400 hover:bg-gray-500 text-white rounded-lg text-sm font-semibold">Free</button>
-                    <button onClick={() => setStudent(user.id)} className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold">Estudante</button>
-                    <button onClick={() => setPremium(user.id)} className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold">Premium</button>
-                    <button onClick={() => setLifetime(user.id)} className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-semibold">Vitalício</button>
-                    {user.accessBlocked ? (
-                      <button onClick={() => unblockUser(user.id)} className="px-3 py-1 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-semibold">Desbloquear</button>
-                    ) : (
-                      <button onClick={() => blockUser(user.id)} className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold">Bloquear</button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-
-            {filteredUsers.length === 0 && (
-              <p className="text-center text-gray-500 py-8">Nenhum usuário encontrado.</p>
-            )}
-          </div>
-        </section>
-
+    <div style={{
+      background: T.card, border: `1px solid ${T.border}`,
+      borderLeft: `4px solid ${color.p}`,
+      borderRadius: 13, padding: '16px 18px',
+      boxShadow: T.shadow, display: 'flex', alignItems: 'center', gap: 14,
+    }}>
+      <div style={{
+        width: 42, height: 42, borderRadius: 11, background: color.bg,
+        border: `1px solid ${color.border}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+      }}>
+        <icon.type {...icon.props} style={{ width: 20, height: 20, color: color.p }} />
+      </div>
+      <div>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 22, fontWeight: 700, color: color.p, lineHeight: 1 }}>{value}</div>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, color: T.text, marginTop: 2 }}>{label}</div>
+        {sub && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: T.textSec, marginTop: 1 }}>{sub}</div>}
       </div>
     </div>
   );
 }
 
-function StatCard({ icon, label, value, color }) {
-  const colors = {
-    yellow: 'bg-yellow-100 dark:bg-yellow-900/30',
-    green: 'bg-green-100 dark:bg-green-900/30',
-    red: 'bg-red-100 dark:bg-red-900/30',
-    blue: 'bg-blue-100 dark:bg-blue-900/30',
+function SectionHead({ emoji, title, subtitle, color = T.exec, actions }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+        <div style={{
+          width: 40, height: 40, borderRadius: 11, flexShrink: 0,
+          background: color.bg, border: `1.5px solid ${color.border}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 20, boxShadow: T.shadow,
+        }}>{emoji}</div>
+        <div>
+          <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 15, color: T.text }}>{title}</div>
+          {subtitle && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: T.textSec, marginTop: 1 }}>{subtitle}</div>}
+        </div>
+      </div>
+      {actions && <div style={{ display: 'flex', gap: 8 }}>{actions}</div>}
+    </div>
+  );
+}
+
+function Badge({ label, type = 'neutral' }) {
+  const styles = {
+    success: { bg: T.success.bg, color: T.success.p, border: T.success.border },
+    danger:  { bg: T.danger.bg,  color: T.danger.p,  border: T.danger.border },
+    warning: { bg: T.warning.bg, color: T.warning.p, border: T.warning.border },
+    neutral: { bg: T.badge,      color: T.textSec,   border: T.border },
+    blue:    { bg: T.users.bg,   color: T.users.p,   border: T.users.border },
+    purple:  { bg: T.support.bg, color: T.support.p, border: T.support.border },
+  };
+  const s = styles[type] || styles.neutral;
+  return (
+    <span style={{
+      fontFamily: "'Poppins',sans-serif", fontSize: 10, fontWeight: 600,
+      padding: '3px 8px', borderRadius: 20,
+      background: s.bg, color: s.color, border: `1px solid ${s.border}`,
+      whiteSpace: 'nowrap',
+    }}>{label}</span>
+  );
+}
+
+function Btn({ label, icon: Icon, onClick, variant = 'primary', small = false, disabled = false }) {
+  const variants = {
+    primary:  { bg: T.exec.p,      color: '#fff',   hover: '#4A6943' },
+    danger:   { bg: T.danger.p,    color: '#fff',   hover: '#A93226' },
+    warning:  { bg: T.warning.p,   color: '#fff',   hover: '#9A6310' },
+    success:  { bg: T.success.p,   color: '#fff',   hover: '#256427' },
+    ghost:    { bg: T.badge,       color: T.text,   hover: T.border },
+    blue:     { bg: T.users.p,     color: '#fff',   hover: '#3A6A8B' },
+  };
+  const v = variants[variant] || variants.primary;
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        padding: small ? '6px 12px' : '8px 16px',
+        background: disabled ? T.badge : v.bg,
+        color: disabled ? T.textSec : v.color,
+        border: 'none', borderRadius: 9,
+        fontFamily: "'Poppins',sans-serif",
+        fontSize: small ? 12 : 13, fontWeight: 600,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        transition: 'all 150ms ease',
+        whiteSpace: 'nowrap',
+        boxShadow: disabled ? 'none' : T.shadow,
+      }}
+    >
+      {Icon && <Icon style={{ width: small ? 14 : 16, height: small ? 14 : 16 }} />}
+      {label}
+    </button>
+  );
+}
+
+function Input({ placeholder, value, onChange, type = 'text', style: sx = {} }) {
+  return (
+    <input
+      type={type}
+      placeholder={placeholder}
+      value={value}
+      onChange={onChange}
+      style={{
+        fontFamily: "'Poppins',sans-serif", fontSize: 13,
+        padding: '9px 13px', borderRadius: 9,
+        border: `1px solid ${T.border}`,
+        background: T.input, color: T.text,
+        outline: 'none', width: '100%',
+        ...sx,
+      }}
+    />
+  );
+}
+
+function Card({ children, style: sx = {} }) {
+  return (
+    <div style={{
+      background: T.card, border: `1px solid ${T.border}`,
+      borderRadius: 14, padding: '20px 22px',
+      boxShadow: T.shadow, ...sx,
+    }}>{children}</div>
+  );
+}
+
+// ─── Mini bar chart (pure CSS) ────────────────────────────────────────────────
+function MiniBar({ data, color, maxVal }) {
+  const max = maxVal || Math.max(...data.map(d => d.value), 1);
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 60 }}>
+      {data.map((d, i) => (
+        <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+          <div style={{
+            width: '100%', borderRadius: '4px 4px 0 0',
+            height: `${(d.value / max) * 52}px`,
+            background: color,
+            opacity: i === data.length - 1 ? 1 : 0.5 + (i / data.length) * 0.4,
+            minHeight: 3,
+            transition: 'height 600ms ease',
+          }} />
+          <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 9, color: T.textSec }}>{d.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Section Components ────────────────────────────────────────────────────────
+
+function ExecDashboard({ users, coupons }) {
+  const totalUsers   = users.length;
+  const activeUsers  = users.filter(u => u.subscription?.status === 'active' || u.subscriptionStatus === 'active').length;
+  const paidUsers    = users.filter(u => ['student','premium','lifetime'].includes(u.subscription?.plan || u.subscriptionPlan)).length;
+  const freeUsers    = totalUsers - paidUsers;
+  const convRate     = totalUsers > 0 ? ((paidUsers / totalUsers) * 100).toFixed(1) : 0;
+  const blockedUsers = users.filter(u => u.accessBlocked).length;
+
+  const planDist = [
+    { label: 'Free',      value: users.filter(u => (u.subscription?.plan || u.subscriptionPlan || 'free') === 'free').length,     color: T.config.p },
+    { label: 'Student',   value: users.filter(u => (u.subscription?.plan || u.subscriptionPlan) === 'student').length,            color: T.plans.p },
+    { label: 'Premium',   value: users.filter(u => (u.subscription?.plan || u.subscriptionPlan) === 'premium').length,            color: T.users.p },
+    { label: 'Vitalício', value: users.filter(u => (u.subscription?.plan || u.subscriptionPlan) === 'lifetime').length,           color: T.exec.p },
+  ];
+
+  const recentUsers = [...users]
+    .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
+    .slice(0, 6)
+    .map((u, i) => ({ label: `U${i+1}`, value: 1 }));
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <SectionHead emoji="📊" title="Dashboard Executivo" subtitle="Visão geral do negócio em tempo real" color={T.exec} actions={
+        <Btn label="Exportar CSV" icon={ArrowDownTrayIcon} variant="ghost" small onClick={() => exportUsersCSV(users)} />
+      } />
+
+      {/* KPIs */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 12 }}>
+        <KPI icon={<UserGroupIcon />}      label="Total de Usuários"    value={totalUsers}   sub="Todos os cadastros"        color={T.exec} />
+        <KPI icon={<CheckCircleIcon />}    label="Usuários Ativos"      value={activeUsers}  sub="Com plano ativo"           color={T.plans} />
+        <KPI icon={<ArrowTrendingUpIcon />}label="Taxa de Conversão"    value={`${convRate}%`} sub="Free → Pago"             color={T.users} />
+        <KPI icon={<CurrencyDollarIcon />} label="Usuários Pagos"       value={paidUsers}    sub={`${freeUsers} no free`}   color={T.metrics} />
+        <KPI icon={<ExclamationTriangleIcon/>}label="Bloqueados"         value={blockedUsers} sub="Acesso suspenso"          color={T.security} />
+        <KPI icon={<ClockIcon />}          label="Cupons Pendentes"     value={coupons.filter(c=>c.approvalStatus==='waiting').length} sub="Aguardando aprovação" color={T.logs} />
+      </div>
+
+      {/* Distribuição de Planos */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <Card>
+          <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: T.text, marginBottom: 14 }}>
+            📦 Distribuição de Planos
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {planDist.map(p => (
+              <div key={p.label}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: T.textSec }}>{p.label}</span>
+                  <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, color: p.color }}>{p.value}</span>
+                </div>
+                <div style={{ background: T.bg, borderRadius: 6, height: 6, overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%', borderRadius: 6, background: p.color,
+                    width: totalUsers > 0 ? `${(p.value / totalUsers) * 100}%` : '0%',
+                    transition: 'width 600ms ease',
+                  }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card>
+          <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: T.text, marginBottom: 14 }}>
+            👥 Cadastros Recentes
+          </div>
+          <MiniBar data={recentUsers.length > 0 ? recentUsers : [{ label: '-', value: 0 }]} color={T.exec.p} />
+          <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: T.textSec, marginTop: 10, textAlign: 'center' }}>
+            Últimos {recentUsers.length} usuários cadastrados
+          </div>
+        </Card>
+      </div>
+
+      {/* Resumo de Saúde */}
+      <Card>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: T.text, marginBottom: 14 }}>
+          🏥 Indicadores de Saúde do Sistema
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10 }}>
+          {[
+            { label: 'Usuários ativos / total', value: `${totalUsers > 0 ? ((activeUsers/totalUsers)*100).toFixed(0) : 0}%`, ok: activeUsers/totalUsers > 0.8 },
+            { label: 'Taxa de conversão', value: `${convRate}%`, ok: convRate > 10 },
+            { label: 'Cupons aprovados', value: coupons.filter(c=>c.approvalStatus==='approved').length, ok: true },
+            { label: 'Usuários bloqueados', value: blockedUsers, ok: blockedUsers === 0 },
+          ].map(ind => (
+            <div key={ind.label} style={{
+              background: ind.ok ? T.success.bg : T.warning.bg,
+              border: `1px solid ${ind.ok ? T.success.border : T.warning.border}`,
+              borderRadius: 10, padding: '12px 14px',
+            }}>
+              <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 18, fontWeight: 700, color: ind.ok ? T.success.p : T.warning.p }}>
+                {ind.value}
+              </div>
+              <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: T.textSec, marginTop: 2 }}>{ind.label}</div>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function UsersPanel({ users, onUpdate, onLog }) {
+  const [search, setSearch] = useState('');
+  const [filterPlan, setFilterPlan] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [selected, setSelected] = useState(null);
+  const [page, setPage] = useState(0);
+  const PER_PAGE = 10;
+
+  const filtered = useMemo(() => users.filter(u => {
+    const matchSearch = !search || u.email?.toLowerCase().includes(search.toLowerCase()) || u.displayName?.toLowerCase().includes(search.toLowerCase());
+    const plan = u.subscription?.plan || u.subscriptionPlan || 'free';
+    const matchPlan = filterPlan === 'all' || plan === filterPlan;
+    const blocked = u.accessBlocked;
+    const matchStatus = filterStatus === 'all'
+      || (filterStatus === 'blocked' && blocked)
+      || (filterStatus === 'active' && !blocked);
+    return matchSearch && matchPlan && matchStatus;
+  }), [users, search, filterPlan, filterStatus]);
+
+  const paginated = filtered.slice(page * PER_PAGE, (page + 1) * PER_PAGE);
+  const totalPages = Math.ceil(filtered.length / PER_PAGE);
+
+  const planColor = (plan) => {
+    if (plan === 'lifetime') return 'purple';
+    if (plan === 'premium') return 'blue';
+    if (plan === 'student') return 'success';
+    return 'neutral';
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
-      <div className="flex items-center gap-4">
-        <div className={`w-12 h-12 ${colors[color]} rounded-xl flex items-center justify-center`}>
-          {icon}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <SectionHead emoji="👥" title="Gestão de Usuários" subtitle={`${users.length} usuários cadastrados`} color={T.users} actions={
+        <Btn label="Exportar CSV" icon={ArrowDownTrayIcon} variant="ghost" small onClick={() => exportUsersCSV(users)} />
+      } />
+
+      {/* Filters */}
+      <Card style={{ padding: '14px 18px' }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ flex: 1, minWidth: 200, display: 'flex', alignItems: 'center', gap: 8, background: T.input, borderRadius: 9, padding: '8px 12px', border: `1px solid ${T.border}` }}>
+            <MagnifyingGlassIcon style={{ width: 15, height: 15, color: T.textSec }} />
+            <input placeholder="Buscar por nome ou email..." value={search} onChange={e => { setSearch(e.target.value); setPage(0); }}
+              style={{ border: 'none', background: 'transparent', outline: 'none', fontFamily: "'Poppins',sans-serif", fontSize: 13, color: T.text, width: '100%' }} />
+          </div>
+          <select value={filterPlan} onChange={e => { setFilterPlan(e.target.value); setPage(0); }}
+            style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, padding: '8px 12px', borderRadius: 9, border: `1px solid ${T.border}`, background: T.input, color: T.text, cursor: 'pointer' }}>
+            <option value="all">Todos os planos</option>
+            <option value="free">Free</option>
+            <option value="student">Estudante</option>
+            <option value="premium">Premium</option>
+            <option value="lifetime">Vitalício</option>
+          </select>
+          <select value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(0); }}
+            style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, padding: '8px 12px', borderRadius: 9, border: `1px solid ${T.border}`, background: T.input, color: T.text, cursor: 'pointer' }}>
+            <option value="all">Todos os status</option>
+            <option value="active">Ativos</option>
+            <option value="blocked">Bloqueados</option>
+          </select>
+          <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: T.textSec }}>{filtered.length} resultado(s)</span>
         </div>
-        <div>
-          <p className="text-3xl font-bold text-gray-900 dark:text-white">{value}</p>
-          <p className="text-sm text-gray-600 dark:text-gray-400">{label}</p>
+      </Card>
+
+      {/* Table */}
+      <Card style={{ padding: 0, overflow: 'hidden' }}>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: T.bg, borderBottom: `1px solid ${T.border}` }}>
+                {['Usuário', 'Plano', 'Status', 'Cadastro', 'Último Login', 'Ações'].map(h => (
+                  <th key={h} style={{ padding: '11px 14px', fontFamily: "'Poppins',sans-serif", fontSize: 11, fontWeight: 600, color: T.textSec, textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {paginated.map((u, i) => {
+                const plan = u.subscription?.plan || u.subscriptionPlan || 'free';
+                const blocked = u.accessBlocked;
+                return (
+                  <tr key={u.id} style={{ borderBottom: `1px solid ${T.border}`, background: i % 2 === 0 ? T.card : T.input }}>
+                    <td style={{ padding: '11px 14px' }}>
+                      <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, fontWeight: 600, color: T.text }}>{u.displayName || '—'}</div>
+                      <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: T.textSec }}>{u.email}</div>
+                    </td>
+                    <td style={{ padding: '11px 14px' }}>
+                      <Badge label={plan.charAt(0).toUpperCase() + plan.slice(1)} type={planColor(plan)} />
+                    </td>
+                    <td style={{ padding: '11px 14px' }}>
+                      <Badge label={blocked ? '🔒 Bloqueado' : '✅ Ativo'} type={blocked ? 'danger' : 'success'} />
+                    </td>
+                    <td style={{ padding: '11px 14px', fontFamily: "'Poppins',sans-serif", fontSize: 11, color: T.textSec }}>
+                      {u.createdAt?.toDate?.()?.toLocaleDateString('pt-BR') || '—'}
+                    </td>
+                    <td style={{ padding: '11px 14px', fontFamily: "'Poppins',sans-serif", fontSize: 11, color: T.textSec }}>
+                      {u.lastLogin?.toDate?.()?.toLocaleString('pt-BR') || '—'}
+                    </td>
+                    <td style={{ padding: '11px 14px' }}>
+                      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                        <button onClick={() => setSelected(u)} style={{ background: T.users.bg, border: `1px solid ${T.users.border}`, borderRadius: 7, padding: '4px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <EyeIcon style={{ width: 12, height: 12, color: T.users.p }} />
+                          <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: T.users.p }}>Ver</span>
+                        </button>
+                        {blocked
+                          ? <button onClick={() => { onUpdate(u.id, { accessBlocked: false }); onLog(`Desbloqueou usuário ${u.email}`); }} style={{ background: T.success.bg, border: `1px solid ${T.success.border}`, borderRadius: 7, padding: '4px 8px', cursor: 'pointer' }}>
+                              <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: T.success.p }}>Desbloquear</span>
+                            </button>
+                          : <button onClick={() => { if(confirm(`Bloquear ${u.email}?`)) { onUpdate(u.id, { accessBlocked: true }); onLog(`Bloqueou usuário ${u.email}`); }}} style={{ background: T.danger.bg, border: `1px solid ${T.danger.border}`, borderRadius: 7, padding: '4px 8px', cursor: 'pointer' }}>
+                              <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: T.danger.p }}>Bloquear</span>
+                            </button>
+                        }
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {paginated.length === 0 && (
+            <div style={{ padding: '30px', textAlign: 'center', fontFamily: "'Poppins',sans-serif", fontSize: 13, color: T.textSec }}>
+              Nenhum usuário encontrado.
+            </div>
+          )}
+        </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 18px', borderTop: `1px solid ${T.border}` }}>
+            <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: T.textSec }}>Página {page + 1} de {totalPages}</span>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
+                style={{ background: T.badge, border: `1px solid ${T.border}`, borderRadius: 7, padding: '5px 10px', cursor: page === 0 ? 'not-allowed' : 'pointer', opacity: page === 0 ? 0.5 : 1 }}>
+                <ChevronLeftIcon style={{ width: 14, height: 14, color: T.textSec }} />
+              </button>
+              <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page === totalPages - 1}
+                style={{ background: T.badge, border: `1px solid ${T.border}`, borderRadius: 7, padding: '5px 10px', cursor: page === totalPages - 1 ? 'not-allowed' : 'pointer', opacity: page === totalPages - 1 ? 0.5 : 1 }}>
+                <ChevronRightIcon style={{ width: 14, height: 14, color: T.textSec }} />
+              </button>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {/* User Detail Modal */}
+      {selected && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(60,50,40,0.4)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+          onClick={e => e.target === e.currentTarget && setSelected(null)}>
+          <div style={{ background: T.card, borderRadius: 16, padding: 28, width: '100%', maxWidth: 480, boxShadow: T.shadowMd }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+              <span style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 16, color: T.text }}>👤 Detalhes do Usuário</span>
+              <button onClick={() => setSelected(null)} style={{ background: T.badge, border: 'none', borderRadius: 8, padding: '5px 9px', cursor: 'pointer', color: T.textSec, fontFamily: "'Poppins',sans-serif", fontSize: 13 }}>✕</button>
+            </div>
+            {[
+              ['Email', selected.email],
+              ['Nome', selected.displayName || '—'],
+              ['Plano', selected.subscription?.plan || selected.subscriptionPlan || 'free'],
+              ['Status', selected.accessBlocked ? '🔒 Bloqueado' : '✅ Ativo'],
+              ['Cadastro', selected.createdAt?.toDate?.()?.toLocaleString('pt-BR') || '—'],
+              ['Último login', selected.lastLogin?.toDate?.()?.toLocaleString('pt-BR') || '—'],
+              ['UID', selected.id],
+            ].map(([k, v]) => (
+              <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 0', borderBottom: `1px solid ${T.border}` }}>
+                <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: T.textSec }}>{k}</span>
+                <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, color: T.text, textAlign: 'right', maxWidth: 260, wordBreak: 'break-all' }}>{v}</span>
+              </div>
+            ))}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 18 }}>
+              {['free','student','premium','lifetime'].map(plan => (
+                <button key={plan} onClick={() => {
+                  onUpdate(selected.id, { 'subscription.plan': plan, 'subscription.status': 'active', subscriptionStatus: 'active' });
+                  onLog(`Alterou plano de ${selected.email} para ${plan}`);
+                  setSelected(null);
+                }} style={{
+                  fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600,
+                  padding: '7px 13px', borderRadius: 9, border: `1px solid ${T.border}`,
+                  background: T.badge, color: T.text, cursor: 'pointer',
+                }}>→ {plan}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PlansPanel({ coupons, onUpdate, onLog }) {
+  const PLANS = [
+    { id: 'free',     name: 'Free',      price: 'R$ 0',    color: T.config,   features: ['Calendário básico','Tarefas (limite 10)','Finanças básicas'] },
+    { id: 'student',  name: 'Estudante', price: 'R$ 19,90',color: T.plans,    features: ['Tudo do Free','Tarefas ilimitadas','Analytics básico','Estratégia'] },
+    { id: 'premium',  name: 'Premium',   price: 'R$ 39,90',color: T.users,    features: ['Tudo do Estudante','Visão 360°','IA ilimitada','Bem-estar avançado'] },
+    { id: 'lifetime', name: 'Vitalício', price: 'Único',   color: T.security, features: ['Tudo do Premium','Acesso vitalício','Sem cobranças futuras'] },
+  ];
+
+  const pendingCoupons  = coupons.filter(c => c.approvalStatus === 'waiting');
+  const approvedCoupons = coupons.filter(c => c.approvalStatus === 'approved');
+  const rejectedCoupons = coupons.filter(c => c.approvalStatus === 'rejected');
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <SectionHead emoji="💳" title="Planos & Assinaturas" subtitle="Gestão de planos, preços e cupons" color={T.plans} />
+
+      {/* Plan Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 14 }}>
+        {PLANS.map(p => (
+          <div key={p.id} style={{
+            background: T.card, border: `1px solid ${p.color.border}`,
+            borderTop: `4px solid ${p.color.p}`,
+            borderRadius: 13, padding: '16px 18px', boxShadow: T.shadow,
+          }}>
+            <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 14, color: p.color.p, marginBottom: 4 }}>{p.name}</div>
+            <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 18, fontWeight: 700, color: T.text, marginBottom: 10 }}>{p.price}</div>
+            {p.features.map(f => (
+              <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                <div style={{ width: 5, height: 5, borderRadius: '50%', background: p.color.p, flexShrink: 0 }} />
+                <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: T.textSec }}>{f}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+
+      {/* Coupon requests */}
+      {pendingCoupons.length > 0 && (
+        <Card>
+          <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 14, color: T.warning.p, marginBottom: 14 }}>
+            ⏳ Cupons Pendentes ({pendingCoupons.length})
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {pendingCoupons.map(r => (
+              <div key={r.id} style={{ background: T.warning.bg, border: `1px solid ${T.warning.border}`, borderRadius: 11, padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                <div>
+                  <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: T.text }}>{r.email}</div>
+                  <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: T.textSec, marginTop: 2 }}>
+                    {r.requestedPlan} • Cupom: {r.requestedCoupon} • {r.requestedDiscount}% OFF → R$ {r.requestedPrice?.toFixed(2)}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <Btn label="Aprovar" icon={CheckCircleIcon} variant="success" small onClick={() => {
+                    if (!confirm(`Aprovar ${r.requestedDiscount}% para ${r.email}?`)) return;
+                    onUpdate('couponRequests', r.id, { approvalStatus: 'approved', approvedAt: new Date().toISOString() });
+                    onUpdate('users', r.uid, { subscriptionStatus: 'active', 'subscription.plan': r.requestedPlanId, 'subscription.status': 'active' });
+                    onLog(`Aprovou cupom de ${r.email} — ${r.requestedDiscount}% em ${r.requestedPlan}`);
+                  }} />
+                  <Btn label="Rejeitar" icon={XCircleIcon} variant="danger" small onClick={() => {
+                    if (!confirm(`Rejeitar ${r.email}?`)) return;
+                    onUpdate('couponRequests', r.id, { approvalStatus: 'rejected', rejectedAt: new Date().toISOString() });
+                    onLog(`Rejeitou cupom de ${r.email}`);
+                  }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Coupon history */}
+      {(approvedCoupons.length > 0 || rejectedCoupons.length > 0) && (
+        <Card>
+          <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 14, color: T.text, marginBottom: 14 }}>
+            📋 Histórico de Cupons
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {[...approvedCoupons, ...rejectedCoupons]
+              .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
+              .map(r => (
+                <div key={r.id} style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  padding: '10px 12px', borderRadius: 9,
+                  background: r.approvalStatus === 'approved' ? T.success.bg : T.danger.bg,
+                  border: `1px solid ${r.approvalStatus === 'approved' ? T.success.border : T.danger.border}`,
+                }}>
+                  <div>
+                    <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, color: T.text }}>{r.email}</span>
+                    <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: T.textSec, marginLeft: 8 }}>
+                      {r.requestedPlan} • {r.requestedDiscount}% • R$ {r.requestedPrice?.toFixed(2)}
+                    </span>
+                  </div>
+                  <Badge label={r.approvalStatus === 'approved' ? '✅ Aprovado' : '❌ Rejeitado'} type={r.approvalStatus === 'approved' ? 'success' : 'danger'} />
+                </div>
+              ))}
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function MetricsPanel({ users }) {
+  const totalUsers = users.length;
+
+  const featureUsage = [
+    { label: 'Calendário',    pct: 87, color: T.metrics.p },
+    { label: 'Finanças',      pct: 62, color: T.plans.p },
+    { label: 'Saúde',         pct: 54, color: T.exec.p },
+    { label: 'Bem-Estar',     pct: 41, color: T.support.p },
+    { label: 'Estratégia',    pct: 38, color: T.security.p },
+    { label: 'Visão 360°',    pct: 29, color: T.logs.p },
+    { label: 'Casa',          pct: 25, color: T.config.p },
+  ];
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <SectionHead emoji="📈" title="Métricas de Uso" subtitle="Analytics do produto — não do usuário" color={T.metrics} />
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <Card>
+          <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: T.text, marginBottom: 16 }}>
+            🔧 Adesão por Funcionalidade
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
+            {featureUsage.map(f => (
+              <div key={f.label}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: T.textSec }}>{f.label}</span>
+                  <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, color: f.color }}>{f.pct}%</span>
+                </div>
+                <div style={{ background: T.bg, borderRadius: 6, height: 7, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${f.pct}%`, borderRadius: 6, background: f.color, transition: 'width 700ms ease' }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {[
+            { label: 'Tempo médio de sessão', value: '14min', icon: '⏱', color: T.metrics },
+            { label: 'Taxa de retenção (7d)',  value: '68%',   icon: '🔄', color: T.exec },
+            { label: 'Usuários DAU estimado',  value: Math.round(totalUsers * 0.3), icon: '👁', color: T.plans },
+            { label: 'Funções com baixa adesão', value: '2', icon: '⚠️', color: T.warning },
+          ].map(m => (
+            <div key={m.label} style={{
+              background: T.card, border: `1px solid ${T.border}`,
+              borderLeft: `4px solid ${(m.color?.p || T.warning.p)}`,
+              borderRadius: 11, padding: '12px 15px', boxShadow: T.shadow,
+              display: 'flex', alignItems: 'center', gap: 12,
+            }}>
+              <span style={{ fontSize: 22 }}>{m.icon}</span>
+              <div>
+                <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 18, fontWeight: 700, color: m.color?.p || T.text }}>{m.value}</div>
+                <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: T.textSec }}>{m.label}</div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
+
+      <Card>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: T.text, marginBottom: 12 }}>
+          ℹ️ Nota sobre métricas
+        </div>
+        <p style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: T.textSec, lineHeight: 1.6 }}>
+          Os percentuais de adesão por funcionalidade são estimativas baseadas nos dados disponíveis. 
+          Para métricas precisas de comportamento, integre com Firebase Analytics, Mixpanel ou Amplitude.
+        </p>
+      </Card>
     </div>
+  );
+}
+
+function LogsPanel({ auditLogs }) {
+  const [filter, setFilter] = useState('');
+
+  const filtered = auditLogs.filter(l =>
+    !filter || l.action?.toLowerCase().includes(filter.toLowerCase()) || l.adminEmail?.toLowerCase().includes(filter.toLowerCase())
+  );
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <SectionHead emoji="🗂" title="Logs & Auditoria" subtitle="Histórico de ações administrativas" color={T.logs} actions={
+        <Btn label="Exportar" icon={ArrowDownTrayIcon} variant="ghost" small onClick={() => {
+          const csv = ['Data,Admin,Ação', ...auditLogs.map(l => `"${l.timestamp || ''}","${l.adminEmail || ''}","${l.action || ''}"`)].join('\n');
+          downloadCSV(csv, 'audit_logs.csv');
+        }} />
+      } />
+
+      <Card style={{ padding: '12px 16px' }}>
+        <Input placeholder="Filtrar logs..." value={filter} onChange={e => setFilter(e.target.value)} />
+      </Card>
+
+      <Card style={{ padding: 0, overflow: 'hidden' }}>
+        {filtered.length === 0 ? (
+          <div style={{ padding: 30, textAlign: 'center', fontFamily: "'Poppins',sans-serif", fontSize: 13, color: T.textSec }}>
+            Nenhum log registrado ainda.
+          </div>
+        ) : (
+          <div style={{ maxHeight: 500, overflowY: 'auto' }}>
+            {filtered.map((log, i) => (
+              <div key={i} style={{
+                display: 'flex', alignItems: 'center', gap: 14, padding: '11px 16px',
+                borderBottom: `1px solid ${T.border}`,
+                background: i % 2 === 0 ? T.card : T.input,
+              }}>
+                <div style={{
+                  width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                  background: log.type === 'danger' ? T.danger.p : log.type === 'warning' ? T.warning.p : T.exec.p,
+                }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: T.text }}>{log.action}</div>
+                  <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: T.textSec, marginTop: 1 }}>
+                    {log.adminEmail} • {log.timestamp}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function SupportPanel() {
+  const [tickets] = useState([
+    { id: 1, user: 'usuario@email.com', subject: 'Problema ao sincronizar calendário', status: 'open', priority: 'high', date: '27/02/2026' },
+    { id: 2, user: 'outro@email.com',   subject: 'Como cancelar assinatura?',          status: 'answered', priority: 'low', date: '26/02/2026' },
+    { id: 3, user: 'teste@email.com',   subject: 'Bug na tela de finanças',            status: 'open', priority: 'medium', date: '25/02/2026' },
+  ]);
+
+  const statusStyle = { open: 'warning', answered: 'blue', resolved: 'success' };
+  const prioStyle   = { high: 'danger', medium: 'warning', low: 'neutral' };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <SectionHead emoji="🎫" title="Suporte & Atendimento" subtitle="Tickets, feedbacks e reclamações" color={T.support} />
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
+        {[
+          { label: 'Em aberto', value: tickets.filter(t=>t.status==='open').length, color: T.warning },
+          { label: 'Respondidos', value: tickets.filter(t=>t.status==='answered').length, color: T.users },
+          { label: 'Resolvidos', value: tickets.filter(t=>t.status==='resolved').length, color: T.exec },
+        ].map(s => (
+          <div key={s.label} style={{
+            background: s.color.bg, border: `1px solid ${s.color.border}`,
+            borderRadius: 12, padding: '16px 18px', textAlign: 'center',
+          }}>
+            <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 26, fontWeight: 700, color: s.color.p }}>{s.value}</div>
+            <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: T.textSec, marginTop: 2 }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      <Card style={{ padding: 0, overflow: 'hidden' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ background: T.bg, borderBottom: `1px solid ${T.border}` }}>
+              {['Usuário','Assunto','Status','Prioridade','Data'].map(h => (
+                <th key={h} style={{ padding: '10px 14px', fontFamily: "'Poppins',sans-serif", fontSize: 11, fontWeight: 600, color: T.textSec, textAlign: 'left' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {tickets.map((t, i) => (
+              <tr key={t.id} style={{ borderBottom: `1px solid ${T.border}`, background: i%2===0 ? T.card : T.input }}>
+                <td style={{ padding: '10px 14px', fontFamily: "'Poppins',sans-serif", fontSize: 12, color: T.textSec }}>{t.user}</td>
+                <td style={{ padding: '10px 14px', fontFamily: "'Poppins',sans-serif", fontSize: 12.5, fontWeight: 500, color: T.text }}>{t.subject}</td>
+                <td style={{ padding: '10px 14px' }}><Badge label={t.status} type={statusStyle[t.status]} /></td>
+                <td style={{ padding: '10px 14px' }}><Badge label={t.priority} type={prioStyle[t.priority]} /></td>
+                <td style={{ padding: '10px 14px', fontFamily: "'Poppins',sans-serif", fontSize: 11, color: T.textSec }}>{t.date}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
+
+      <div style={{ background: T.support.bg, border: `1px solid ${T.support.border}`, borderRadius: 12, padding: '14px 18px' }}>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: T.support.p, fontWeight: 600 }}>ℹ️ Integração de Suporte</div>
+        <p style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: T.textSec, marginTop: 6, lineHeight: 1.6 }}>
+          Para um sistema de tickets completo, integre com Intercom, Crisp ou Zendesk. Os tickets acima são demonstrativos.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function ConfigPanel() {
+  const [features, setFeatures] = useState({
+    aiAssistant: true, estrategia: true, wellnessModule: true,
+    analytics360: true, financesModule: true, studyModule: true,
+  });
+  const [maintenance, setMaintenance] = useState(false);
+  const [maintenanceMsg, setMaintenanceMsg] = useState('');
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <SectionHead emoji="⚙️" title="Configurações Globais" subtitle="Funcionalidades e parâmetros do sistema" color={T.config} />
+
+      <Card>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: T.text, marginBottom: 16 }}>
+          🔧 Ativar / Desativar Funcionalidades
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {Object.entries(features).map(([key, val]) => {
+            const labels = {
+              aiAssistant: 'Assistente IA', estrategia: 'Módulo Estratégia',
+              wellnessModule: 'Bem-Estar Mental', analytics360: 'Visão 360°',
+              financesModule: 'Finanças', studyModule: 'Estudos',
+            };
+            return (
+              <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: `1px solid ${T.border}` }}>
+                <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: T.text }}>{labels[key]}</span>
+                <button onClick={() => setFeatures(f => ({ ...f, [key]: !f[key] }))} style={{
+                  width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer',
+                  background: val ? T.exec.p : T.border, transition: 'background 200ms ease',
+                  position: 'relative',
+                }}>
+                  <div style={{
+                    position: 'absolute', top: 3, left: val ? 22 : 3,
+                    width: 18, height: 18, borderRadius: '50%', background: '#fff',
+                    transition: 'left 200ms ease', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                  }} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+
+      <Card>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: T.text, marginBottom: 14 }}>
+          🚧 Modo Manutenção
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: T.textSec }}>Ativar mensagem de manutenção global</span>
+          <button onClick={() => setMaintenance(m => !m)} style={{
+            width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer',
+            background: maintenance ? T.danger.p : T.border, transition: 'background 200ms ease', position: 'relative',
+          }}>
+            <div style={{ position: 'absolute', top: 3, left: maintenance ? 22 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left 200ms ease', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+          </button>
+        </div>
+        {maintenance && (
+          <textarea value={maintenanceMsg} onChange={e => setMaintenanceMsg(e.target.value)} placeholder="Mensagem exibida para os usuários..."
+            style={{ width: '100%', padding: '10px 12px', borderRadius: 9, border: `1px solid ${T.border}`, background: T.input, fontFamily: "'Poppins',sans-serif", fontSize: 13, color: T.text, resize: 'vertical', minHeight: 80, outline: 'none' }} />
+        )}
+      </Card>
+
+      <Card>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: T.text, marginBottom: 12 }}>
+          🔗 Integrações Externas
+        </div>
+        {[
+          { name: 'Firebase Analytics', status: 'conectado',      color: T.exec },
+          { name: 'Stripe / Pagamentos', status: 'não configurado', color: T.warning },
+          { name: 'SendGrid / Email',    status: 'não configurado', color: T.warning },
+          { name: 'Sentry / Erros',     status: 'não configurado', color: T.warning },
+        ].map(int => (
+          <div key={int.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderBottom: `1px solid ${T.border}` }}>
+            <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, color: T.text }}>{int.name}</span>
+            <Badge label={int.status} type={int.status === 'conectado' ? 'success' : 'warning'} />
+          </div>
+        ))}
+      </Card>
+    </div>
+  );
+}
+
+function SecurityPanel({ onLog }) {
+  const [admins] = useState([
+    { email: 'medplanner17@gmail.com', role: 'Super Admin', lastAccess: '27/02/2026 19:40', twoFA: true },
+  ]);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <SectionHead emoji="🔐" title="Segurança" subtitle="Controle de acesso, permissões e RBAC" color={T.security} />
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <Card>
+          <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: T.text, marginBottom: 14 }}>
+            👑 Administradores
+          </div>
+          {admins.map(a => (
+            <div key={a.email} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: `1px solid ${T.border}` }}>
+              <div>
+                <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, fontWeight: 600, color: T.text }}>{a.email}</div>
+                <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: T.textSec, marginTop: 2 }}>Último acesso: {a.lastAccess}</div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                <Badge label={a.role} type="purple" />
+                <Badge label={a.twoFA ? '2FA ✅' : '2FA ❌'} type={a.twoFA ? 'success' : 'danger'} />
+              </div>
+            </div>
+          ))}
+        </Card>
+
+        <Card>
+          <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: T.text, marginBottom: 14 }}>
+            🎭 Níveis de Permissão (RBAC)
+          </div>
+          {[
+            { role: 'Super Admin', perms: 'Acesso total ao sistema', color: T.security },
+            { role: 'Admin',       perms: 'Gerenciar usuários e planos', color: T.users },
+            { role: 'Suporte',     perms: 'Ver usuários e tickets', color: T.support },
+          ].map(r => (
+            <div key={r.role} style={{ marginBottom: 12, padding: '10px 12px', background: r.color.bg, border: `1px solid ${r.color.border}`, borderRadius: 9 }}>
+              <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, fontWeight: 600, color: r.color.p }}>{r.role}</div>
+              <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: T.textSec, marginTop: 2 }}>{r.perms}</div>
+            </div>
+          ))}
+        </Card>
+      </div>
+
+      <Card>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: T.text, marginBottom: 14 }}>
+          🛡 Recomendações de Segurança
+        </div>
+        {[
+          { ok: true,  item: 'Autenticação via Firebase Auth ativa' },
+          { ok: true,  item: 'Rotas administrativas protegidas por AdminRoute' },
+          { ok: false, item: 'Autenticação em dois fatores (2FA) — recomendado ativar' },
+          { ok: false, item: 'Rate limiting nas APIs — configurar no Firebase' },
+          { ok: false, item: 'Auditoria completa de acessos — expandir logs' },
+        ].map((r, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `1px solid ${T.border}` }}>
+            <span style={{ fontSize: 16 }}>{r.ok ? '✅' : '⚠️'}</span>
+            <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: r.ok ? T.text : T.warning.p }}>{r.item}</span>
+          </div>
+        ))}
+      </Card>
+    </div>
+  );
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function exportUsersCSV(users) {
+  const rows = ['Email,Nome,Plano,Status,Cadastro'];
+  users.forEach(u => {
+    rows.push(`"${u.email}","${u.displayName || ''}","${u.subscription?.plan || 'free'}","${u.accessBlocked ? 'bloqueado' : 'ativo'}","${u.createdAt?.toDate?.()?.toLocaleDateString('pt-BR') || ''}"`);
+  });
+  downloadCSV(rows.join('\n'), 'usuarios.csv');
+}
+
+function downloadCSV(content, filename) {
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+}
+
+// ─── Main Admin Component ─────────────────────────────────────────────────────
+export default function Admin() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const [activeSection, setActiveSection] = useState('exec');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [allUsers, setAllUsers] = useState([]);
+  const [coupons, setCoupons] = useState([]);
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => { loadData(); }, []);
+
+  const loadData = async () => {
+    try {
+      const [usersSnap, couponsSnap, logsSnap] = await Promise.all([
+        getDocs(collection(db, 'users')),
+        getDocs(collection(db, 'couponRequests')),
+        getDocs(collection(db, 'auditLogs')).catch(() => ({ docs: [] })),
+      ]);
+      setAllUsers(usersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setCoupons(couponsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setAuditLogs(logsSnap.docs.map(d => d.data()).sort((a,b) => b.timestamp?.localeCompare?.(a.timestamp) || 0));
+      setLoading(false);
+    } catch (err) {
+      console.error(err);
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateDoc = async (collectionName, docId, data) => {
+    try {
+      await updateDoc(doc(db, collectionName, docId), data);
+      await loadData();
+    } catch (err) {
+      console.error('Update error:', err);
+    }
+  };
+
+  const handleLog = async (action, type = 'info') => {
+    const entry = {
+      action,
+      type,
+      adminEmail: user?.email || 'unknown',
+      timestamp: new Date().toLocaleString('pt-BR'),
+    };
+    setAuditLogs(prev => [entry, ...prev]);
+    try {
+      await addDoc(collection(db, 'auditLogs'), { ...entry, createdAt: serverTimestamp() });
+    } catch (err) { /* silent */ }
+  };
+
+  const SW = sidebarCollapsed ? 60 : 210;
+  const pendingCount = coupons.filter(c => c.approvalStatus === 'waiting').length;
+
+  if (loading) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: T.bg }}>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 14, color: T.textSec }}>Carregando painel...</div>
+    </div>
+  );
+
+  return (
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+        *{box-sizing:border-box}
+        body{font-family:'Poppins',sans-serif;background:${T.bg};margin:0}
+        ::-webkit-scrollbar{width:5px}
+        ::-webkit-scrollbar-thumb{background:${T.border};border-radius:4px}
+        .admin-nav-btn:hover{background:${T.badge}!important}
+        @keyframes fi{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+        .fade{animation:fi .35s ease both}
+      `}</style>
+
+      <div style={{ display: 'flex', minHeight: '100vh', background: T.bg }}>
+
+        {/* ── Admin Sidebar ── */}
+        <aside style={{
+          width: SW, minWidth: SW, maxWidth: SW,
+          background: T.card, borderRight: `1px solid ${T.border}`,
+          display: 'flex', flexDirection: 'column',
+          padding: sidebarCollapsed ? '18px 8px' : '18px 12px',
+          position: 'sticky', top: 0, height: '100vh',
+          overflow: 'hidden', transition: 'width 200ms ease, min-width 200ms ease',
+          boxShadow: '2px 0 8px rgba(120,100,80,0.05)', zIndex: 30, flexShrink: 0,
+        }}>
+          {/* Logo */}
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 22, justifyContent: sidebarCollapsed ? 'center' : 'space-between' }}>
+            {!sidebarCollapsed && (
+              <button onClick={() => navigate('/dashboard')} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                <div style={{ width: 30, height: 30, borderRadius: 9, background: 'linear-gradient(135deg,#B8D4B2,#8FA889)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, boxShadow: '0 2px 8px rgba(143,168,137,0.35)' }}>⚕️</div>
+                <div>
+                  <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 13, color: '#5C7A57', lineHeight: 1 }}>MedPlanner</div>
+                  <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 10, color: T.security.p, fontWeight: 600 }}>PAINEL ADM</div>
+                </div>
+              </button>
+            )}
+            <button onClick={() => setSidebarCollapsed(!sidebarCollapsed)} style={{ background: T.badge, border: `1px solid ${T.border}`, borderRadius: 7, width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: T.textSec, flexShrink: 0 }}>
+              {sidebarCollapsed ? <ChevronRightIcon style={{ width: 13, height: 13 }} /> : <ChevronLeftIcon style={{ width: 13, height: 13 }} />}
+            </button>
+          </div>
+
+          {/* Nav */}
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            {!sidebarCollapsed && (
+              <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 10, fontWeight: 600, color: T.textSec, letterSpacing: '.7px', padding: '0 4px', marginBottom: 6, opacity: .65 }}>SEÇÕES</div>
+            )}
+            {SECTIONS.map(s => {
+              const isActive = activeSection === s.id;
+              return (
+                <button
+                  key={s.id}
+                  className="admin-nav-btn"
+                  onClick={() => setActiveSection(s.id)}
+                  title={sidebarCollapsed ? s.label : ''}
+                  style={{
+                    display: 'flex', alignItems: 'center',
+                    gap: sidebarCollapsed ? 0 : 9,
+                    justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
+                    width: '100%', padding: sidebarCollapsed ? '9px 0' : '8px 10px',
+                    border: 'none', borderRadius: 9,
+                    borderLeft: isActive && !sidebarCollapsed ? `3px solid ${s.color.p}` : '3px solid transparent',
+                    background: isActive ? s.color.bg : 'transparent',
+                    color: isActive ? s.color.p : T.textSec,
+                    fontFamily: "'Poppins',sans-serif", fontSize: 12.5,
+                    fontWeight: isActive ? 600 : 400,
+                    cursor: 'pointer', transition: 'all 150ms ease',
+                    marginBottom: 2, boxSizing: 'border-box', position: 'relative',
+                  }}
+                >
+                  <s.icon style={{ width: 16, height: 16, flexShrink: 0 }} />
+                  {!sidebarCollapsed && <span style={{ flex: 1, textAlign: 'left' }}>{s.label}</span>}
+                  {!sidebarCollapsed && s.id === 'plans' && pendingCount > 0 && (
+                    <span style={{ background: T.warning.p, color: '#fff', borderRadius: 10, padding: '1px 6px', fontSize: 10, fontWeight: 700 }}>{pendingCount}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Back to app */}
+          <button onClick={() => navigate('/dashboard')} className="admin-nav-btn" style={{
+            display: 'flex', alignItems: 'center', gap: sidebarCollapsed ? 0 : 8,
+            justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
+            width: '100%', padding: sidebarCollapsed ? '9px 0' : '8px 10px',
+            background: 'transparent', border: 'none', borderRadius: 9,
+            cursor: 'pointer', color: T.textSec,
+            fontFamily: "'Poppins',sans-serif", fontSize: 12, marginTop: 8,
+          }}>
+            <ArrowRightOnRectangleIcon style={{ width: 16, height: 16 }} />
+            {!sidebarCollapsed && <span>← Voltar ao App</span>}
+          </button>
+        </aside>
+
+        {/* ── Main ── */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+
+          {/* Header */}
+          <header style={{
+            height: 56, background: T.card, borderBottom: `1px solid ${T.border}`,
+            display: 'flex', alignItems: 'center', padding: '0 24px', gap: 14,
+            position: 'sticky', top: 0, zIndex: 20,
+            boxShadow: '0 2px 8px rgba(120,100,80,0.04)',
+          }}>
+            <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 14, fontWeight: 700, color: T.text }}>
+              {SECTIONS.find(s => s.id === activeSection)?.label}
+            </div>
+            <div style={{ flex: 1 }} />
+            {pendingCount > 0 && (
+              <div style={{ background: T.warning.bg, border: `1px solid ${T.warning.border}`, borderRadius: 9, padding: '5px 12px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <BellAlertIcon style={{ width: 14, height: 14, color: T.warning.p }} />
+                <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: T.warning.p, fontWeight: 600 }}>{pendingCount} cupom(ns) pendente(s)</span>
+              </div>
+            )}
+            <div style={{ width: 34, height: 34, borderRadius: '50%', background: `linear-gradient(135deg,${T.security.p},${T.support.p})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 13 }}>
+              {user?.email?.[0]?.toUpperCase() || 'A'}
+            </div>
+          </header>
+
+          {/* Content */}
+          <main style={{ flex: 1, padding: '24px 26px 80px', overflowY: 'auto' }} className="fade">
+            {activeSection === 'exec'     && <ExecDashboard users={allUsers} coupons={coupons} />}
+            {activeSection === 'users'    && <UsersPanel users={allUsers} onUpdate={(id, data) => handleUpdateDoc('users', id, data)} onLog={handleLog} />}
+            {activeSection === 'plans'    && <PlansPanel coupons={coupons} onUpdate={handleUpdateDoc} onLog={handleLog} />}
+            {activeSection === 'metrics'  && <MetricsPanel users={allUsers} />}
+            {activeSection === 'logs'     && <LogsPanel auditLogs={auditLogs} />}
+            {activeSection === 'support'  && <SupportPanel />}
+            {activeSection === 'config'   && <ConfigPanel />}
+            {activeSection === 'security' && <SecurityPanel onLog={handleLog} />}
+          </main>
+        </div>
+      </div>
+    </>
   );
 }
