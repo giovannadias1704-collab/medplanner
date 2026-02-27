@@ -205,33 +205,36 @@ export default function Settings() {
     }
   };
 
-  const handlePDFUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  // Substitua a função handlePDFUpload no Settings.jsx por esta versão:
 
-    if (file.type !== 'application/pdf') {
-      alert('Por favor, selecione um arquivo PDF');
-      return;
+const handlePDFUpload = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  e.target.value = ''; // permite reenviar o mesmo arquivo
+
+  if (file.type !== 'application/pdf') {
+    alert('Por favor, selecione um arquivo PDF');
+    return;
+  }
+
+  try {
+    setProcessingPDF(true);
+
+    const result = await processPDFWithAI(file);
+
+    if (result.savedCount > 0) {
+      alert(`✅ ${result.savedCount} evento(s) extraído(s) e adicionado(s) ao seu calendário!\n\nAbra o Calendário para visualizá-los.`);
+    } else {
+      alert(`⚠️ Nenhum evento foi identificado neste PDF.\n\nDica: funciona melhor com cronogramas, calendários acadêmicos e programações com datas explícitas.`);
     }
-
-    try {
-      setProcessingPDF(true);
-      
-      const result = await processPDFWithAI(file);
-      
-      alert(`PDF processado! 
-      
-Em breve, a IA vai extrair eventos automaticamente e adicionar ao seu calendário.
-
-Funcionalidade em desenvolvimento! 🚀`);
-      
-    } catch (error) {
-      alert('Erro ao processar PDF');
-    } finally {
-      setProcessingPDF(false);
-    }
-  };
-
+  } catch (error) {
+    console.error('Erro ao processar PDF:', error);
+    alert(`❌ Erro ao processar PDF: ${error.message}`);
+  } finally {
+    setProcessingPDF(false);
+  }
+};
   const handleRefreshOnboarding = () => {
     if (confirm('Deseja refazer o questionário inicial? Seus dados atuais serão mantidos até você finalizar.')) {
       navigate('/onboarding');
