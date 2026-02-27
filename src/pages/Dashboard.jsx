@@ -1,482 +1,684 @@
 import { useContext, useMemo, useState } from 'react';
 import { AppContext } from '../context/AppContext';
 import { useOnboarding } from '../hooks/useOnboarding';
-import PageHeader from '../components/PageHeader';
 import QuickCaptureBar from '../components/QuickCaptureBar';
 import EventCard from '../components/EventCard';
-import StatsCard from '../components/StatsCard';
-import ProgressChart from '../components/ProgressChart';
 import InsightCard from '../components/InsightCard';
 import AIChat from '../components/AIChat';
-import { isToday, isTomorrow } from '../utils/dateParser';
 import { daysUntil } from '../utils/helpers';
 import { calculateDashboardStats, calculateTaskStats } from '../utils/statsCalculator';
 import { addDays, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { 
-  AcademicCapIcon, 
-  HeartIcon, 
+import {
+  AcademicCapIcon,
+  HeartIcon,
   BanknotesIcon,
   SparklesIcon,
-  FireIcon,
+  HomeIcon,
+  ChartBarIcon,
+  CogIcon,
+  UserIcon,
+  BellIcon,
+  MagnifyingGlassIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  FaceSmileIcon,
+  CreditCardIcon,
+  WrenchScrewdriverIcon,
+  MapIcon,
   CalendarIcon,
-  CheckCircleIcon,
-  CurrencyDollarIcon,
-  BeakerIcon
 } from '@heroicons/react/24/outline';
 
+// ─── Pastel Safari Design System ──────────────────────────────────────────────
+const T = {
+  bg:            '#F4EFE6',
+  card:          '#FFFCF7',
+  border:        '#E8DFD3',
+  input:         '#FAF6EF',
+  badge:         '#EFE6D8',
+  text:          '#3E3A36',
+  textSec:       '#6B5E53',
+  shadow:        '0 4px 12px rgba(120,100,80,0.07)',
+  shadowMd:      '0 8px 24px rgba(120,100,80,0.12)',
+
+  strategy:  { p: '#D9A27E', h: '#C48E6B', bg: '#F3E4D8' },
+  finance:   { p: '#8FA889', h: '#7C9776', bg: '#EAF1E8' },
+  health:    { p: '#A8BFA3', h: '#95AD90', bg: '#EEF4EC' },
+  wellness:  { p: '#B7A8B8', h: '#A392A4', bg: '#F1EBF2' },
+  analytics: { p: '#8CA3A3', h: '#7B9393', bg: '#E9F0F0' },
+  home:      { p: '#CBBBA3', h: '#B8A88F', bg: '#F2ECE2' },
+};
+
+// ─── Sidebar groups ────────────────────────────────────────────────────────────
+const GROUPS = [
+  {
+    label: 'PRINCIPAL',
+    items: [
+      { id: 'home',      label: 'Home',        Icon: HomeIcon,      color: null },
+      { id: 'analytics', label: 'Visão 360°',  Icon: ChartBarIcon,  color: T.analytics },
+      { id: 'strategy',  label: 'Estratégia',  Icon: MapIcon,       color: T.strategy },
+    ],
+  },
+  {
+    label: 'VIDA',
+    items: [
+      { id: 'calendar',  label: 'Calendário',      Icon: CalendarIcon,     color: T.analytics },
+      { id: 'hometask',  label: 'Casa',            Icon: HomeIcon,         color: T.home },
+      { id: 'finance',   label: 'Finanças',        Icon: BanknotesIcon,    color: T.finance },
+      { id: 'health',    label: 'Saúde Física',    Icon: HeartIcon,        color: T.health },
+      { id: 'wellness',  label: 'Bem-Estar Mental',Icon: FaceSmileIcon,    color: T.wellness },
+    ],
+  },
+  {
+    label: 'SISTEMA',
+    items: [
+      { id: 'plans',    label: 'Planos',         Icon: CreditCardIcon, color: null },
+      { id: 'settings', label: 'Configurações',  Icon: CogIcon,        color: null },
+    ],
+  },
+];
+const ADMIN_ITEM = { id: 'admin', label: 'ADM', Icon: WrenchScrewdriverIcon, color: T.strategy };
+
+// ─── Small reusable pieces ─────────────────────────────────────────────────────
+function NavItem({ item, active, collapsed, onClick }) {
+  const c = item.color;
+  return (
+    <button
+      onClick={() => onClick(item.id)}
+      title={collapsed ? item.label : ''}
+      style={{
+        display: 'flex', alignItems: 'center',
+        gap: collapsed ? 0 : 10,
+        justifyContent: collapsed ? 'center' : 'flex-start',
+        width: '100%', padding: collapsed ? '10px 0' : '9px 12px',
+        border: 'none', borderRadius: 10,
+        borderLeft: active && !collapsed ? `3px solid ${c?.p || T.textSec}` : '3px solid transparent',
+        background: active ? (c?.bg || T.badge) : 'transparent',
+        color: active ? (c?.p || T.text) : T.textSec,
+        fontFamily: "'Poppins',sans-serif", fontSize: 13.5,
+        fontWeight: active ? 600 : 400,
+        cursor: 'pointer', transition: 'all 150ms ease',
+        boxSizing: 'border-box',
+      }}
+    >
+      <item.Icon style={{ width: 17, height: 17, flexShrink: 0 }} />
+      {!collapsed && <span>{item.label}</span>}
+    </button>
+  );
+}
+
+function Pill({ icon, value, label, color }) {
+  return (
+    <div style={{
+      background: color.bg, border: `1px solid ${T.border}`,
+      borderRadius: 14, padding: '14px 18px',
+      display: 'flex', alignItems: 'center', gap: 12,
+      boxShadow: T.shadow,
+    }}>
+      <span style={{ fontSize: 26 }}>{icon}</span>
+      <div>
+        <div style={{ fontSize: 22, fontWeight: 700, color: color.p, fontFamily: "'Poppins',sans-serif", lineHeight: 1 }}>{value}</div>
+        <div style={{ fontSize: 11, color: T.textSec, marginTop: 2, fontFamily: "'Poppins',sans-serif" }}>{label}</div>
+      </div>
+    </div>
+  );
+}
+
+function SecHead({ emoji, title, subtitle, color = {} }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 14 }}>
+      <div style={{
+        width: 38, height: 38, borderRadius: 11, flexShrink: 0,
+        background: color.bg || T.badge, border: `1.5px solid ${color.p || T.border}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 19, boxShadow: T.shadow,
+      }}>{emoji}</div>
+      <div>
+        <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14.5, color: T.text }}>{title}</div>
+        {subtitle && <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: T.textSec, marginTop: 1 }}>{subtitle}</div>}
+      </div>
+    </div>
+  );
+}
+
+function StratBar({ goal, icon, progress, color }) {
+  return (
+    <div style={{
+      background: T.card, border: `1px solid ${T.border}`,
+      borderLeft: `4px solid ${color.p}`,
+      borderRadius: 13, padding: '14px 16px', boxShadow: T.shadow,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 9 }}>
+        <span style={{ fontSize: 20 }}>{icon}</span>
+        <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, fontWeight: 600, color: T.text }}>{goal}</span>
+      </div>
+      <div style={{ background: T.bg, borderRadius: 8, height: 7, overflow: 'hidden' }}>
+        <div style={{
+          height: '100%', width: `${progress}%`,
+          background: `linear-gradient(90deg,${color.p},${color.h})`,
+          borderRadius: 8, transition: 'width 700ms ease',
+        }} />
+      </div>
+      <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: T.textSec, marginTop: 4, textAlign: 'right' }}>
+        {progress}% concluído
+      </div>
+    </div>
+  );
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
 export default function Dashboard() {
-  const { 
-    events, 
-    tasks, 
-    bills, 
-    homeTasks, 
-    studySchedule, 
-    waterLogs, 
-    settings 
+  const {
+    events = [], tasks = [], bills = [],
+    homeTasks = [], studySchedule = [],
+    waterLogs = [], settings = {}, isAdmin = false,
   } = useContext(AppContext);
-  
+
   const { onboardingData } = useOnboarding();
-  const [showAIChat, setShowAIChat] = useState(false);
-  
-  // ========== NOVO: CALCULAR ESTATÍSTICAS ==========
-  const dashboardStats = useMemo(() => 
+  const [showAIChat, setShowAIChat]     = useState(false);
+  const [collapsed, setCollapsed]       = useState(false);
+  const [active, setActive]             = useState('home');
+  const [profileOpen, setProfileOpen]   = useState(false);
+  const [searchFocus, setSearchFocus]   = useState(false);
+
+  const DS = useMemo(() =>
     calculateDashboardStats(events, tasks, homeTasks, bills, studySchedule, waterLogs, settings),
     [events, tasks, homeTasks, bills, studySchedule, waterLogs, settings]
   );
+  const TS = useMemo(() => calculateTaskStats(tasks, homeTasks), [tasks, homeTasks]);
 
-  const taskStats = useMemo(() => 
-    calculateTaskStats(tasks, homeTasks),
-    [tasks, homeTasks]
-  );
+  const top3 = useMemo(() => (
+    [...events.map(e => ({ ...e, source: 'event' })),
+     ...tasks.map(t => ({ ...t, source: 'task' })),
+     ...bills.map(b => ({ ...b, source: 'bill' }))]
+      .filter(i => i.date && daysUntil(i.date) >= 0)
+      .sort((a, b) => daysUntil(a.date) - daysUntil(b.date))
+      .slice(0, 3)
+  ), [events, tasks, bills]);
 
-  // Top 3 Prioridades
-  const top3Priorities = useMemo(() => {
-    const allItems = [
-      ...events.map(e => ({ ...e, source: 'event' })),
-      ...tasks.map(t => ({ ...t, source: 'task' })),
-      ...bills.map(b => ({ ...b, source: 'bill' }))
-    ];
-
-    const futureItems = allItems.filter(item => {
-      if (!item.date) return false;
-      const days = daysUntil(item.date);
-      return days >= 0;
-    });
-
-    return futureItems
-      .sort((a, b) => {
-        const daysA = daysUntil(a.date);
-        const daysB = daysUntil(b.date);
-        return daysA - daysB;
-      })
-      .slice(0, 3);
-  }, [events, tasks, bills]);
-
-  // Próximos eventos (24-72h)
-  const upcomingEvents = useMemo(() => {
-    const today = new Date();
-    const in3Days = addDays(today, 3);
-
-    return events.filter(event => {
-      if (!event.date) return false;
-      const eventDate = new Date(event.date + 'T00:00:00');
-      return eventDate > today && eventDate <= in3Days;
+  const upcoming = useMemo(() => {
+    const today = new Date(), in3 = addDays(today, 3);
+    return events.filter(e => {
+      if (!e.date) return false;
+      const d = new Date(e.date + 'T00:00:00');
+      return d > today && d <= in3;
     });
   }, [events]);
 
-  // Pendências urgentes
-  const urgentItems = useMemo(() => {
-    const urgent = [];
-
-    bills.forEach(bill => {
-      if (!bill.date || bill.paid) return;
-      const days = daysUntil(bill.date);
-      if (days >= 0 && days <= 3) {
-        urgent.push({ ...bill, type: 'bill', urgency: days });
-      }
-    });
-
-    tasks.forEach(task => {
-      if (!task.date || task.completed) return;
-      const days = daysUntil(task.date);
-      if (days < 0) {
-        urgent.push({ ...task, type: 'task', urgency: days });
-      }
-    });
-
-    return urgent.sort((a, b) => a.urgency - b.urgency);
+  const urgent = useMemo(() => {
+    const u = [];
+    bills.forEach(b => { if (!b.date || b.paid) return; const d = daysUntil(b.date); if (d >= 0 && d <= 3) u.push({ ...b, type: 'bill', urgency: d }); });
+    tasks.forEach(t => { if (!t.date || t.completed) return; const d = daysUntil(t.date); if (d < 0) u.push({ ...t, type: 'task', urgency: d }); });
+    return u.sort((a, b) => a.urgency - b.urgency);
   }, [bills, tasks]);
 
-  // Mensagem personalizada baseada no perfil
-  const getPersonalizedGreeting = () => {
-    const hour = new Date().getHours();
-    let timeGreeting = 'Olá';
-    
-    if (hour >= 5 && hour < 12) timeGreeting = 'Bom dia';
-    else if (hour >= 12 && hour < 18) timeGreeting = 'Boa tarde';
-    else timeGreeting = 'Boa noite';
+  const stratItems = useMemo(() => {
+    const items = [];
+    if (onboardingData?.shortTermGoals)
+      items.push({ goal: onboardingData.shortTermGoals.slice(0, 55), icon: '🎯', progress: Math.min(100, parseInt(TS.completionRate) || 0), color: T.strategy });
+    if (onboardingData?.focusResidency === 'sim')
+      items.push({ goal: `Residência${onboardingData.residencyArea ? ` — ${onboardingData.residencyArea}` : ''}`, icon: '🏥', progress: 35, color: T.analytics });
+    if (onboardingData?.studyHoursPerDay)
+      items.push({ goal: `Estudo diário: ${onboardingData.studyHoursPerDay}h`, icon: '📚', progress: 60, color: T.health });
+    return items;
+  }, [onboardingData, TS]);
 
-    if (onboardingData?.name) {
-      return `${timeGreeting}, ${onboardingData.name}! 👋`;
-    }
-    return `${timeGreeting}! 👋`;
-  };
+  const hour = new Date().getHours();
+  const greet = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite';
+  const name  = onboardingData?.name;
+  const dateLabel = format(new Date(), "EEEE, dd 'de' MMMM", { locale: ptBR });
 
-  const getPersonalizedSubtitle = () => {
-    const parts = [];
-    
-    if (onboardingData?.semester) {
-      parts.push(`${onboardingData.semester}º Semestre`);
-    }
-    
-    if (onboardingData?.university) {
-      parts.push(onboardingData.university);
-    }
-
-    if (parts.length > 0) {
-      return `${parts.join(' • ')} • ${format(new Date(), "EEEE, dd 'de' MMMM", { locale: ptBR })}`;
-    }
-
-    return format(new Date(), "EEEE, dd 'de' MMMM", { locale: ptBR });
-  };
+  const SW = collapsed ? 64 : 222;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-32">
-      <PageHeader 
-        title={getPersonalizedGreeting()}
-        subtitle={getPersonalizedSubtitle()}
-        emoji="🏠"
-        imageQuery="workspace,desk,morning,coffee"
-      />
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{font-family:'Poppins',sans-serif;background:${T.bg};color:${T.text}}
+        ::-webkit-scrollbar{width:5px}
+        ::-webkit-scrollbar-thumb{background:${T.border};border-radius:4px}
+        .hl:hover{background:${T.badge}!important;transition:background 120ms}
+        @keyframes fi{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+        .a1{animation:fi .4s ease both}
+        .a2{animation:fi .5s .1s ease both}
+        .a3{animation:fi .5s .2s ease both}
+        .a4{animation:fi .5s .3s ease both}
+        .lift:hover{transform:translateY(-2px);box-shadow:${T.shadowMd}!important;transition:all 150ms ease}
+      `}</style>
 
-      <QuickCaptureBar />
+      <div style={{ display: 'flex', minHeight: '100vh', background: T.bg }}>
 
-      <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-        
-        {/* ========== NOVO: ESTATÍSTICAS DO DIA ========== */}
-        <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 animate-fade-in">
-          <StatsCard
-            title="Eventos Hoje"
-            value={dashboardStats.eventsToday}
-            subtitle="No calendário"
-            icon="📅"
-            color="blue"
-          />
-          
-          <StatsCard
-            title="Tarefas Hoje"
-            value={dashboardStats.tasksToday}
-            subtitle="Pendentes"
-            icon="✅"
-            color="green"
-          />
-          
-          <StatsCard
-            title="Contas (7 dias)"
-            value={dashboardStats.billsThisWeek}
-            subtitle="A vencer"
-            icon="💰"
-            color="orange"
-          />
-          
-          <StatsCard
-            title="Hidratação"
-            value={`${dashboardStats.waterToday}L`}
-            subtitle={`Meta: ${dashboardStats.waterGoal}L`}
-            icon="💧"
-            color={dashboardStats.waterGoalPercentage >= 100 ? 'green' : 'blue'}
-            trend={
-              dashboardStats.waterGoalPercentage >= 100 
-                ? { direction: 'up', value: '100%' }
-                : { direction: 'down', value: `${dashboardStats.waterGoalPercentage}%` }
-            }
-          />
-        </section>
-
-        {/* ========== NOVO: PROGRESSO DE TAREFAS ========== */}
-        {taskStats.totalTasks > 0 && (
-          <section className="animate-fade-in" style={{ animationDelay: '0.1s' }}>
-            <ProgressChart
-              title="📊 Progresso de Tarefas"
-              color="green"
-              data={[
-                { 
-                  label: 'Concluídas', 
-                  value: taskStats.completedTasks, 
-                  unit: `de ${taskStats.totalTasks}` 
-                },
-                { 
-                  label: 'Taxa de Conclusão', 
-                  value: parseInt(taskStats.completionRate), 
-                  unit: '%' 
-                }
-              ]}
-            />
-          </section>
-        )}
-
-        {/* ========== NOVO: INSIGHTS AUTOMÁTICOS ========== */}
-        {taskStats.insights && taskStats.insights.length > 0 && (
-          <section className="animate-fade-in" style={{ animationDelay: '0.15s' }}>
-            <InsightCard 
-              title="💡 Insights do Dia"
-              insights={taskStats.insights}
-            />
-          </section>
-        )}
-
-        {/* Cards de Estatísticas Personalizadas */}
-        {onboardingData && (
-          <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-fade-in" style={{ animationDelay: '0.2s' }}>
-            {/* Estudos */}
-            {onboardingData.studyHoursPerDay && (
-              <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl p-5 text-white shadow-xl hover-lift transition-all">
-                <div className="flex items-center justify-between mb-3">
-                  <AcademicCapIcon className="w-8 h-8 opacity-80" />
-                  <span className="text-2xl">📚</span>
-                </div>
-                <p className="text-sm opacity-90 mb-1">Meta de Estudo</p>
-                <p className="text-3xl font-bold">{onboardingData.studyHoursPerDay}h/dia</p>
-                {onboardingData.studyTime && (
-                  <p className="text-xs opacity-75 mt-2 capitalize">Período: {onboardingData.studyTime}</p>
-                )}
+        {/* ── SIDEBAR ── */}
+        <aside style={{
+          width: SW, minWidth: SW, maxWidth: SW,
+          background: T.card, borderRight: `1px solid ${T.border}`,
+          display: 'flex', flexDirection: 'column',
+          padding: collapsed ? '20px 10px' : '20px 14px',
+          position: 'sticky', top: 0, height: '100vh',
+          overflow: 'hidden', transition: 'width 200ms ease, min-width 200ms ease',
+          boxShadow: '2px 0 8px rgba(120,100,80,0.04)', zIndex: 30, flexShrink: 0,
+        }}>
+          {/* Logo row */}
+          <div style={{
+            display: 'flex', alignItems: 'center', marginBottom: 26,
+            justifyContent: collapsed ? 'center' : 'space-between',
+          }}>
+            {!collapsed && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                <div style={{
+                  width: 32, height: 32, borderRadius: 10, fontSize: 16,
+                  background: `linear-gradient(135deg,${T.strategy.p},${T.finance.p})`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>🌿</div>
+                <span style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 15, color: T.text, letterSpacing: '-0.3px' }}>
+                  Meu Centro
+                </span>
               </div>
             )}
-
-            {/* Objetivos */}
-            {onboardingData.focusResidency && (
-              <div className="bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl p-5 text-white shadow-xl hover-lift transition-all">
-                <div className="flex items-center justify-between mb-3">
-                  <SparklesIcon className="w-8 h-8 opacity-80" />
-                  <span className="text-2xl">🎯</span>
-                </div>
-                <p className="text-sm opacity-90 mb-1">Objetivo</p>
-                <p className="text-lg font-bold">
-                  {onboardingData.focusResidency === 'sim' ? 'Residência' : 'Graduação'}
-                </p>
-                {onboardingData.residencyArea && (
-                  <p className="text-xs opacity-75 mt-2">{onboardingData.residencyArea}</p>
-                )}
-              </div>
-            )}
-
-            {/* Saúde */}
-            {onboardingData.exerciseFrequency && (
-              <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl p-5 text-white shadow-xl hover-lift transition-all">
-                <div className="flex items-center justify-between mb-3">
-                  <HeartIcon className="w-8 h-8 opacity-80" />
-                  <span className="text-2xl">💪</span>
-                </div>
-                <p className="text-sm opacity-90 mb-1">Exercícios</p>
-                <p className="text-2xl font-bold">{onboardingData.exerciseFrequency}</p>
-                {onboardingData.waterGoal && (
-                  <p className="text-xs opacity-75 mt-2">Água: {onboardingData.waterGoal}L/dia</p>
-                )}
-              </div>
-            )}
-
-            {/* Finanças */}
-            {onboardingData.monthlyBudget && (
-              <div className="bg-gradient-to-br from-orange-500 to-red-600 rounded-2xl p-5 text-white shadow-xl hover-lift transition-all">
-                <div className="flex items-center justify-between mb-3">
-                  <BanknotesIcon className="w-8 h-8 opacity-80" />
-                  <span className="text-2xl">💰</span>
-                </div>
-                <p className="text-sm opacity-90 mb-1">Orçamento</p>
-                <p className="text-lg font-bold capitalize">
-                  {onboardingData.monthlyBudget === 'sim' ? 'Definido' : onboardingData.monthlyBudget === 'não' ? 'Não definido' : 'A definir'}
-                </p>
-                {onboardingData.budgetAmount && (
-                  <p className="text-xs opacity-75 mt-2">{onboardingData.budgetAmount}</p>
-                )}
-              </div>
-            )}
-          </section>
-        )}
-
-        {/* Mensagem de Motivação Personalizada */}
-        {onboardingData?.shortTermGoals && (
-          <div className="bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 rounded-2xl p-6 border-2 border-yellow-200 dark:border-yellow-800 shadow-lg animate-fade-in" style={{ animationDelay: '0.25s' }}>
-            <div className="flex items-start gap-4">
-              <div className="flex-shrink-0">
-                <div className="w-12 h-12 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-xl flex items-center justify-center">
-                  <FireIcon className="w-6 h-6 text-white" />
-                </div>
-              </div>
-              <div className="flex-1">
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
-                  🎯 Suas Metas de Curto Prazo
-                </h3>
-                <p className="text-gray-700 dark:text-gray-300">
-                  {onboardingData.shortTermGoals}
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Top 3 Prioridades */}
-        <section className="animate-fade-in" style={{ animationDelay: '0.3s' }}>
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-pink-600 rounded-2xl flex items-center justify-center shadow-lg">
-              <span className="text-2xl font-bold text-white">3</span>
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-                Prioridades de Hoje
-              </h2>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Foco no que realmente importa
-              </p>
-            </div>
+            <button onClick={() => setCollapsed(!collapsed)} style={{
+              background: T.badge, border: `1px solid ${T.border}`,
+              borderRadius: 8, width: 28, height: 28, flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', color: T.textSec,
+            }}>
+              {collapsed
+                ? <ChevronRightIcon style={{ width: 14, height: 14 }} />
+                : <ChevronLeftIcon  style={{ width: 14, height: 14 }} />}
+            </button>
           </div>
 
-          {top3Priorities.length === 0 ? (
-            <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-2xl p-8 text-center border-2 border-green-200 dark:border-green-800 shadow-lg">
-              <div className="text-6xl mb-3">🎉</div>
-              <p className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
-                Dia Livre!
-              </p>
-              <p className="text-gray-600 dark:text-gray-400">
-                Nenhuma prioridade urgente. Aproveite o dia!
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {top3Priorities.map((item, index) => (
-                <div key={item.id} className="flex items-start gap-3 animate-slide-in" style={{ animationDelay: `${0.35 + index * 0.1}s` }}>
-                  <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-600 text-white rounded-xl flex items-center justify-center font-bold text-lg shadow-lg">
-                    {index + 1}
-                  </div>
-                  <div className="flex-1">
-                    <EventCard event={item} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* Próximos Eventos (24-72h) */}
-        <section className="animate-fade-in" style={{ animationDelay: '0.4s' }}>
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-2xl flex items-center justify-center shadow-lg">
-              <span className="text-2xl">📅</span>
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-                Próximos Eventos
-              </h2>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Nos próximos 3 dias
-              </p>
-            </div>
+          {/* Nav */}
+          <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+            {GROUPS.map(g => (
+              <div key={g.label} style={{ marginBottom: 18 }}>
+                {!collapsed && (
+                  <div style={{
+                    fontFamily: "'Poppins',sans-serif", fontSize: 10, fontWeight: 600,
+                    color: T.textSec, letterSpacing: '.8px', padding: '0 4px',
+                    marginBottom: 5, opacity: .65,
+                  }}>{g.label}</div>
+                )}
+                {g.items.map(item => (
+                  <NavItem key={item.id} item={item} active={active === item.id} collapsed={collapsed} onClick={setActive} />
+                ))}
+                <div style={{ borderTop: `1px solid ${T.border}`, margin: '8px 0' }} />
+              </div>
+            ))}
+            {isAdmin && (
+              <NavItem item={ADMIN_ITEM} active={active === 'admin'} collapsed={collapsed} onClick={setActive} />
+            )}
           </div>
+        </aside>
 
-          {upcomingEvents.length === 0 ? (
-            <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 text-center shadow-lg border border-gray-200 dark:border-gray-700">
-              <div className="text-6xl mb-3">📭</div>
-              <p className="text-gray-500 dark:text-gray-400 font-medium">
-                Nenhum evento nos próximos 3 dias
-              </p>
-              <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">
-                Tempo livre para focar em outras atividades
-              </p>
+        {/* ── MAIN ── */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+
+          {/* Header */}
+          <header style={{
+            height: 58, background: T.card,
+            borderBottom: `1px solid ${T.border}`,
+            display: 'flex', alignItems: 'center',
+            padding: '0 24px', gap: 14,
+            position: 'sticky', top: 0, zIndex: 20,
+            boxShadow: '0 2px 8px rgba(120,100,80,0.04)',
+          }}>
+            {/* Search */}
+            <div style={{
+              flex: 1, maxWidth: 400,
+              background: searchFocus ? T.card : T.input,
+              border: `1px solid ${searchFocus ? T.strategy.p : T.border}`,
+              borderRadius: 10, padding: '7px 13px',
+              display: 'flex', alignItems: 'center', gap: 8,
+              transition: 'all 150ms ease',
+              boxShadow: searchFocus ? `0 0 0 3px ${T.strategy.bg}` : 'none',
+            }}>
+              <MagnifyingGlassIcon style={{ width: 15, height: 15, color: T.textSec, flexShrink: 0 }} />
+              <input
+                placeholder="Busca global..."
+                onFocus={() => setSearchFocus(true)}
+                onBlur={() => setSearchFocus(false)}
+                style={{
+                  border: 'none', background: 'transparent', outline: 'none',
+                  fontFamily: "'Poppins',sans-serif", fontSize: 13, color: T.text, width: '100%',
+                }}
+              />
             </div>
-          ) : (
-            <div className="space-y-3">
-              {upcomingEvents.map((event, index) => (
-                <div key={event.id} className="animate-slide-in" style={{ animationDelay: `${0.45 + index * 0.1}s` }}>
-                  <EventCard event={event} />
+            <div style={{ flex: 1 }} />
+
+            {/* Bell */}
+            <button style={{
+              background: T.input, border: `1px solid ${T.border}`,
+              borderRadius: 10, width: 37, height: 37,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', color: T.textSec, position: 'relative',
+            }}>
+              <BellIcon style={{ width: 17, height: 17 }} />
+              {urgent.length > 0 && (
+                <span style={{
+                  position: 'absolute', top: 7, right: 7,
+                  width: 7, height: 7, borderRadius: '50%',
+                  background: T.strategy.p, border: `2px solid ${T.card}`,
+                }} />
+              )}
+            </button>
+
+            {/* Avatar */}
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => setProfileOpen(!profileOpen)}
+                style={{
+                  width: 36, height: 36, borderRadius: '50%',
+                  background: `linear-gradient(135deg,${T.strategy.p},${T.wellness.p})`,
+                  border: `2px solid ${T.border}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: 'pointer', color: '#fff',
+                  fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13,
+                }}
+              >
+                {name ? name[0].toUpperCase() : <UserIcon style={{ width: 17, height: 17 }} />}
+              </button>
+
+              {profileOpen && (
+                <div style={{
+                  position: 'absolute', top: 44, right: 0, width: 174,
+                  background: T.card, border: `1px solid ${T.border}`,
+                  borderRadius: 12, boxShadow: T.shadowMd, overflow: 'hidden', zIndex: 100,
+                }}>
+                  {[
+                    ['👤','Meu Perfil'],
+                    ['⚙️','Configurações'],
+                    ...(isAdmin ? [['🛠','ADM']] : []),
+                    ['🚪','Sair'],
+                  ].map(([ico, lbl]) => (
+                    <button key={lbl} className="hl" style={{
+                      display: 'flex', alignItems: 'center', gap: 9,
+                      width: '100%', padding: '10px 14px',
+                      background: 'transparent', border: 'none', cursor: 'pointer',
+                      color: T.text, fontFamily: "'Poppins',sans-serif", fontSize: 13,
+                    }}><span>{ico}</span>{lbl}</button>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
-          )}
-        </section>
+          </header>
 
-        {/* Pendências Urgentes */}
-        {urgentItems.length > 0 && (
-          <section className="animate-fade-in" style={{ animationDelay: '0.5s' }}>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-red-600 rounded-2xl flex items-center justify-center shadow-lg animate-pulse">
-                <span className="text-2xl">⚠️</span>
-              </div>
-              <div>
-                <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-                  Urgente
-                </h2>
-                <p className="text-sm text-red-600 dark:text-red-400">
-                  {urgentItems.length} item(ns) precisam de atenção
-                </p>
+          {/* ── Page Content ── */}
+          <main style={{ flex: 1, padding: '26px 26px 96px', overflowY: 'auto' }}>
+
+            {/* Greeting banner */}
+            <div className="a1" style={{ marginBottom: 24 }}>
+              <div style={{
+                background: T.card, border: `1px solid ${T.border}`,
+                borderRadius: 15, padding: '18px 22px',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                boxShadow: T.shadow,
+              }}>
+                <div>
+                  <h1 style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 21, color: T.text }}>
+                    {name ? `${greet}, ${name}! 👋` : `${greet}! 👋`}
+                  </h1>
+                  <p style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: T.textSec, marginTop: 3, textTransform: 'capitalize' }}>
+                    {[onboardingData?.semester && `${onboardingData.semester}º Semestre`,
+                      onboardingData?.university,
+                      dateLabel].filter(Boolean).join(' • ')}
+                  </p>
+                </div>
+                <div style={{
+                  background: T.strategy.bg, borderRadius: 10,
+                  padding: '7px 14px', border: `1px solid ${T.strategy.p}25`,
+                }}>
+                  <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: T.strategy.p, fontWeight: 600 }}>
+                    Centro de Controle 🌿
+                  </span>
+                </div>
               </div>
             </div>
 
-            <div className="space-y-3">
-              {urgentItems.map((item, index) => (
-                <div
-                  key={item.id}
-                  className="bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20 border-l-4 border-red-500 p-5 rounded-2xl shadow-lg hover-lift animate-slide-in"
-                  style={{ animationDelay: `${0.55 + index * 0.1}s` }}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-2xl">
-                          {item.type === 'bill' ? '💰' : '✅'}
-                        </span>
-                        <span className="text-xs px-3 py-1 bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 rounded-full font-semibold">
-                          {item.type === 'bill' ? 'CONTA' : 'TAREFA'}
+            {/* Quick Capture */}
+            <div className="a2" style={{ marginBottom: 24 }}>
+              <QuickCaptureBar />
+            </div>
+
+            {/* Stats pills */}
+            <div className="a2" style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))',
+              gap: 12, marginBottom: 26,
+            }}>
+              <Pill icon="📅" value={DS.eventsToday}                               label="Eventos hoje"     color={T.analytics} />
+              <Pill icon="✅" value={DS.tasksToday}                                label="Tarefas pendentes" color={T.health} />
+              <Pill icon="💰" value={DS.billsThisWeek}                             label="Contas (7 dias)"  color={T.finance} />
+              <Pill icon="💧" value={`${DS.waterToday}L`} label={`Meta: ${DS.waterGoal}L`}
+                color={DS.waterGoalPercentage >= 100 ? T.health : T.analytics} />
+            </div>
+
+            {/* 2-col: Estratégia + Prioridades */}
+            <div className="a3" style={{
+              display: 'grid', gridTemplateColumns: '1fr 1fr',
+              gap: 22, marginBottom: 26,
+            }}>
+              {/* Estratégia */}
+              <section>
+                <SecHead emoji="🎯" title="Estratégia" subtitle="Progresso dos seus objetivos" color={T.strategy} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
+                  {stratItems.length === 0 ? (
+                    <div style={{
+                      background: T.card, border: `1px solid ${T.border}`, borderRadius: 13,
+                      padding: '22px', textAlign: 'center', boxShadow: T.shadow,
+                      fontFamily: "'Poppins',sans-serif", fontSize: 13, color: T.textSec,
+                    }}>🌱 Configure seus objetivos no onboarding</div>
+                  ) : stratItems.map((s, i) => <StratBar key={i} {...s} />)}
+
+                  {/* Global task progress */}
+                  {TS.totalTasks > 0 && (
+                    <div style={{
+                      background: T.card, border: `1px solid ${T.border}`,
+                      borderLeft: `4px solid ${T.finance.p}`,
+                      borderRadius: 13, padding: '14px 16px', boxShadow: T.shadow,
+                    }}>
+                      <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, fontWeight: 600, color: T.text, marginBottom: 9 }}>
+                        📊 Progresso Geral de Tarefas
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+                        <div style={{ flex: 1, background: T.bg, borderRadius: 8, height: 7, overflow: 'hidden' }}>
+                          <div style={{
+                            height: '100%', width: `${TS.completionRate}%`,
+                            background: `linear-gradient(90deg,${T.finance.p},${T.health.p})`,
+                            borderRadius: 8, transition: 'width 700ms ease',
+                          }} />
+                        </div>
+                        <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 13, fontWeight: 700, color: T.finance.p, minWidth: 34 }}>
+                          {parseInt(TS.completionRate)}%
                         </span>
                       </div>
-                      <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-1">
-                        {item.title}
-                      </h3>
-                      <p className="text-sm text-red-600 dark:text-red-400 font-medium">
-                        {item.urgency < 0
-                          ? `⏰ Atrasado há ${Math.abs(item.urgency)} dia(s)`
-                          : item.urgency === 0
-                          ? '🔥 Vence HOJE'
-                          : `📌 Vence em ${item.urgency} dia(s)`}
-                      </p>
+                      <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: T.textSec, marginTop: 5 }}>
+                        {TS.completedTasks} de {TS.totalTasks} tarefas concluídas
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              {/* Prioridades */}
+              <section>
+                <SecHead emoji="🔥" title="Prioridades de Hoje" subtitle="Foco no que importa" color={T.strategy} />
+                {top3.length === 0 ? (
+                  <div style={{
+                    background: T.health.bg, border: `1px solid ${T.health.p}30`,
+                    borderRadius: 13, padding: '30px', textAlign: 'center', boxShadow: T.shadow,
+                  }}>
+                    <div style={{ fontSize: 38, marginBottom: 8 }}>🎉</div>
+                    <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 14, color: T.text }}>Dia Livre!</div>
+                    <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: T.textSec, marginTop: 3 }}>Nenhuma prioridade urgente.</div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {top3.map((item, i) => {
+                      const colors = [T.strategy, T.analytics, T.health];
+                      return (
+                        <div key={item.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
+                          <div style={{
+                            width: 27, height: 27, flexShrink: 0, marginTop: 2,
+                            background: colors[i].bg, border: `1.5px solid ${colors[i].p}`,
+                            borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 12,
+                            color: colors[i].p,
+                          }}>{i + 1}</div>
+                          <div style={{ flex: 1 }}><EventCard event={item} /></div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            </div>
+
+            {/* Insights + Urgentes */}
+            {(TS.insights?.length > 0 || urgent.length > 0) && (
+              <div className="a4" style={{
+                display: 'grid',
+                gridTemplateColumns: TS.insights?.length > 0 && urgent.length > 0 ? '1fr 1fr' : '1fr',
+                gap: 22, marginBottom: 26,
+              }}>
+                {TS.insights?.length > 0 && (
+                  <section>
+                    <SecHead emoji="💡" title="Insights do Dia" subtitle="Gerados automaticamente" color={T.analytics} />
+                    <InsightCard title="" insights={TS.insights} />
+                  </section>
+                )}
+                {urgent.length > 0 && (
+                  <section>
+                    <SecHead emoji="⚠️" title="Urgente" subtitle={`${urgent.length} item(ns) precisam de atenção`} color={T.strategy} />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {urgent.map(item => (
+                        <div key={item.id} style={{
+                          background: T.card, border: `1px solid ${T.border}`,
+                          borderLeft: `4px solid ${T.strategy.p}`,
+                          borderRadius: 13, padding: '13px 15px', boxShadow: T.shadow,
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 5 }}>
+                            <span style={{ fontSize: 17 }}>{item.type === 'bill' ? '💰' : '✅'}</span>
+                            <span style={{
+                              fontFamily: "'Poppins',sans-serif", fontSize: 10, fontWeight: 600,
+                              padding: '2px 7px', borderRadius: 20,
+                              background: T.strategy.bg, color: T.strategy.p,
+                            }}>{item.type === 'bill' ? 'CONTA' : 'TAREFA'}</span>
+                          </div>
+                          <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: T.text, marginBottom: 3 }}>
+                            {item.title}
+                          </div>
+                          <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: T.strategy.p }}>
+                            {item.urgency < 0
+                              ? `⏰ Atrasado há ${Math.abs(item.urgency)} dia(s)`
+                              : item.urgency === 0 ? '🔥 Vence HOJE' : `📌 Vence em ${item.urgency} dia(s)`}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </div>
+            )}
+
+            {/* Próximos Eventos */}
+            <section className="a4" style={{ marginBottom: 26 }}>
+              <SecHead emoji="📅" title="Próximos Eventos" subtitle="Nos próximos 3 dias" color={T.analytics} />
+              {upcoming.length === 0 ? (
+                <div style={{
+                  background: T.card, border: `1px solid ${T.border}`,
+                  borderRadius: 13, padding: '26px', textAlign: 'center',
+                  boxShadow: T.shadow, fontFamily: "'Poppins',sans-serif", fontSize: 13, color: T.textSec,
+                }}>
+                  📭 Nenhum evento nos próximos 3 dias
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(250px,1fr))', gap: 11 }}>
+                  {upcoming.map(e => <EventCard key={e.id} event={e} />)}
+                </div>
+              )}
+            </section>
+
+            {/* Personal KPIs */}
+            {onboardingData && (
+              <div className="a4" style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit,minmax(168px,1fr))',
+                gap: 12, marginBottom: 26,
+              }}>
+                {onboardingData.studyHoursPerDay && (
+                  <div style={{ background: T.analytics.bg, border: `1px solid ${T.analytics.p}30`, borderRadius: 13, padding: '16px', boxShadow: T.shadow }}>
+                    <div style={{ fontSize: 24, marginBottom: 7 }}>📚</div>
+                    <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: T.textSec }}>Meta de Estudo</div>
+                    <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 20, fontWeight: 700, color: T.analytics.p }}>{onboardingData.studyHoursPerDay}h/dia</div>
+                  </div>
+                )}
+                {onboardingData.exerciseFrequency && (
+                  <div style={{ background: T.health.bg, border: `1px solid ${T.health.p}30`, borderRadius: 13, padding: '16px', boxShadow: T.shadow }}>
+                    <div style={{ fontSize: 24, marginBottom: 7 }}>💪</div>
+                    <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: T.textSec }}>Exercícios</div>
+                    <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 17, fontWeight: 700, color: T.health.p }}>{onboardingData.exerciseFrequency}</div>
+                  </div>
+                )}
+                {onboardingData.waterGoal && (
+                  <div style={{ background: T.analytics.bg, border: `1px solid ${T.analytics.p}30`, borderRadius: 13, padding: '16px', boxShadow: T.shadow }}>
+                    <div style={{ fontSize: 24, marginBottom: 7 }}>💧</div>
+                    <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: T.textSec }}>Meta de Água</div>
+                    <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 20, fontWeight: 700, color: T.analytics.p }}>{onboardingData.waterGoal}L/dia</div>
+                  </div>
+                )}
+                {onboardingData.focusResidency && (
+                  <div style={{ background: T.wellness.bg, border: `1px solid ${T.wellness.p}30`, borderRadius: 13, padding: '16px', boxShadow: T.shadow }}>
+                    <div style={{ fontSize: 24, marginBottom: 7 }}>🎯</div>
+                    <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11.5, color: T.textSec }}>Objetivo</div>
+                    <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 16, fontWeight: 700, color: T.wellness.p }}>
+                      {onboardingData.focusResidency === 'sim' ? 'Residência' : 'Graduação'}
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
+                )}
+              </div>
+            )}
 
-        {/* Card Motivacional */}
-        <div className="bg-gradient-to-br from-purple-500 via-pink-500 to-red-500 rounded-2xl p-6 text-white shadow-2xl animate-fade-in" style={{ animationDelay: '0.6s' }}>
-          <div className="flex items-center gap-4">
-            <div className="text-5xl">💪</div>
-            <div>
-              <h3 className="text-xl font-bold mb-1">
-                {onboardingData?.name ? `Continue Focado, ${onboardingData.name}!` : 'Continue Focado!'}
-              </h3>
-              <p className="text-white/90 text-sm">
-                Cada tarefa concluída te aproxima dos seus objetivos
-              </p>
+            {/* Motivational */}
+            <div className="a4" style={{
+              background: `linear-gradient(135deg,${T.strategy.p},${T.wellness.p})`,
+              borderRadius: 15, padding: '20px 24px',
+              display: 'flex', alignItems: 'center', gap: 16,
+              boxShadow: `0 8px 24px ${T.strategy.p}40`,
+            }}>
+              <span style={{ fontSize: 42 }}>💪</span>
+              <div>
+                <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 15.5, color: '#fff', marginBottom: 3 }}>
+                  {name ? `Continue Focado, ${name}!` : 'Continue Focado!'}
+                </div>
+                <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12.5, color: 'rgba(255,255,255,.87)' }}>
+                  Cada tarefa concluída te aproxima dos seus objetivos 🌿
+                </div>
+              </div>
             </div>
-          </div>
+
+          </main>
         </div>
       </div>
 
-     
-
-      {/* Botão Flutuante de IA */}
+      {/* AI Chat FAB */}
       <button
         onClick={() => setShowAIChat(true)}
-        className="fixed bottom-6 right-6 w-16 h-16 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-full shadow-2xl hover:scale-110 transition-transform flex items-center justify-center z-40"
+        className="lift"
+        style={{
+          position: 'fixed', bottom: 22, right: 22,
+          width: 54, height: 54, borderRadius: '50%', border: 'none',
+          background: `linear-gradient(135deg,${T.strategy.p},${T.wellness.p})`,
+          boxShadow: `0 8px 24px ${T.strategy.p}55`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'pointer', zIndex: 50,
+        }}
         title="Assistente IA"
       >
-        <SparklesIcon className="h-8 w-8" />
+        <SparklesIcon style={{ width: 25, height: 25, color: '#fff' }} />
       </button>
 
-
-      {/* Modal do Chat IA */}
       <AIChat isOpen={showAIChat} onClose={() => setShowAIChat(false)} />
-    </div>
+    </>
   );
 }
