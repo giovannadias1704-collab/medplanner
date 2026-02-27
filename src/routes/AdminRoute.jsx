@@ -1,8 +1,7 @@
 import { Navigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { auth } from "../config/firebase";
+import { auth, db } from "../config/firebase";
 import { doc, getDoc } from "firebase/firestore";
-import { db } from "../config/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 
 export default function AdminRoute({ children }) {
@@ -11,6 +10,8 @@ export default function AdminRoute({ children }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      console.log("UID logado:", user?.uid); // ✅ Moved here
+
       if (!user) {
         setLoading(false);
         return;
@@ -22,6 +23,8 @@ export default function AdminRoute({ children }) {
 
         if (userSnap.exists() && userSnap.data().role === "admin") {
           setIsAdmin(true);
+        } else {
+          console.warn("Usuário não é admin ou role não definido");
         }
       } catch (error) {
         console.error("Erro ao verificar admin:", error);
@@ -33,13 +36,8 @@ export default function AdminRoute({ children }) {
     return () => unsubscribe();
   }, []);
 
-  if (loading) {
-    return <div>Verificando permissão...</div>;
-  }
-
-  if (!isAdmin) {
-    return <Navigate to="/" replace />;
-  }
+  if (loading) return <div>Verificando permissão...</div>;
+  if (!isAdmin) return <Navigate to="/" replace />;
 
   return children;
 }

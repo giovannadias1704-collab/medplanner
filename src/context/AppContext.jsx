@@ -21,7 +21,10 @@ export const AppContext = createContext();
 export function AppProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [notificationPermission, setNotificationPermission] = useState('default');
+
   // States
   const [events, setEvents] = useState([]);
   const [tasks, setTasks] = useState([]);
@@ -38,10 +41,6 @@ export function AppProvider({ children }) {
   const [wellBeingEntries, setWellBeingEntries] = useState([]);
   const [studySessions, setStudySessions] = useState([]);
   const [weeklyEvaluations, setWeeklyEvaluations] = useState([]);
-  
-  // ========== NOVO: NOTIFICAÇÕES ==========
-  const [notifications, setNotifications] = useState([]);
-  const [notificationPermission, setNotificationPermission] = useState('default');
   
   const [userProfile, setUserProfile] = useState({
     displayName: '',
@@ -77,29 +76,51 @@ export function AppProvider({ children }) {
     }
   });
 
-  // Autenticação
+  // Auth
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (!firebaseUser) {
+        setUser(null);
+        setIsAdmin(false);
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const userRef = doc(db, "users", firebaseUser.uid);
+        const userSnap = await getDoc(userRef);
+
+        if (userSnap.exists()) {
+          const userData = { uid: firebaseUser.uid, email: firebaseUser.email, ...userSnap.data() };
+          setUser(userData);
+          setIsAdmin(userSnap.data().role === "admin");
+        } else {
+          setUser({ uid: firebaseUser.uid, email: firebaseUser.email });
+          setIsAdmin(false);
+        }
+      } catch (error) {
+        console.error("Erro ao carregar usuário:", error);
+      }
+
       setLoading(false);
     });
+
     return () => unsubscribe();
   }, []);
 
-  // ========== NOVO: VERIFICAR PERMISSÃO DE NOTIFICAÇÕES ==========
+  // Notification permission
   useEffect(() => {
     if ('Notification' in window) {
       setNotificationPermission(Notification.permission);
     }
   }, []);
 
-  // Carregar dados do usuário
+  // Load user data
   useEffect(() => {
     if (!user) return;
 
     const unsubscribes = [];
 
-    // Helper function to create listener
     const createListener = (collectionName, setState) => {
       const q = query(collection(db, 'users', user.uid, collectionName));
       return onSnapshot(q, (snapshot) => {
@@ -108,67 +129,27 @@ export function AppProvider({ children }) {
       });
     };
 
-    // Events
     unsubscribes.push(createListener('events', setEvents));
-    
-    // Tasks
     unsubscribes.push(createListener('tasks', setTasks));
-    
-    // Bills
     unsubscribes.push(createListener('bills', setBills));
-    
-    // Workouts
     unsubscribes.push(createListener('workouts', setWorkouts));
-    
-    // Meals
     unsubscribes.push(createListener('meals', setMeals));
-    
-    // Weights
     unsubscribes.push(createListener('weights', setWeights));
-    
-    // Water Logs
     unsubscribes.push(createListener('waterLogs', setWaterLogs));
-    
-    // Notes
     unsubscribes.push(createListener('notes', setNotes));
-    
-    // PBL Cases
     unsubscribes.push(createListener('pblCases', setPblCases));
-    
-    // PBL Objectives
     unsubscribes.push(createListener('pblObjectives', setPblObjectives));
-    
-    // PBL Readings
     unsubscribes.push(createListener('pblReadings', setPblReadings));
-
-    // Home Tasks
     unsubscribes.push(createListener('homeTasks', setHomeTasks));
-
-    // Well-Being Entries
     unsubscribes.push(createListener('wellBeingEntries', setWellBeingEntries));
-
-    // Study Schedule
     unsubscribes.push(createListener('studySchedule', setStudySchedule));
-
-    // Study Topics
     unsubscribes.push(createListener('studyTopics', setStudyTopics));
-
-    // Study Reviews
     unsubscribes.push(createListener('studyReviews', setStudyReviews));
-
-    // Study Questions
     unsubscribes.push(createListener('studyQuestions', setStudyQuestions));
-
-    // Study Sessions
     unsubscribes.push(createListener('studySessions', setStudySessions));
-
-    // Weekly Evaluations
     unsubscribes.push(createListener('weeklyEvaluations', setWeeklyEvaluations));
-
-    // ========== NOVO: NOTIFICATIONS ==========
     unsubscribes.push(createListener('notifications', setNotifications));
 
-    // User Profile
     const userProfileQuery = query(collection(db, 'users', user.uid, 'profile'));
     unsubscribes.push(
       onSnapshot(userProfileQuery, (snapshot) => {
@@ -184,7 +165,6 @@ export function AppProvider({ children }) {
       })
     );
 
-    // Study Config
     const studyConfigQuery = query(collection(db, 'users', user.uid, 'studyConfig'));
     unsubscribes.push(
       onSnapshot(studyConfigQuery, (snapshot) => {
@@ -194,7 +174,6 @@ export function AppProvider({ children }) {
       })
     );
 
-    // Settings
     const settingsQuery = query(collection(db, 'users', user.uid, 'settings'));
     unsubscribes.push(
       onSnapshot(settingsQuery, (snapshot) => {
@@ -202,7 +181,6 @@ export function AppProvider({ children }) {
           const settingsData = snapshot.docs[0].data();
           setSettings(settingsData);
           
-          // Aplicar tema imediatamente
           if (settingsData.theme === 'dark') {
             document.documentElement.classList.add('dark');
           } else {
@@ -215,25 +193,21 @@ export function AppProvider({ children }) {
     return () => unsubscribes.forEach(unsub => unsub());
   }, [user]);
 
-  // ========== NOVO: SISTEMA DE VERIFICAÇÃO DE NOTIFICAÇÕES ==========
+  // Notification check interval
   useEffect(() => {
     if (!user || !settings.notifications) return;
 
-    // Verificar a cada 5 minutos
     const checkInterval = setInterval(() => {
       checkForNotifications();
-    }, 5 * 60 * 1000); // 5 minutos
+    }, 5 * 60 * 1000);
 
-    // Verificar imediatamente
     checkForNotifications();
 
     return () => clearInterval(checkInterval);
   }, [user, events, tasks, bills, settings]);
 
-  // ========== NOVO: FUNÇÃO PARA VERIFICAR E CRIAR NOTIFICAÇÕES ==========
+  // ==================== NOTIFICATIONS ====================
   const checkForNotifications = async () => {
-    if (!user || !settings.notifications) return;
-
     const now = new Date();
     const tomorrow = new Date(now);
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -243,7 +217,6 @@ export function AppProvider({ children }) {
     in3Days.setDate(in3Days.getDate() + 3);
     const in3DaysStr = in3Days.toISOString().split('T')[0];
 
-    // Eventos de amanhã
     if (settings.notificationTypes?.events) {
       for (const event of events) {
         if (event.date === tomorrowStr) {
@@ -258,7 +231,6 @@ export function AppProvider({ children }) {
       }
     }
 
-    // Tarefas atrasadas
     if (settings.notificationTypes?.tasks) {
       const todayStr = now.toISOString().split('T')[0];
       for (const task of tasks) {
@@ -268,12 +240,12 @@ export function AppProvider({ children }) {
             title: '⚠️ Tarefa Atrasada',
             message: `"${task.title}" está atrasada!`,
             relatedId: task.id,
-            priority: 'high'          });
+            priority: 'high'
+          });
         }
       }
     }
 
-    // Contas a vencer em 3 dias
     if (settings.notificationTypes?.bills) {
       for (const bill of bills) {
         if (!bill.paid && bill.date <= in3DaysStr && bill.date >= tomorrowStr) {
@@ -288,7 +260,6 @@ export function AppProvider({ children }) {
       }
     }
 
-    // Lembrete de água (a cada 2 horas durante o dia)
     if (settings.notificationTypes?.water) {
       const hour = now.getHours();
       if (hour >= 8 && hour <= 20 && hour % 2 === 0) {
@@ -306,12 +277,10 @@ export function AppProvider({ children }) {
     }
   };
 
-  // ========== NOVO: CRIAR NOTIFICAÇÃO IN-APP ==========
   const createInAppNotification = async (notificationData) => {
     if (!user) return;
     
     try {
-      // Verificar se já existe notificação similar recente (últimas 24h)
       const oneDayAgo = new Date();
       oneDayAgo.setDate(oneDayAgo.getDate() - 1);
       
@@ -321,16 +290,14 @@ export function AppProvider({ children }) {
         new Date(n.createdAt) > oneDayAgo
       );
 
-      if (existingNotification) return; // Não duplicar
+      if (existingNotification) return;
 
-      // Criar notificação no Firebase
       await addDoc(collection(db, 'users', user.uid, 'notifications'), {
         ...notificationData,
         read: false,
         createdAt: new Date().toISOString()
       });
 
-      // Enviar notificação do navegador se permitido
       if (notificationPermission === 'granted') {
         sendBrowserNotification(notificationData.title, notificationData.message);
       }
@@ -339,7 +306,6 @@ export function AppProvider({ children }) {
     }
   };
 
-  // ========== NOVO: ENVIAR NOTIFICAÇÃO DO NAVEGADOR ==========
   const sendBrowserNotification = (title, message, icon = '/icon-192.png') => {
     if ('Notification' in window && Notification.permission === 'granted') {
       try {
@@ -356,7 +322,6 @@ export function AppProvider({ children }) {
     }
   };
 
-  // ========== NOVO: SOLICITAR PERMISSÃO DE NOTIFICAÇÕES ==========
   const requestNotificationPermission = async () => {
     if (!('Notification' in window)) {
       console.log('Este navegador não suporta notificações');
@@ -373,18 +338,14 @@ export function AppProvider({ children }) {
     }
   };
 
-  // ========== NOVO: MARCAR NOTIFICAÇÃO COMO LIDA ==========
   const markNotificationAsRead = async (notificationId) => {
     if (!user) return;
     try {
       const notifRef = doc(db, 'users', user.uid, 'notifications', notificationId);
-      
-      // VERIFICAR SE DOCUMENTO EXISTE ANTES DE ATUALIZAR
       const notifDoc = await getDoc(notifRef);
       
       if (!notifDoc.exists()) {
         console.warn('⚠️ Notificação não encontrada no Firebase:', notificationId);
-        // Remover do estado local se não existir no Firebase
         setNotifications(prev => prev.filter(notif => notif.id !== notificationId));
         return;
       }
@@ -401,12 +362,10 @@ export function AppProvider({ children }) {
     }
   };
 
-  // ========== NOVO: MARCAR TODAS COMO LIDAS ==========
   const markAllNotificationsAsRead = async () => {
     if (!user) return;
     try {
       const unreadNotifications = notifications.filter(n => !n.read);
-      
       for (const notification of unreadNotifications) {
         await markNotificationAsRead(notification.id);
       }
@@ -415,7 +374,6 @@ export function AppProvider({ children }) {
     }
   };
 
-  // ========== NOVO: DELETAR NOTIFICAÇÃO ==========
   const deleteNotification = async (notificationId) => {
     if (!user) return;
     try {
@@ -425,7 +383,6 @@ export function AppProvider({ children }) {
     }
   };
 
-  // ========== NOVO: LIMPAR NOTIFICAÇÕES ANTIGAS (30+ dias) ==========
   const clearOldNotifications = async () => {
     if (!user) return;
     try {
@@ -446,12 +403,10 @@ export function AppProvider({ children }) {
     }
   };
 
-  // ========== NOVO: OBTER NOTIFICAÇÕES NÃO LIDAS ==========
   const getUnreadNotifications = () => {
     return notifications.filter(n => !n.read);
   };
 
-  // ========== NOVO: CRIAR NOTIFICAÇÃO MANUAL ==========
   const addManualNotification = async (title, message, type = 'info', priority = 'medium') => {
     await createInAppNotification({
       type,
@@ -471,7 +426,6 @@ export function AppProvider({ children }) {
         createdAt: new Date().toISOString()
       });
 
-      // ========== NOVO: CRIAR NOTIFICAÇÃO PARA EVENTO ==========
       if (settings.notificationTypes?.events && eventData.date) {
         const eventDate = new Date(eventData.date);
         const now = new Date();
@@ -960,7 +914,6 @@ export function AppProvider({ children }) {
       const storageRef = ref(storage, `users/${user.uid}/profile.jpg`);
       await uploadBytes(storageRef, file);
       const photoURL = await getDownloadURL(storageRef);
-      
       await updateUserProfile({ photoURL });
       return photoURL;
     } catch (error) {
@@ -1370,7 +1323,7 @@ export function AppProvider({ children }) {
   const value = {
     user,
     loading,
-    // States
+    isAdmin,
     events,
     tasks,
     bills,
@@ -1393,37 +1346,28 @@ export function AppProvider({ children }) {
     studySessions,
     weeklyEvaluations,
     settings,
-    // ========== NOVO: NOTIFICATIONS ==========
     notifications,
     notificationPermission,
-    // Events
     addEvent,
     updateEvent,
     deleteEvent,
-    // Tasks
     addTask,
     updateTask,
     deleteTask,
-    // Bills
     addBill,
     updateBill,
     deleteBill,
     toggleBillPaid,
-    // Workouts
     addWorkout,
     updateWorkout,
     deleteWorkout,
-    // Meals
     addMeal,
     updateMeal,
     deleteMeal,
-    // Weight
     addWeight,
-    // Water
     logWater,
     getWaterIntakeToday,
     updateWaterGoal,
-    // PBL
     addPBLCase,
     updatePBLCase,
     deletePBLCase,
@@ -1431,23 +1375,19 @@ export function AppProvider({ children }) {
     togglePBLObjective,
     addPBLReading,
     deletePBLReading,
-    // Home Tasks
     addHomeTask,
     updateHomeTask,
     deleteHomeTask,
     toggleHomeTask,
-    // Well-Being
     addWellBeingEntry,
     getWellBeingHistory,
     getWellBeingStats,
-    // User Profile & Settings
     updateUserProfile,
     uploadProfilePhoto,
     updateTheme,
     updateSettings,
     processPDFWithAI,
     exportAllData,
-    // Study
     updateStudyConfig,
     generateStudySchedule,
     toggleStudyScheduleItem,
@@ -1463,7 +1403,6 @@ export function AppProvider({ children }) {
     answerStudyQuestion,
     getTodayReviews,
     getUpcomingExams,
-    // ========== NOVO: NOTIFICATION FUNCTIONS ==========
     createInAppNotification,
     sendBrowserNotification,
     requestNotificationPermission,
@@ -1476,5 +1415,9 @@ export function AppProvider({ children }) {
     checkForNotifications
   };
 
-  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+  return (
+    <AppContext.Provider value={value}>
+      {children}
+    </AppContext.Provider>
+  );
 }
