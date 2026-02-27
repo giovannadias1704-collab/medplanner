@@ -2,33 +2,24 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
-console.log('🔑 API Key carregada:', API_KEY ? 'SIM ✅' : 'NÃO ❌');
-
 if (!API_KEY) {
   console.error('⚠️ VITE_GEMINI_API_KEY não configurada no arquivo .env');
 }
 
 const genAI = new GoogleGenerativeAI(API_KEY);
-
 const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-console.log('🤖 Modelo configurado: gemini-2.5-flash');
-
-// ─── Converte File para base64 ─────────────────────────────────────────────────
+// ─── Converte File para base64 ────────────────────────────────────────────────
 async function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => {
-      // Remove o prefixo "data:mime/type;base64," e retorna só o base64
-      const base64 = reader.result.split(',')[1];
-      resolve(base64);
-    };
+    reader.onload = () => resolve(reader.result.split(',')[1]);
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
 }
 
-// ─── Extrai texto de PDF para enviar como contexto ────────────────────────────
+// ─── Extrai texto de PDF ──────────────────────────────────────────────────────
 async function extractPDFText(file) {
   if (!window.pdfjsLib) {
     await new Promise((resolve, reject) => {
@@ -55,196 +46,244 @@ async function extractPDFText(file) {
   return fullText;
 }
 
-// FUNÇÃO: Gerar texto simples
-export async function generateText(prompt) {
-  try {
-    console.log('📤 Enviando prompt para Gemini:', prompt.substring(0, 100) + '...');
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
-    console.log('✅ Resposta recebida com sucesso!');
-    return text;
-  } catch (error) {
-    console.error('❌ Erro ao gerar texto:', error);
-    throw error;
-  }
+// ─── SISTEMA DE INTENÇÕES ─────────────────────────────────────────────────────
+// O Gemini retorna uma action quando identifica que deve executar algo no app.
+// O frontend lê essa action e executa no Firebase.
+//
+// Actions disponíveis:
+//   ADD_EXPENSE    → { description, amount, category, date }
+//   ADD_EVENT      → { title, date, time, description }
+//   ADD_TASK       → { title, dueDate, priority }
+//   ADD_GOAL       → { title, targetAmount, targetDate, category }
+//   NONE           → só resposta em texto
+
+const INTENT_SYSTEM_PROMPT = `
+Você é o assistente do MedPlanner, um app de organização para estudantes de medicina brasileiros.
+
+Você tem acesso aos dados reais do usuário (fornecidos abaixo) e pode executar ações no app.
+
+QUANDO EXECUTAR AÇÕES:
+Se o usuário pedir para adicionar gasto, despesa, conta → use ADD_EXPENSE
+Se o usuário pedir para adicionar evento, compromisso, aula, prova → use ADD_EVENT  
+Se o usuário pedir para adicionar tarefa, to-do → use ADD_TASK
+Se o usuário pedir para criar meta, objetivo de economia → use ADD_GOAL
+Caso contrário → use NONE e responda normalmente
+
+FORMATO OBRIGATÓRIO DA RESPOSTA:
+Sempre responda em JSON válido, sem markdown, sem backticks, exatamente assim:
+
+{
+  "action": "NONE" | "ADD_EXPENSE" | "ADD_EVENT" | "ADD_TASK" | "ADD_GOAL",
+  "actionData": { ... } ou null,
+  "message": "sua resposta para o usuário aqui"
 }
 
-// FUNÇÃO: Chat com suporte real a arquivos (imagens e PDFs)
-export async function chatWithAI(message, context = '', files = []) {
-  try {
-    console.log('📤 Enviando mensagem para Gemini:', message);
-    console.log('📎 Arquivos anexados:', files.length);
+EXEMPLOS:
 
+Usuário: "gastei 35 reais no almoço"
+{
+  "action": "ADD_EXPENSE",
+  "actionData": { "description": "Almoço", "amount": 35, "category": "Alimentação", "date": "hoje" },
+  "message": "✅ Adicionei R$ 35,00 na categoria Alimentação!"
+}
+
+Usuário: "tenho prova de anatomia na sexta às 8h"
+{
+  "action": "ADD_EVENT", 
+  "actionData": { "title": "Prova de Anatomia", "date": "sexta-feira", "time": "08:00", "description": "Prova" },
+  "message": "✅ Evento adicionado na sua agenda para sexta às 8h!"
+}
+
+Usuário: "me explica o ciclo cardíaco"
+{
+  "action": "NONE",
+  "actionData": null,
+  "message": "O ciclo cardíaco é composto por... [resposta completa aqui]"
+}
+`;
+
+// ─── CHAT PRINCIPAL com contexto do usuário ───────────────────────────────────
+export async function chatWithAI(message, userContext = {}, files = []) {
+  try {
     const parts = [];
 
-    // Processa cada arquivo
+    // Processa arquivos
     for (const file of files) {
       if (file.type.startsWith('image/')) {
-        // Imagem: envia como inlineData (base64)
         const base64 = await fileToBase64(file);
-        parts.push({
-          inlineData: {
-            mimeType: file.type,
-            data: base64
-          }
-        });
+        parts.push({ inlineData: { mimeType: file.type, data: base64 } });
         parts.push({ text: `[Imagem anexada: ${file.name}]` });
-
       } else if (file.type === 'application/pdf') {
-        // PDF: extrai o texto e envia como contexto
         try {
           const pdfText = await extractPDFText(file);
-          parts.push({
-            text: `[Conteúdo do PDF "${file.name}"]\n${pdfText.substring(0, 10000)}\n[Fim do PDF]`
-          });
-        } catch (err) {
-          console.warn('Não foi possível extrair texto do PDF:', err);
-          parts.push({ text: `[PDF anexado: ${file.name} - não foi possível extrair o texto]` });
+          parts.push({ text: `[Conteúdo do PDF "${file.name}"]\n${pdfText.substring(0, 10000)}\n[Fim do PDF]` });
+        } catch {
+          parts.push({ text: `[PDF: ${file.name} - erro ao extrair texto]` });
         }
       }
     }
 
-    // Monta o prompt principal
-    const systemPrompt = `Você é um assistente especializado em medicina e estudos médicos para estudantes universitários brasileiros.
+    // Monta contexto do usuário
+    const contextBlock = Object.keys(userContext).length > 0 ? `
+=== DADOS DO USUÁRIO ===
+${userContext.name ? `Nome: ${userContext.name}` : ''}
+${userContext.finances ? `Finanças do mês: Total gasto R$${userContext.finances.totalMonth || 0}, Contas pendentes: ${userContext.finances.pending || 0}` : ''}
+${userContext.events ? `Próximos eventos: ${userContext.events.slice(0, 3).map(e => e.title).join(', ')}` : ''}
+${userContext.goals ? `Metas ativas: ${userContext.goals.slice(0, 3).map(g => g.title).join(', ')}` : ''}
+Data atual: ${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
+========================
+` : `Data atual: ${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}`;
 
-Suas capacidades:
-- Analisar imagens médicas (radiografias, ECGs, histologia, etc.)
-- Ler e interpretar documentos PDF (cronogramas, artigos, casos clínicos)
-- Ajudar com PBL (Problem-Based Learning)
-- Criar flashcards e resumos
-- Montar cronogramas de estudo
-- Responder dúvidas médicas de forma didática
-
-IMPORTANTE: Quando o usuário enviar imagens ou PDFs, analise-os detalhadamente e responda com base no conteúdo real do arquivo.
-
-${context ? `Contexto adicional: ${context}` : ''}`;
-
-    parts.push({ text: `${systemPrompt}\n\nUsuário: ${message || 'Analise o(s) arquivo(s) acima e me diga o que você vê.'}` });
+    parts.push({
+      text: `${INTENT_SYSTEM_PROMPT}\n\n${contextBlock}\n\nUsuário: ${message || 'Analise os arquivos acima.'}`
+    });
 
     const result = await model.generateContent(parts);
     const response = await result.response;
     const text = response.text();
 
-    console.log('✅ Resposta recebida com sucesso!');
+    // Tenta parsear como JSON (sistema de intenções)
+    try {
+      const parsed = JSON.parse(text.trim());
+      return {
+        success: true,
+        action: parsed.action || 'NONE',
+        actionData: parsed.actionData || null,
+        response: parsed.message || text,
+        raw: parsed
+      };
+    } catch {
+      // Se não veio JSON (resposta livre), retorna sem action
+      return {
+        success: true,
+        action: 'NONE',
+        actionData: null,
+        response: text
+      };
+    }
 
-    return {
-      success: true,
-      response: text,
-      tokens: response.usageMetadata || {}
-    };
   } catch (error) {
-    console.error('❌ Erro ao chamar Gemini:', error);
+    console.error('❌ Erro Gemini:', error);
     return {
       success: false,
-      error: error.message,
-      response: `Desculpe, ocorreu um erro ao processar sua mensagem: ${error.message}`
+      action: 'NONE',
+      actionData: null,
+      response: `Erro ao processar: ${error.message}`
     };
   }
 }
 
-// FUNÇÃO: Sugestões de estudo
-export async function getStudySuggestions(subject, goals, availableTime) {
-  const prompt = `Você é um assistente especializado em medicina e estudos médicos.
+// ─── FLASHCARDS (prompt preciso, entrega o formato certo) ─────────────────────
+export async function generateFlashcards(topic, quantity = 15, pdfText = '') {
+  const sourceText = pdfText
+    ? `\n\nConteúdo base para os flashcards:\n${pdfText.substring(0, 8000)}`
+    : '';
 
-Assunto: ${subject}
-Objetivos: ${goals}
-Tempo disponível: ${availableTime} horas por semana
+  const prompt = `Crie EXATAMENTE ${quantity} flashcards sobre: ${topic}${sourceText}
 
-Crie um plano de estudos semanal detalhado e prático, incluindo:
-1. Divisão de tópicos por dia
-2. Tempo estimado para cada atividade
-3. Técnicas de estudo recomendadas
-4. Recursos sugeridos (livros, vídeos, artigos)
+REGRAS OBRIGATÓRIAS:
+- Retorne APENAS os flashcards, sem introdução, sem explicação, sem texto antes ou depois
+- Cada flashcard deve ter exatamente este formato, sem variações:
 
-Seja específico e objetivo.`;
+FRENTE: [pergunta objetiva e clara]
+VERSO: [resposta concisa, máximo 3 linhas]
 
-  return await chatWithAI(prompt);
+---
+
+- Foque em conceitos clínicos, fisiologia, farmacologia e o que cai em provas
+- Não numere os flashcards
+- Não adicione comentários entre eles
+
+Comece agora diretamente com o primeiro flashcard:`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+    return { success: true, action: 'NONE', actionData: null, response: text };
+  } catch (error) {
+    return { success: false, action: 'NONE', actionData: null, response: `Erro: ${error.message}` };
+  }
 }
 
-// FUNÇÃO: Analisar PBL
-export async function analyzePBL(pblTitle, pblDescription, objectives) {
-  const prompt = `Você é um tutor de Problem-Based Learning (PBL) para estudantes de medicina.
+// ─── CRONOGRAMA ───────────────────────────────────────────────────────────────
+export async function createSchedule(details) {
+  const prompt = `Crie um cronograma de estudos semanal para um estudante de medicina.
 
-Título do PBL: ${pblTitle}
-Descrição: ${pblDescription}
-Objetivos atuais: ${objectives || 'Não definidos'}
+Detalhes: ${details}
 
-Analise este caso PBL e forneça:
-1. Objetivos de aprendizagem detalhados (mínimo 5)
-2. Tópicos principais a serem estudados
-3. Perguntas norteadoras para discussão
-4. Recursos bibliográficos recomendados (livros e artigos)
-5. Sugestões de como abordar o caso
+FORMATO OBRIGATÓRIO (retorne APENAS o cronograma, sem texto antes):
 
-Seja específico e prático.`;
+📅 CRONOGRAMA SEMANAL
 
-  return await chatWithAI(prompt);
+Segunda-feira:
+• 07:00 - 09:00 | [atividade]
+• ...
+
+Terça-feira:
+• ...
+
+[continue para todos os dias]
+
+⚠️ Dicas de execução:
+• [3 dicas práticas]`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+    return { success: true, action: 'NONE', actionData: null, response: text };
+  } catch (error) {
+    return { success: false, action: 'NONE', actionData: null, response: `Erro: ${error.message}` };
+  }
 }
 
-// FUNÇÃO: Criar Flashcards
-export async function generateFlashcards(topic, quantity = 10) {
-  const prompt = `Crie ${quantity} flashcards sobre: ${topic}
+// ─── ANÁLISE DE PBL ───────────────────────────────────────────────────────────
+export async function analyzePBL(pblText) {
+  const prompt = `Analise este caso PBL de medicina e estruture a abertura de caixa:
 
-Formato para cada flashcard:
-FRENTE: [pergunta objetiva]
-VERSO: [resposta clara e concisa]
+${pblText}
 
-Foque em conceitos importantes, fatos clínicos relevantes e informações que estudantes de medicina precisam memorizar.
+Retorne neste formato:
 
-Separe cada flashcard com "---"`;
+🔍 PALAVRAS-CHAVE
+• [liste os termos relevantes do caso]
 
-  return await chatWithAI(prompt);
+❓ PROBLEMAS IDENTIFICADOS
+• [liste os problemas/queixas]
+
+🎯 HIPÓTESES DIAGNÓSTICAS
+1. [hipótese principal]
+2. [hipótese alternativa]
+
+📚 OBJETIVOS DE APRENDIZAGEM
+1. [objetivo claro e específico]
+2. ...
+
+🔗 CORRELAÇÕES
+• [correlações fisiológicas/clínicas relevantes]`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+    return { success: true, action: 'NONE', actionData: null, response: text };
+  } catch (error) {
+    return { success: false, action: 'NONE', actionData: null, response: `Erro: ${error.message}` };
+  }
 }
 
-// FUNÇÃO: Criar cronograma inteligente
-export async function createSmartSchedule(events, preferences, goals) {
-  const prompt = `Você é um assistente de produtividade para estudantes de medicina.
-
-Eventos existentes: ${JSON.stringify(events)}
-Preferências: ${preferences}
-Objetivos da semana: ${goals}
-
-Crie um cronograma semanal otimizado que:
-1. Respeite os eventos já marcados
-2. Inclua blocos de estudo estratégicos
-3. Considere pausas e descanso
-4. Sugira horários ideais para cada atividade
-5. Equilibre estudo, saúde e bem-estar
-
-Retorne em formato de lista organizada por dia.`;
-
-  return await chatWithAI(prompt);
-}
-
-// FUNÇÃO: Resumir texto
-export async function summarizeText(text, maxLength = 200) {
-  const prompt = `Resuma o seguinte texto em no máximo ${maxLength} palavras, mantendo as informações mais importantes:\n\n${text}`;
-  return await chatWithAI(prompt);
-}
-
-// FUNÇÃO: Responder dúvidas médicas (educacional)
-export async function answerMedicalQuestion(question) {
-  const prompt = `Você é um assistente educacional para estudantes de medicina. Responda a seguinte dúvida de forma didática e baseada em evidências:
-
-${question}
-
-IMPORTANTE: 
-- Esta é uma resposta educacional para estudantes
-- Não substitui consulta médica real
-- Cite fontes quando possível
-- Seja claro e objetivo`;
-
-  return await chatWithAI(prompt);
+// ─── TEXTO SIMPLES (para casos que não precisam de intenção) ──────────────────
+export async function generateText(prompt) {
+  try {
+    const result = await model.generateContent(prompt);
+    return result.response.text();
+  } catch (error) {
+    throw error;
+  }
 }
 
 export default {
   generateText,
   chatWithAI,
-  getStudySuggestions,
-  analyzePBL,
   generateFlashcards,
-  createSmartSchedule,
-  summarizeText,
-  answerMedicalQuestion
+  createSchedule,
+  analyzePBL
 };
