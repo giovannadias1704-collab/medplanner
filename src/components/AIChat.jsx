@@ -53,7 +53,6 @@ export default function AIChat({ isOpen, onClose }) {
   const { user } = useAuth();
   const { subscription, canUseAI, isPremium, loading: subLoading } = useSubscription();
 
-  // Usa as funções do AppContext — atualização instantânea na UI
   const { addBill, addEvent, addTask, addHomeTask, logWater, events, bills, tasks } = useContext(AppContext);
 
   const { conversations, currentConversationId, createNewConversation,
@@ -107,7 +106,7 @@ export default function AIChat({ isOpen, onClose }) {
     return () => { recognitionRef.current?.stop(); synthRef.current?.cancel(); };
   }, []);
 
-  // Executa ação via AppContext (mesmo fluxo que o resto do app)
+  // Executa ação via AppContext
   const executeAction = async (action, actionData) => {
     try {
       switch (action) {
@@ -200,7 +199,11 @@ export default function AIChat({ isOpen, onClose }) {
       content: input || '📎 Arquivo(s) anexado(s)',
       files: attachedFiles.map(f => ({ name: f.name, type: f.type }))
     };
+
+    // Captura estado atual antes de atualizar
+    const currentMessages = [...messages];
     setMessages(prev => [...prev, userMsg]);
+
     const currentInput = input;
     const filesToSend = [...attachedFiles];
     setInput('');
@@ -222,7 +225,14 @@ export default function AIChat({ isOpen, onClose }) {
       } else {
         const userContext = buildUserContext();
         if (user?.displayName) userContext.name = user.displayName;
-        response = await chatWithAI(currentInput, userContext, filesToSend);
+
+        // ✅ CORREÇÃO PRINCIPAL: passa o histórico de mensagens para manter contexto
+        // Filtra mensagens de instrução/sistema que não devem ir pro modelo
+        const chatHistory = currentMessages
+          .filter(m => !m.isInstruction)
+          .map(m => ({ role: m.role, content: m.content }));
+
+        response = await chatWithAI(currentInput, userContext, filesToSend, chatHistory);
       }
 
       let executedAction = null;

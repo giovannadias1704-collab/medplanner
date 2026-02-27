@@ -47,33 +47,34 @@ async function extractPDFText(file) {
 }
 
 // ─── SISTEMA DE INTENÇÕES ─────────────────────────────────────────────────────
-// O Gemini retorna uma action quando identifica que deve executar algo no app.
-// O frontend lê essa action e executa no Firebase.
-//
-// Actions disponíveis:
-//   ADD_EXPENSE    → { description, amount, category, date }
-//   ADD_EVENT      → { title, date, time, description }
-//   ADD_TASK       → { title, dueDate, priority }
-//   ADD_GOAL       → { title, targetAmount, targetDate, category }
+// Actions disponíveis (alinhadas com executeAction no AIChat.jsx):
+//   ADD_BILL       → { description, amount, date }
+//   ADD_EVENT      → { title, date, time, description, eventType }
+//   ADD_TASK       → { title, date, priority, description }
+//   ADD_HOME_TASK  → { title, category, priority }
+//   LOG_WATER      → { amount }
 //   NONE           → só resposta em texto
 
 const INTENT_SYSTEM_PROMPT = `
 Você é o assistente do MedPlanner, um app de organização para estudantes de medicina brasileiros.
 
-Você tem acesso aos dados reais do usuário (fornecidos abaixo) e pode executar ações no app.
+Você tem MEMÓRIA da conversa — sempre leve em conta o que foi dito anteriormente para dar respostas coerentes e contextuais.
+
+Você pode executar ações no app quando o usuário pedir.
 
 QUANDO EXECUTAR AÇÕES:
-Se o usuário pedir para adicionar gasto, despesa, conta → use ADD_EXPENSE
-Se o usuário pedir para adicionar evento, compromisso, aula, prova → use ADD_EVENT  
-Se o usuário pedir para adicionar tarefa, to-do → use ADD_TASK
-Se o usuário pedir para criar meta, objetivo de economia → use ADD_GOAL
-Caso contrário → use NONE e responda normalmente
+- Usuário mencionar gasto, despesa, conta, pagamento → ADD_BILL
+- Usuário mencionar evento, compromisso, aula, prova, consulta → ADD_EVENT
+- Usuário mencionar tarefa, afazer, to-do, lembrete de atividade → ADD_TASK
+- Usuário mencionar tarefa doméstica, limpar, lavar, arrumar → ADD_HOME_TASK
+- Usuário mencionar que bebeu água, hidratação → LOG_WATER
+- Qualquer outro assunto → NONE
 
 FORMATO OBRIGATÓRIO DA RESPOSTA:
 Sempre responda em JSON válido, sem markdown, sem backticks, exatamente assim:
 
 {
-  "action": "NONE" | "ADD_EXPENSE" | "ADD_EVENT" | "ADD_TASK" | "ADD_GOAL",
+  "action": "NONE" | "ADD_BILL" | "ADD_EVENT" | "ADD_TASK" | "ADD_HOME_TASK" | "LOG_WATER",
   "actionData": { ... } ou null,
   "message": "sua resposta para o usuário aqui"
 }
@@ -82,16 +83,30 @@ EXEMPLOS:
 
 Usuário: "gastei 35 reais no almoço"
 {
-  "action": "ADD_EXPENSE",
-  "actionData": { "description": "Almoço", "amount": 35, "category": "Alimentação", "date": "hoje" },
-  "message": "✅ Adicionei R$ 35,00 na categoria Alimentação!"
+  "action": "ADD_BILL",
+  "actionData": { "description": "Almoço", "amount": 35, "date": "hoje" },
+  "message": "✅ Adicionei R$ 35,00 em Finanças!"
 }
 
 Usuário: "tenho prova de anatomia na sexta às 8h"
 {
-  "action": "ADD_EVENT", 
-  "actionData": { "title": "Prova de Anatomia", "date": "sexta-feira", "time": "08:00", "description": "Prova" },
-  "message": "✅ Evento adicionado na sua agenda para sexta às 8h!"
+  "action": "ADD_EVENT",
+  "actionData": { "title": "Prova de Anatomia", "date": "sexta-feira", "time": "08:00", "eventType": "exam", "description": "Prova" },
+  "message": "✅ Prova de Anatomia adicionada na agenda para sexta às 8h!"
+}
+
+Usuário: "adiciona tarefa: revisar farmacologia"
+{
+  "action": "ADD_TASK",
+  "actionData": { "title": "Revisar farmacologia", "date": "hoje", "priority": "média" },
+  "message": "✅ Tarefa criada!"
+}
+
+Usuário: "bebi 500ml de água"
+{
+  "action": "LOG_WATER",
+  "actionData": { "amount": 0.5 },
+  "message": "💧 Registrei 500ml de água!"
 }
 
 Usuário: "me explica o ciclo cardíaco"
@@ -102,49 +117,77 @@ Usuário: "me explica o ciclo cardíaco"
 }
 `;
 
-// ─── CHAT PRINCIPAL com contexto do usuário ───────────────────────────────────
-export async function chatWithAI(message, userContext = {}, files = []) {
+// ─── CHAT PRINCIPAL com histórico e contexto do usuário ──────────────────────
+export async function chatWithAI(message, userContext = {}, files = [], history = []) {
   try {
-    const parts = [];
+    // Monta contexto do usuário
+    const contextBlock = `
+=== DADOS DO USUÁRIO ===
+${userContext.name ? `Nome: ${userContext.name}` : ''}
+${userContext.finances ? `Finanças: Total pendente R$${userContext.finances.totalPending || 0}, ${userContext.finances.pendingCount || 0} contas a pagar` : ''}
+${userContext.events ? `Próximos eventos: ${userContext.events.map(e => e.title).join(', ')}` : ''}
+${userContext.tasks ? `Tarefas pendentes: ${userContext.tasks.pending}` : ''}
+Data atual: ${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
+========================`;
 
-    // Processa arquivos
+    // Converte histórico para o formato do Gemini SDK
+    // O primeiro turn DEVE ser 'user', então inclui o system prompt junto à primeira msg do usuário
+    const systemAndContext = `${INTENT_SYSTEM_PROMPT}\n\n${contextBlock}`;
+
+    const geminiHistory = [];
+
+    for (let i = 0; i < history.length; i++) {
+      const msg = history[i];
+      const role = msg.role === 'assistant' ? 'model' : 'user';
+
+      // Injeta system prompt junto à primeira mensagem do usuário no histórico
+      let text = msg.content;
+      if (i === 0 && role === 'user') {
+        text = `${systemAndContext}\n\nUsuário: ${msg.content}`;
+      }
+
+      geminiHistory.push({
+        role,
+        parts: [{ text }]
+      });
+    }
+
+    // Monta a mensagem atual com arquivos
+    const currentParts = [];
+
+    // Processa arquivos anexados
     for (const file of files) {
       if (file.type.startsWith('image/')) {
         const base64 = await fileToBase64(file);
-        parts.push({ inlineData: { mimeType: file.type, data: base64 } });
-        parts.push({ text: `[Imagem anexada: ${file.name}]` });
+        currentParts.push({ inlineData: { mimeType: file.type, data: base64 } });
+        currentParts.push({ text: `[Imagem anexada: ${file.name}]` });
       } else if (file.type === 'application/pdf') {
         try {
           const pdfText = await extractPDFText(file);
-          parts.push({ text: `[Conteúdo do PDF "${file.name}"]\n${pdfText.substring(0, 10000)}\n[Fim do PDF]` });
+          currentParts.push({ text: `[Conteúdo do PDF "${file.name}"]\n${pdfText.substring(0, 10000)}\n[Fim do PDF]` });
         } catch {
-          parts.push({ text: `[PDF: ${file.name} - erro ao extrair texto]` });
+          currentParts.push({ text: `[PDF: ${file.name} - erro ao extrair texto]` });
         }
       }
     }
 
-    // Monta contexto do usuário
-    const contextBlock = Object.keys(userContext).length > 0 ? `
-=== DADOS DO USUÁRIO ===
-${userContext.name ? `Nome: ${userContext.name}` : ''}
-${userContext.finances ? `Finanças do mês: Total gasto R$${userContext.finances.totalMonth || 0}, Contas pendentes: ${userContext.finances.pending || 0}` : ''}
-${userContext.events ? `Próximos eventos: ${userContext.events.slice(0, 3).map(e => e.title).join(', ')}` : ''}
-${userContext.goals ? `Metas ativas: ${userContext.goals.slice(0, 3).map(g => g.title).join(', ')}` : ''}
-Data atual: ${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
-========================
-` : `Data atual: ${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}`;
+    // Se não há histórico ainda, injeta o system prompt na mensagem atual
+    if (geminiHistory.length === 0) {
+      currentParts.push({ text: `${systemAndContext}\n\nUsuário: ${message || 'Analise os arquivos acima.'}` });
+    } else {
+      currentParts.push({ text: `Usuário: ${message || 'Analise os arquivos acima.'}` });
+    }
 
-    parts.push({
-      text: `${INTENT_SYSTEM_PROMPT}\n\n${contextBlock}\n\nUsuário: ${message || 'Analise os arquivos acima.'}`
-    });
-
-    const result = await model.generateContent(parts);
-    const response = await result.response;
-    const text = response.text();
+    // Inicia o chat com histórico e envia a mensagem atual
+    const chat = model.startChat({ history: geminiHistory });
+    const result = await chat.sendMessage(currentParts);
+    const text = result.response.text();
 
     // Tenta parsear como JSON (sistema de intenções)
     try {
-      const parsed = JSON.parse(text.trim());
+      // Remove possíveis blocos markdown que o modelo às vezes insere
+      const cleaned = text.trim().replace(/^```json\s*/i, '').replace(/\s*```$/i, '');
+      const parsed = JSON.parse(cleaned);
       return {
         success: true,
         action: parsed.action || 'NONE',
@@ -153,7 +196,6 @@ Data atual: ${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-
         raw: parsed
       };
     } catch {
-      // Se não veio JSON (resposta livre), retorna sem action
       return {
         success: true,
         action: 'NONE',
@@ -173,7 +215,7 @@ Data atual: ${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-
   }
 }
 
-// ─── FLASHCARDS (prompt preciso, entrega o formato certo) ─────────────────────
+// ─── FLASHCARDS ───────────────────────────────────────────────────────────────
 export async function generateFlashcards(topic, quantity = 15, pdfText = '') {
   const sourceText = pdfText
     ? `\n\nConteúdo base para os flashcards:\n${pdfText.substring(0, 8000)}`
@@ -270,7 +312,7 @@ Retorne neste formato:
   }
 }
 
-// ─── TEXTO SIMPLES (para casos que não precisam de intenção) ──────────────────
+// ─── TEXTO SIMPLES ────────────────────────────────────────────────────────────
 export async function generateText(prompt) {
   try {
     const result = await model.generateContent(prompt);
