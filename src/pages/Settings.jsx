@@ -2,7 +2,6 @@ import { useState, useContext, useRef, useEffect } from 'react';
 import { AppContext } from '../context/AppContext';
 import { useOnboarding } from '../hooks/useOnboarding';
 import ThemeSelector from '../components/ThemeSelector';
-import { applyTheme, getStoredTheme } from '../utils/themeManager';
 import { auth } from '../services/firebase';
 import { signOut } from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
@@ -131,34 +130,25 @@ export default function Settings() {
   const [editingName, setEditingName] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [processingPDF, setProcessingPDF] = useState(false);
-  const [selectedTheme, setSelectedTheme] = useState(() => getStoredTheme());
 
   // Unified config state
   const [cfg, setCfg] = useState({
-    // notifications
     notifEvents: true, notifTasks: true, notifBills: true,
     notifWater: true, notifStudy: true, notifHealth: false,
     notifEmail: false, notifPush: true, notifInternal: true,
     notifFrequency: 'daily',
-    // analysis
     analysisPeriod: '30', autoCorrelations: true,
     scoreWeightHealth: 30, scoreWeightMental: 30,
     scoreWeightProd: 30, scoreWeightFinance: 10,
-    // ai
     aiAutoSave: false, aiHistorical: true,
     aiSuggestions: true, aiStyle: 'balanced', aiInsightsPerDay: 5,
-    // agenda
     weekStartsOn: 'monday', timezone: 'America/Sao_Paulo',
     dateFormat: 'dd/mm/yyyy', defaultReminderTime: '09:00',
-    // health
     weightUnit: 'kg', heightUnit: 'cm',
     waterGoal: 2.0, sleepGoal: 8, exerciseGoal: 30,
-    // study
     pomodoroDuration: 25, pomodoroBreak: 5,
     spacedRepFreq: 'daily', weeklyStudyGoal: 20,
-    // finance
     currency: 'BRL', monthStart: 1, savingsGoal: 500, overspendAlert: true,
-    // system
     language: 'pt-BR', region: 'BR',
     fontSize: 'medium', highContrast: false, reduceAnimations: false,
   });
@@ -226,7 +216,6 @@ export default function Settings() {
 
   const totalWeight = cfg.scoreWeightHealth + cfg.scoreWeightMental + cfg.scoreWeightProd + cfg.scoreWeightFinance;
 
-  // ─── RENDER ────────────────────────────────────────────────────────────────
   return (
     <PageLayout
       title="Configurações"
@@ -248,8 +237,8 @@ export default function Settings() {
 
       <div className="settings-wrap pb-32">
 
-        {/* ── MOBILE NAV ────────────────────────────────────────────── */}
-        <div className="lg:hidden w-full mb-6 -mx-0 overflow-x-auto">
+        {/* ── MOBILE NAV ── */}
+        <div className="lg:hidden w-full mb-6 overflow-x-auto">
           <div className="flex gap-2 min-w-max pb-2">
             {NAV_ITEMS.map(n => (
               <button key={n.id} onClick={() => scrollTo(n.id)}
@@ -264,16 +253,13 @@ export default function Settings() {
 
         <div className="flex gap-6">
 
-          {/* ── DESKTOP SIDEBAR ───────────────────────────────────────── */}
+          {/* ── DESKTOP SIDEBAR ── */}
           <aside className="hidden lg:flex flex-col gap-1 w-52 flex-shrink-0 sticky top-24 self-start">
             {NAV_ITEMS.map(n => (
-              <button
-                key={n.id}
-                onClick={() => scrollTo(n.id)}
+              <button key={n.id} onClick={() => scrollTo(n.id)}
                 className={`snav-btn flex items-center gap-3 px-4 py-2.5 text-left text-sm font-semibold w-full ${
                   activeSection === n.id ? 'is-active' : 'text-gray-600 dark:text-gray-400'
-                }`}
-              >
+                }`}>
                 <span className="text-base">{n.icon}</span>
                 <span>{n.label}</span>
               </button>
@@ -286,15 +272,11 @@ export default function Settings() {
             </div>
           </aside>
 
-          {/* ── SECTIONS ──────────────────────────────────────────────── */}
+          {/* ── SECTIONS ── */}
           <div className="flex-1 space-y-6 sfade min-w-0">
 
-            {/* ══════════════════════════════════════════════════
-                1. CONTA
-            ══════════════════════════════════════════════════ */}
+            {/* 1. CONTA */}
             <SectionCard id="conta" icon="👤" label="Conta" gradient="from-blue-500 to-indigo-600">
-
-              {/* Profile hero */}
               <div className="flex items-start gap-4 p-4 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-2xl border border-indigo-100 dark:border-indigo-800">
                 <div className="relative flex-shrink-0">
                   <div className="w-20 h-20 rounded-2xl overflow-hidden bg-gradient-to-br from-gray-200 to-gray-300 dark:from-gray-700 dark:to-gray-600 shadow-md">
@@ -310,7 +292,6 @@ export default function Settings() {
                   </button>
                   <input ref={fileInputRef} type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
                 </div>
-
                 <div className="flex-1 min-w-0">
                   {editingName ? (
                     <div className="flex gap-2 mb-2">
@@ -340,25 +321,15 @@ export default function Settings() {
                   Redefinir
                 </button>
               </Row>
-
               <Row icon="📱" title="Autenticação em 2 Fatores" desc="Camada extra de segurança (2FA)">
                 <Toggle value={false} onChange={() => alert('2FA em breve!')} />
               </Row>
-
               <Row icon="💻" title="Sessões Ativas" desc="Dispositivos conectados à conta">
-                <button onClick={() => alert('Em breve')}
-                  className="px-4 py-2 text-xs font-bold border border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all">
-                  Ver sessões
-                </button>
+                <button onClick={() => alert('Em breve')} className="px-4 py-2 text-xs font-bold border border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all">Ver sessões</button>
               </Row>
-
               <Row icon="📋" title="Histórico de Login" desc="Registro dos últimos acessos">
-                <button onClick={() => alert('Em breve')}
-                  className="px-4 py-2 text-xs font-bold border border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all">
-                  Ver histórico
-                </button>
+                <button onClick={() => alert('Em breve')} className="px-4 py-2 text-xs font-bold border border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all">Ver histórico</button>
               </Row>
-
               <Row icon="🗑️" title="Excluir Conta" desc="Ação irreversível — todos os dados serão removidos" danger>
                 <button onClick={() => confirm('Tem certeza? Esta ação é irreversível!') && alert('Funcionalidade em breve')}
                   className="px-4 py-2 text-xs font-bold bg-red-600 hover:bg-red-700 text-white rounded-xl transition-all">
@@ -367,16 +338,13 @@ export default function Settings() {
               </Row>
             </SectionCard>
 
-            {/* ══════════════════════════════════════════════════
-                2. PRIVACIDADE & SEGURANÇA
-            ══════════════════════════════════════════════════ */}
+            {/* 2. PRIVACIDADE */}
             <SectionCard id="privacidade" icon="🔐" label="Privacidade & Segurança" gradient="from-slate-600 to-gray-700">
-
               <div className="grid grid-cols-3 gap-2">
                 {[
                   { label: 'JSON', icon: '📥', action: () => exportAllData?.() },
-                  { label: 'PDF', icon: '📄', action: () => alert('Em breve') },
-                  { label: 'CSV', icon: '📊', action: () => alert('Em breve') },
+                  { label: 'PDF',  icon: '📄', action: () => alert('Em breve') },
+                  { label: 'CSV',  icon: '📊', action: () => alert('Em breve') },
                 ].map(b => (
                   <button key={b.label} onClick={b.action}
                     className="flex flex-col items-center gap-1.5 py-3 px-2 bg-gray-50 dark:bg-gray-700/40 hover:bg-gray-100 dark:hover:bg-gray-700/70 rounded-2xl border border-gray-200 dark:border-gray-700 transition-all">
@@ -385,7 +353,6 @@ export default function Settings() {
                   </button>
                 ))}
               </div>
-
               <div className="bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 rounded-2xl p-4">
                 <p className="text-xs font-bold text-red-700 dark:text-red-400 mb-3">🗑️ Apagar Dados por Categoria</p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -397,64 +364,45 @@ export default function Settings() {
                   ))}
                 </div>
               </div>
-
               <Row icon="☁️" title="Backup Automático" desc="Cópia diária salva na nuvem">
                 <Toggle value={true} onChange={() => {}} />
               </Row>
-
               <Row icon="🔒" title="Criptografia" desc="Dados sensíveis criptografados">
                 <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-3 py-1 rounded-full font-bold">Ativa ✅</span>
               </Row>
-
               <SelectRow icon="⏱️" title="Timeout por Inatividade" desc="Bloquear após tempo sem uso"
                 value="never" onChange={() => {}}
                 options={[
                   { value: 'never', label: 'Nunca' },
-                  { value: '5', label: '5 minutos' },
-                  { value: '15', label: '15 minutos' },
-                  { value: '30', label: '30 minutos' },
+                  { value: '5',     label: '5 minutos' },
+                  { value: '15',    label: '15 minutos' },
+                  { value: '30',    label: '30 minutos' },
                 ]} />
             </SectionCard>
 
-            {/* ══════════════════════════════════════════════════
-                3. PERSONALIZAÇÃO
-            ══════════════════════════════════════════════════ */}
+            {/* 3. PERSONALIZAÇÃO — ThemeSelector sem props */}
             <SectionCard id="visual" icon="🎨" label="Personalização" gradient="from-pink-500 to-rose-600">
-
-              {/* ThemeSelector mantido dentro do SectionCard, apenas sem o wrapper extra */}
               <div className="rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-700">
-                <ThemeSelector currentTheme={selectedTheme} onThemeChange={(t) => {
-                  setSelectedTheme(t);
-                  applyTheme(t);
-                  updateTheme?.(t === 'dark' ? 'dark' : 'light');
-                }} />
+                {/* ✅ ThemeSelector usa useTheme() internamente — sem props necessárias */}
+                <ThemeSelector />
               </div>
 
               <SelectRow icon="📐" title="Layout" desc="Modo de exibição das informações"
                 value="expanded" onChange={() => {}}
                 options={[{ value: 'compact', label: '🗜️ Compacto' }, { value: 'expanded', label: '📋 Expandido' }]} />
-
               <SelectRow icon="🔍" title="Nível de Detalhe" desc="Quantidade de informações exibidas"
                 value="advanced" onChange={() => {}}
                 options={[{ value: 'simple', label: '🔍 Simplificado' }, { value: 'advanced', label: '🔬 Avançado' }]} />
-
               <Row icon="📌" title="Ordem das Abas" desc="Reordenar módulos do menu">
                 <span className="text-xs text-gray-400 italic">Em breve</span>
               </Row>
-
               <Row icon="👁️" title="Métricas Visíveis" desc="Ocultar cards no Dashboard">
-                <button className="px-4 py-2 text-xs font-bold border border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
-                  Configurar
-                </button>
+                <button className="px-4 py-2 text-xs font-bold border border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">Configurar</button>
               </Row>
             </SectionCard>
 
-            {/* ══════════════════════════════════════════════════
-                4. NOTIFICAÇÕES
-            ══════════════════════════════════════════════════ */}
+            {/* 4. NOTIFICAÇÕES */}
             <SectionCard id="notificacoes" icon="🔔" label="Notificações" gradient="from-amber-500 to-orange-600">
-
-              {/* Permission status */}
               <div className={`p-4 rounded-2xl flex items-center justify-between gap-4 border-2 ${
                 notificationPermission === 'granted'
                   ? 'bg-green-50 dark:bg-green-900/10 border-green-300 dark:border-green-700'
@@ -475,12 +423,10 @@ export default function Settings() {
                   </button>
                 )}
               </div>
-
-              {/* Channels */}
               <div className="grid grid-cols-3 gap-2">
                 {[
-                  { key: 'notifEmail', icon: '📧', label: 'Email' },
-                  { key: 'notifPush', icon: '📲', label: 'Push' },
+                  { key: 'notifEmail',    icon: '📧', label: 'Email'   },
+                  { key: 'notifPush',     icon: '📲', label: 'Push'    },
                   { key: 'notifInternal', icon: '🔔', label: 'Interna' },
                 ].map(ch => (
                   <button key={ch.key} onClick={() => set(ch.key, !cfg[ch.key])}
@@ -493,28 +439,25 @@ export default function Settings() {
                   </button>
                 ))}
               </div>
-
               {[
-                { key: 'notifEvents', icon: '📅', label: 'Eventos', desc: '1 dia antes do evento' },
-                { key: 'notifTasks', icon: '✅', label: 'Tarefas', desc: 'Tarefas atrasadas e urgentes' },
-                { key: 'notifBills', icon: '💰', label: 'Contas', desc: '3 dias antes do vencimento' },
-                { key: 'notifWater', icon: '💧', label: 'Hidratação', desc: 'A cada 2h (8h–20h)' },
-                { key: 'notifStudy', icon: '📚', label: 'Estudos', desc: 'Revisões e cronograma' },
-                { key: 'notifHealth', icon: '🏥', label: 'Saúde', desc: 'Consultas e medicamentos' },
+                { key: 'notifEvents', icon: '📅', label: 'Eventos',    desc: '1 dia antes do evento' },
+                { key: 'notifTasks',  icon: '✅', label: 'Tarefas',    desc: 'Tarefas atrasadas e urgentes' },
+                { key: 'notifBills',  icon: '💰', label: 'Contas',     desc: '3 dias antes do vencimento' },
+                { key: 'notifWater',  icon: '💧', label: 'Hidratação', desc: 'A cada 2h (8h–20h)' },
+                { key: 'notifStudy',  icon: '📚', label: 'Estudos',    desc: 'Revisões e cronograma' },
+                { key: 'notifHealth', icon: '🏥', label: 'Saúde',      desc: 'Consultas e medicamentos' },
               ].map(n => (
                 <Row key={n.key} icon={n.icon} title={n.label} desc={n.desc}>
                   <Toggle value={cfg[n.key]} onChange={v => set(n.key, v)} />
                 </Row>
               ))}
-
               <SelectRow icon="🔁" title="Frequência de Resumos" desc="Periodicidade dos resumos automáticos"
                 value={cfg.notifFrequency} onChange={v => set('notifFrequency', v)}
                 options={[
-                  { value: 'daily', label: '📅 Diária' },
-                  { value: 'weekly', label: '📆 Semanal' },
-                  { value: 'off', label: '🔕 Desativado' },
+                  { value: 'daily',  label: '📅 Diária'     },
+                  { value: 'weekly', label: '📆 Semanal'    },
+                  { value: 'off',    label: '🔕 Desativado' },
                 ]} />
-
               <Row icon="🗑️" title="Limpar Notificações Antigas" desc="Remover alertas com mais de 30 dias">
                 <button onClick={async () => {
                   if (confirm('Limpar notificações com mais de 30 dias?')) {
@@ -527,20 +470,14 @@ export default function Settings() {
               </Row>
             </SectionCard>
 
-            {/* ══════════════════════════════════════════════════
-                5. ANÁLISE
-            ══════════════════════════════════════════════════ */}
+            {/* 5. ANÁLISE */}
             <SectionCard id="analise" icon="📊" label="Preferências de Análise" gradient="from-violet-500 to-purple-600">
-
               <SelectRow icon="📆" title="Período Padrão" desc="Janela de análise ao abrir a página"
                 value={cfg.analysisPeriod} onChange={v => set('analysisPeriod', v)}
                 options={[{ value: '7', label: '7 dias' }, { value: '30', label: '30 dias' }, { value: '90', label: '90 dias' }]} />
-
               <Row icon="🔗" title="Correlações Automáticas" desc="Detectar relações entre variáveis">
                 <Toggle value={cfg.autoCorrelations} onChange={v => set('autoCorrelations', v)} />
               </Row>
-
-              {/* Weight sliders */}
               <div className="bg-violet-50 dark:bg-violet-900/10 border border-violet-200 dark:border-violet-800 rounded-2xl p-4">
                 <div className="flex items-center justify-between mb-4">
                   <p className="text-sm font-bold text-violet-700 dark:text-violet-300">⚖️ Peso de Cada Área no Score Global</p>
@@ -548,40 +485,32 @@ export default function Settings() {
                     totalWeight === 100
                       ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
                       : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
-                  }`}>
-                    {totalWeight}/100%
-                  </span>
+                  }`}>{totalWeight}/100%</span>
                 </div>
                 <div className="space-y-5">
                   {[
-                    { key: 'scoreWeightHealth', label: 'Saúde Física', color: '#22d3ee', accent: '#0e7490' },
-                    { key: 'scoreWeightMental', label: 'Bem-Estar Mental', color: '#a78bfa', accent: '#7c3aed' },
-                    { key: 'scoreWeightProd', label: 'Produtividade', color: '#fbbf24', accent: '#d97706' },
-                    { key: 'scoreWeightFinance', label: 'Financeiro', color: '#34d399', accent: '#059669' },
+                    { key: 'scoreWeightHealth', label: 'Saúde Física',      color: '#22d3ee' },
+                    { key: 'scoreWeightMental', label: 'Bem-Estar Mental',  color: '#a78bfa' },
+                    { key: 'scoreWeightProd',   label: 'Produtividade',     color: '#fbbf24' },
+                    { key: 'scoreWeightFinance',label: 'Financeiro',        color: '#34d399' },
                   ].map(w => (
                     <div key={w.key}>
                       <div className="flex justify-between items-center mb-1.5">
                         <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{w.label}</span>
                         <span className="text-xs font-bold" style={{ color: w.color }}>{cfg[w.key]}%</span>
                       </div>
-                      <input
-                        type="range" min={5} max={60} step={5}
-                        value={cfg[w.key]}
+                      <input type="range" min={5} max={60} step={5} value={cfg[w.key]}
                         onChange={e => set(w.key, parseInt(e.target.value))}
-                        style={{ accentColor: w.color, background: `linear-gradient(to right, ${w.color} 0%, ${w.color} ${(cfg[w.key]-5)/55*100}%, #e5e7eb ${(cfg[w.key]-5)/55*100}%, #e5e7eb 100%)` }}
-                        className="w-full"
-                      />
+                        style={{ accentColor: w.color }}
+                        className="w-full" />
                     </div>
                   ))}
                 </div>
               </div>
             </SectionCard>
 
-            {/* ══════════════════════════════════════════════════
-                6. IA
-            ══════════════════════════════════════════════════ */}
+            {/* 6. IA */}
             <SectionCard id="ia" icon="🧠" label="Inteligência Artificial" gradient="from-emerald-500 to-teal-600">
-
               <Row icon="🤖" title="Auto-save com IA" desc="Salvar sugestões sem confirmação manual">
                 <Toggle value={cfg.aiAutoSave} onChange={v => set('aiAutoSave', v)} />
               </Row>
@@ -591,27 +520,21 @@ export default function Settings() {
               <Row icon="💡" title="Sugestões Proativas" desc="Insights automáticos em tempo real">
                 <Toggle value={cfg.aiSuggestions} onChange={v => set('aiSuggestions', v)} />
               </Row>
-
               <SelectRow icon="🎙️" title="Estilo de Resposta" desc="Tom e formato das mensagens da IA"
                 value={cfg.aiStyle} onChange={v => set('aiStyle', v)}
                 options={[
-                  { value: 'direct', label: '⚡ Direto e objetivo' },
-                  { value: 'balanced', label: '⚖️ Equilibrado' },
-                  { value: 'detailed', label: '📝 Detalhado e explicativo' },
+                  { value: 'direct',   label: '⚡ Direto e objetivo'        },
+                  { value: 'balanced', label: '⚖️ Equilibrado'              },
+                  { value: 'detailed', label: '📝 Detalhado e explicativo'  },
                 ]} />
-
               <NumberRow icon="🔢" title="Limite de Insights por Dia" desc="Máximo de análises automáticas diárias"
                 value={cfg.aiInsightsPerDay} onChange={v => set('aiInsightsPerDay', v)} min={1} max={20} step={1} unit="/ dia" />
-
-              {/* PDF Import */}
               <div className="bg-teal-50 dark:bg-teal-900/10 border-2 border-dashed border-teal-300 dark:border-teal-700 rounded-2xl p-5">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-xl">📄</span>
                   <p className="text-sm font-bold text-teal-700 dark:text-teal-300">Importar PDF com IA</p>
                 </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-4 ml-8">
-                  Extração automática de eventos de cronogramas e calendários acadêmicos
-                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-4 ml-8">Extração automática de eventos de cronogramas e calendários acadêmicos</p>
                 <button onClick={() => pdfInputRef.current?.click()} disabled={processingPDF}
                   className="w-full py-3 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all">
                   {processingPDF
@@ -622,31 +545,25 @@ export default function Settings() {
               </div>
             </SectionCard>
 
-            {/* ══════════════════════════════════════════════════
-                7. AGENDA
-            ══════════════════════════════════════════════════ */}
+            {/* 7. AGENDA */}
             <SectionCard id="agenda" icon="📅" label="Preferências de Agenda" gradient="from-cyan-500 to-blue-600">
-
               <SelectRow icon="📆" title="Início da Semana" desc="Primeiro dia no calendário"
                 value={cfg.weekStartsOn} onChange={v => set('weekStartsOn', v)}
                 options={[{ value: 'monday', label: '🗓️ Segunda-feira' }, { value: 'sunday', label: '🗓️ Domingo' }]} />
-
               <SelectRow icon="🌐" title="Fuso Horário" desc="Referência para horários e lembretes"
                 value={cfg.timezone} onChange={v => set('timezone', v)}
                 options={[
                   { value: 'America/Sao_Paulo', label: '🇧🇷 Brasília (UTC-3)' },
-                  { value: 'America/New_York', label: '🇺🇸 New York (UTC-5)' },
-                  { value: 'Europe/Lisbon', label: '🇵🇹 Lisboa (UTC+0)' },
+                  { value: 'America/New_York',  label: '🇺🇸 New York (UTC-5)' },
+                  { value: 'Europe/Lisbon',     label: '🇵🇹 Lisboa (UTC+0)'   },
                 ]} />
-
               <SelectRow icon="📋" title="Formato de Data" desc="Como as datas são exibidas"
                 value={cfg.dateFormat} onChange={v => set('dateFormat', v)}
                 options={[
-                  { value: 'dd/mm/yyyy', label: 'DD/MM/AAAA' },
-                  { value: 'mm/dd/yyyy', label: 'MM/DD/AAAA' },
-                  { value: 'yyyy-mm-dd', label: 'AAAA-MM-DD' },
+                  { value: 'dd/mm/yyyy', label: 'DD/MM/AAAA'  },
+                  { value: 'mm/dd/yyyy', label: 'MM/DD/AAAA'  },
+                  { value: 'yyyy-mm-dd', label: 'AAAA-MM-DD'  },
                 ]} />
-
               <Row icon="⏰" title="Horário Padrão de Lembrete" desc="Hora padrão de envio dos alertas">
                 <input type="time" value={cfg.defaultReminderTime}
                   onChange={e => set('defaultReminderTime', e.target.value)}
@@ -654,113 +571,82 @@ export default function Settings() {
               </Row>
             </SectionCard>
 
-            {/* ══════════════════════════════════════════════════
-                8. SAÚDE
-            ══════════════════════════════════════════════════ */}
+            {/* 8. SAÚDE */}
             <SectionCard id="saude" icon="🏥" label="Configurações de Saúde" gradient="from-red-500 to-rose-600">
-
               <SelectRow icon="⚖️" title="Unidade de Peso" desc="Formato para registros de peso corporal"
                 value={cfg.weightUnit} onChange={v => set('weightUnit', v)}
                 options={[{ value: 'kg', label: '🇧🇷 Quilogramas (kg)' }, { value: 'lb', label: '🇺🇸 Libras (lb)' }]} />
-
               <SelectRow icon="📏" title="Unidade de Altura" desc="Formato para registros de altura"
                 value={cfg.heightUnit} onChange={v => set('heightUnit', v)}
                 options={[{ value: 'cm', label: 'Centímetros (cm)' }, { value: 'ft', label: 'Pés/Polegadas (ft/in)' }]} />
-
               <NumberRow icon="💧" title="Meta Diária de Água" desc="Quantidade ideal de água por dia"
                 value={cfg.waterGoal} onChange={v => set('waterGoal', v)} min={0.5} max={6} step={0.1} unit="L/dia" />
-
               <NumberRow icon="😴" title="Meta de Sono" desc="Horas ideais de sono por noite"
                 value={cfg.sleepGoal} onChange={v => set('sleepGoal', v)} min={4} max={12} step={0.5} unit="h/noite" />
-
               <NumberRow icon="🏃" title="Meta de Exercício" desc="Tempo mínimo de atividade física diária"
                 value={cfg.exerciseGoal} onChange={v => set('exerciseGoal', v)} min={0} max={180} step={5} unit="min/dia" />
             </SectionCard>
 
-            {/* ══════════════════════════════════════════════════
-                9. ESTUDOS
-            ══════════════════════════════════════════════════ */}
+            {/* 9. ESTUDOS */}
             <SectionCard id="estudo" icon="📚" label="Configurações de Estudo" gradient="from-orange-500 to-amber-600">
-
               <NumberRow icon="🍅" title="Duração do Pomodoro" desc="Minutos de foco por sessão de estudo"
                 value={cfg.pomodoroDuration} onChange={v => set('pomodoroDuration', v)} min={5} max={90} step={5} unit="minutos" />
-
               <NumberRow icon="☕" title="Intervalo entre Sessões" desc="Minutos de descanso entre pomodoros"
                 value={cfg.pomodoroBreak} onChange={v => set('pomodoroBreak', v)} min={1} max={30} step={1} unit="minutos" />
-
               <SelectRow icon="🔄" title="Frequência de Revisão Espaçada" desc="Quão frequente você quer revisar o conteúdo"
                 value={cfg.spacedRepFreq} onChange={v => set('spacedRepFreq', v)}
                 options={[
-                  { value: 'daily', label: '📅 Diária' },
-                  { value: 'weekly', label: '📆 Semanal' },
+                  { value: 'daily',  label: '📅 Diária'        },
+                  { value: 'weekly', label: '📆 Semanal'       },
                   { value: 'custom', label: '⚙️ Personalizado' },
                 ]} />
-
               <NumberRow icon="🎯" title="Meta Semanal de Estudo" desc="Horas de estudo alvo por semana"
                 value={cfg.weeklyStudyGoal} onChange={v => set('weeklyStudyGoal', v)} min={1} max={80} step={1} unit="h/semana" />
             </SectionCard>
 
-            {/* ══════════════════════════════════════════════════
-                10. FINANCEIRO
-            ══════════════════════════════════════════════════ */}
+            {/* 10. FINANCEIRO */}
             <SectionCard id="financeiro" icon="💰" label="Configurações Financeiras" gradient="from-green-500 to-emerald-600">
-
               <SelectRow icon="💱" title="Moeda" desc="Formato de exibição de valores monetários"
                 value={cfg.currency} onChange={v => set('currency', v)}
                 options={[
                   { value: 'BRL', label: '🇧🇷 Real Brasileiro (R$)' },
-                  { value: 'USD', label: '🇺🇸 Dólar Americano ($)' },
-                  { value: 'EUR', label: '🇪🇺 Euro (€)' },
+                  { value: 'USD', label: '🇺🇸 Dólar Americano ($)'  },
+                  { value: 'EUR', label: '🇪🇺 Euro (€)'             },
                 ]} />
-
               <NumberRow icon="📅" title="Início do Mês Financeiro" desc="Dia do mês para reset do orçamento"
                 value={cfg.monthStart} onChange={v => set('monthStart', v)} min={1} max={28} step={1} unit="dia do mês" />
-
               <NumberRow icon="🎯" title="Meta Mensal de Economia" desc="Valor alvo de poupança por mês"
                 value={cfg.savingsGoal} onChange={v => set('savingsGoal', v)} min={0} max={99999} step={50}
                 unit={cfg.currency === 'BRL' ? 'R$/mês' : '$/ mês'} />
-
               <Row icon="⚠️" title="Alerta de Gasto Excessivo" desc="Notificar ao ultrapassar limites do orçamento">
                 <Toggle value={cfg.overspendAlert} onChange={v => set('overspendAlert', v)} />
               </Row>
             </SectionCard>
 
-            {/* ══════════════════════════════════════════════════
-                11. SISTEMA
-            ══════════════════════════════════════════════════ */}
+            {/* 11. SISTEMA */}
             <SectionCard id="sistema" icon="🌍" label="Sistema" gradient="from-indigo-500 to-blue-600">
-
               <SelectRow icon="🌐" title="Idioma da Interface" desc="Linguagem de todos os textos do app"
                 value={cfg.language} onChange={v => set('language', v)}
                 options={[
                   { value: 'pt-BR', label: '🇧🇷 Português (Brasil)' },
-                  { value: 'en-US', label: '🇺🇸 English (US)' },
-                  { value: 'es-ES', label: '🇪🇸 Español' },
+                  { value: 'en-US', label: '🇺🇸 English (US)'       },
+                  { value: 'es-ES', label: '🇪🇸 Español'            },
                 ]} />
-
               <SelectRow icon="📍" title="Região" desc="Formatos regionais de datas e números"
                 value={cfg.region} onChange={v => set('region', v)}
                 options={[{ value: 'BR', label: '🇧🇷 Brasil' }, { value: 'US', label: '🇺🇸 EUA' }, { value: 'PT', label: '🇵🇹 Portugal' }]} />
-
-              {/* Accessibility block */}
               <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-2xl p-4">
                 <p className="text-sm font-bold text-blue-700 dark:text-blue-300 mb-3">♿ Acessibilidade</p>
                 <div className="space-y-2">
                   <Row icon="🔤" title="Tamanho da Fonte" desc="Ajuste para melhor leitura">
                     <div className="flex gap-1">
-                      {[
-                        { v: 'small', l: 'P' },
-                        { v: 'medium', l: 'M' },
-                        { v: 'large', l: 'G' },
-                      ].map(s => (
+                      {[{ v: 'small', l: 'P' }, { v: 'medium', l: 'M' }, { v: 'large', l: 'G' }].map(s => (
                         <button key={s.v} onClick={() => set('fontSize', s.v)}
                           className={`w-9 h-9 text-xs font-bold rounded-xl transition-all border ${
                             cfg.fontSize === s.v
                               ? 'bg-blue-600 text-white border-blue-600'
                               : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                          }`}>
-                          {s.l}
-                        </button>
+                          }`}>{s.l}</button>
                       ))}
                     </div>
                   </Row>
@@ -774,23 +660,14 @@ export default function Settings() {
               </div>
             </SectionCard>
 
-            {/* ══════════════════════════════════════════════════
-                12. LEGAL
-            ══════════════════════════════════════════════════ */}
+            {/* 12. LEGAL */}
             <SectionCard id="legal" icon="🧾" label="Legal & Sobre" gradient="from-gray-500 to-slate-600">
-
               <Row icon="📋" title="Termos de Uso" desc="Leia os termos de utilização da plataforma">
-                <button className="px-4 py-2 text-xs font-bold border border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
-                  Abrir →
-                </button>
+                <button className="px-4 py-2 text-xs font-bold border border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">Abrir →</button>
               </Row>
-
               <Row icon="🔒" title="Política de Privacidade" desc="Como seus dados são coletados e protegidos">
-                <button className="px-4 py-2 text-xs font-bold border border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
-                  Abrir →
-                </button>
+                <button className="px-4 py-2 text-xs font-bold border border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">Abrir →</button>
               </Row>
-
               <div className="bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-2xl p-6 text-center border border-indigo-100 dark:border-indigo-800">
                 <div className="text-4xl mb-3">💙</div>
                 <p className="font-bold text-gray-900 dark:text-white">MedPlanner</p>
@@ -811,8 +688,8 @@ export default function Settings() {
               Sair da Conta
             </button>
 
-          </div>{/* end sections */}
-        </div>{/* end layout */}
+          </div>
+        </div>
       </div>
     </PageLayout>
   );
