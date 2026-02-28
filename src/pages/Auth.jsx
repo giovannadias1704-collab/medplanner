@@ -5,6 +5,7 @@ import { registerWithEmail, loginWithEmail, loginWithGoogle, handleRedirectResul
 import { auth } from '../config/firebase';
 import { isValidEmail } from '../utils/helpers';
 import ForgotPasswordModal from '../components/ForgotPasswordModal';
+import { sendWelcomeEmail } from '../services/emailService';
 
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
@@ -18,7 +19,6 @@ export default function Auth() {
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const navigate = useNavigate();
 
-  // Função para limpar estado do Google Login
   const clearGoogleLoginState = () => {
     sessionStorage.removeItem('googleLoginInProgress');
     sessionStorage.removeItem('googleLoginTimestamp');
@@ -30,24 +30,28 @@ export default function Auth() {
   // Verificar redirect do Google PRIMEIRO
   useEffect(() => {
     let isMounted = true;
-    
+
     const checkGoogleRedirect = async () => {
       try {
         console.log('🔍 Verificando redirect do Google...');
         setLoading(true);
-        
+
         const result = await handleRedirectResult();
-        
+
         if (!isMounted) return;
-        
+
         if (result.success && result.user) {
           console.log('✅ Login com Google bem-sucedido!', result.user.email);
-          
-          // Dar um tempo para o Firebase processar
+
           await new Promise(resolve => setTimeout(resolve, 500));
-          
+
           if (result.isNewUser) {
-            console.log('🆕 Novo usuário - indo para onboarding');
+            console.log('🆕 Novo usuário - enviando boas-vindas e indo para onboarding');
+            // ✅ Email de boas-vindas para novos usuários via Google
+            await sendWelcomeEmail({
+              displayName: result.user.displayName,
+              email: result.user.email,
+            });
             navigate('/onboarding', { replace: true });
           } else {
             console.log('👤 Usuário existente - indo para dashboard');
@@ -73,9 +77,9 @@ export default function Auth() {
         }
       }
     };
-    
+
     checkGoogleRedirect();
-    
+
     return () => {
       isMounted = false;
     };
@@ -84,11 +88,10 @@ export default function Auth() {
   // Verificar usuário já autenticado (APÓS verificar redirect)
   useEffect(() => {
     if (checkingAuth) return;
-    
+
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user && !loading) {
         console.log('🔐 Usuário já autenticado:', user.email);
-        
         if (window.location.pathname === '/auth') {
           console.log('➡️ Redirecionando usuário autenticado...');
           navigate('/dashboard', { replace: true });
@@ -125,13 +128,12 @@ export default function Auth() {
       if (isLogin) {
         console.log('📧 Tentando login com email...');
         const result = await loginWithEmail(email, password);
-        
+
         if (result.success) {
           console.log('✅ Login com email bem-sucedido');
           if (!result.emailVerified) {
             setSuccess('Login realizado! Verifique seu email para ter acesso completo.');
           }
-          
           setTimeout(() => {
             navigate('/dashboard', { replace: true });
           }, 500);
@@ -143,11 +145,12 @@ export default function Auth() {
       } else {
         console.log('📝 Tentando registro...');
         const result = await registerWithEmail(email, password, displayName);
-        
+
         if (result.success) {
           console.log('✅ Registro bem-sucedido');
+          // ✅ Email de boas-vindas para novos usuários via email
+          await sendWelcomeEmail({ displayName, email });
           setSuccess(result.message);
-          
           setTimeout(() => {
             navigate('/onboarding', { replace: true });
           }, 2000);
@@ -170,7 +173,7 @@ export default function Auth() {
     setLoading(true);
 
     console.log('🔵 Iniciando login com Google...');
-    
+
     try {
       const result = await loginWithGoogle();
 
@@ -203,7 +206,7 @@ export default function Auth() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 dark:from-gray-900 dark:to-gray-800 px-4 py-12">
       <div className="max-w-md w-full">
         <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 animate-fade-in">
-          
+
           <div className="text-center mb-8">
             <div className="w-16 h-16 bg-gradient-to-br from-purple-600 to-pink-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
               <span className="text-3xl">🩺</span>
@@ -387,7 +390,7 @@ export default function Auth() {
         </p>
       </div>
 
-      <ForgotPasswordModal 
+      <ForgotPasswordModal
         isOpen={showForgotPassword}
         onClose={() => setShowForgotPassword(false)}
       />
