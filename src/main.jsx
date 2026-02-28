@@ -6,7 +6,7 @@ import { initTheme } from './utils/themeManager.js';
 import { AppProvider } from './context/AppContext';
 import { SubscriptionProvider } from './context/SubscriptionContext';
 import { CouponProvider } from './context/CouponContext';
-
+import './sentry'; // 
 // Inicializar tema
 initTheme();
 

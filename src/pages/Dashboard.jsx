@@ -692,7 +692,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* AI Chat FAB */}
+    {/* AI Chat FAB */}
       <button
         onClick={() => setShowAIChat(true)}
         className="lift"
@@ -713,9 +713,3 @@ export default function Dashboard() {
     </>
   );
 }
-<button 
-  onClick={() => { throw new Error('Teste Sentry!') }}
-  style={{ position: 'fixed', bottom: 90, right: 22, zIndex: 50, background: 'red', color: 'white', padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer' }}
->
-  Testar Sentry
-</button>
