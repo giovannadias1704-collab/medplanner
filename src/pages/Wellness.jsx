@@ -6,6 +6,7 @@ import {
   ChartBarIcon, ArrowTrendingUpIcon, ArrowTrendingDownIcon,
   FaceSmileIcon, BoltIcon, ClockIcon
 } from '@heroicons/react/24/outline';
+import PageLayout from '../components/PageLayout';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
@@ -121,7 +122,7 @@ function Scale({ label, value, onChange, min = 1, max = 5, color = 'indigo', low
 
 // ─── Breathing Exercise ───────────────────────────────────────────────────────
 function BreathingExercise({ onClose }) {
-  const [phase, setPhase] = useState('idle'); // idle | inhale | hold | exhale | rest
+  const [phase, setPhase] = useState('idle');
   const [count, setCount] = useState(0);
   const [cycle, setCycle] = useState(0);
   const [running, setRunning] = useState(false);
@@ -165,8 +166,6 @@ function BreathingExercise({ onClose }) {
         <button onClick={onClose} className="absolute top-4 right-4 p-2"><XMarkIcon className="h-5 w-5 text-gray-400" /></button>
         <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-1">🧘 Respiração 4-7-8</h3>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">Técnica para reduzir ansiedade e estresse</p>
-
-        {/* Circle */}
         <div className="relative w-40 h-40 mx-auto mb-6">
           <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
             <circle cx="50" cy="50" r="45" fill="none" stroke="#e5e7eb" strokeWidth="8" />
@@ -187,7 +186,6 @@ function BreathingExercise({ onClose }) {
             )}
           </div>
         </div>
-
         {running && <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{current.instruction}</p>}
         {cycle > 0 && <p className="text-xs text-purple-600 dark:text-purple-400 mb-3">{cycle} ciclo(s) completo(s)</p>}
         <div className="flex gap-3 justify-center">
@@ -412,14 +410,11 @@ export default function Wellness() {
   const [sleepHours, setSleepHours] = useState('');
   const [waterIntake, setWaterIntake] = useState(0);
   const [exerciseMinutes, setExerciseMinutes] = useState(0);
-  // Events
   const [events, setEvents] = useState([]);
   const [showEventForm, setShowEventForm] = useState(false);
   const [eventForm, setEventForm] = useState({ description: '', category: 'Trabalho', impact: 0 });
-  // Journal
   const [journal, setJournal] = useState({ positive: '', improve: '', learned: '', worried: '' });
   const [notes, setNotes] = useState('');
-  // Guided journal expand
   const [journalExpanded, setJournalExpanded] = useState(false);
 
   useEffect(() => { ls.set('gratitudeLogs', gratitudeLogs); }, [gratitudeLogs]);
@@ -447,7 +442,6 @@ export default function Wellness() {
     const msg = getMotivational(mood, stress);
     setMotivationalMsg(msg);
     setSavedMsg(true);
-    // Reset
     setMood(3); setEnergy(3); setStress(3); setAnxiety(3); setMotivation(3); setFocus(3);
     setFeeling(''); setTriggers([]); setSleepHours(''); setWaterIntake(0); setExerciseMinutes(0);
     setEvents([]); setJournal({ positive: '', improve: '', learned: '', worried: '' }); setNotes('');
@@ -455,7 +449,6 @@ export default function Wellness() {
     setTimeout(() => { setSavedMsg(false); setActiveTab('historico'); }, 3000);
   };
 
-  // Stats
   const entries = wellnessEntries || [];
   const last7 = entries.slice(-7);
   const thisWeekEntries = entries.filter(e => {
@@ -479,7 +472,6 @@ export default function Wellness() {
   const chartData = last7.map(e => ({ value: e.mood, label: fmtShort(e.date) }));
   const stressData = last7.map(e => ({ value: e.stress, label: fmtShort(e.date) }));
 
-  // Goals progress
   const goalsProgress = {
     checkin_5x: thisWeekEntries.length,
     stress_baixo: weekStats ? parseFloat(weekStats.avgStress) : 0,
@@ -499,518 +491,486 @@ export default function Wellness() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-32">
-      {/* Header */}
-      <div className="bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 px-4 pt-6 pb-8">
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-3xl font-bold text-white mb-1">💚 Bem-estar</h1>
-          <p className="text-indigo-100 text-sm">Autoconhecimento e equilíbrio emocional</p>
-        </div>
-      </div>
-
+    <PageLayout
+      title="Bem-estar"
+      subtitle="Autoconhecimento e equilíbrio emocional"
+      emoji="💚"
+    >
       {/* Medical disclaimer */}
-      <div className="max-w-6xl mx-auto px-4 -mt-2">
-        <div className="bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-300 dark:border-amber-700 rounded-2xl p-4 mb-4 flex items-start gap-3 shadow-sm">
-          <span className="text-2xl flex-shrink-0">⚕️</span>
-          <div>
-            <p className="font-bold text-amber-800 dark:text-amber-200 text-sm">Aviso importante</p>
-            <p className="text-amber-700 dark:text-amber-300 text-xs mt-0.5">Este aplicativo é uma ferramenta de <strong>autoconhecimento e monitoramento pessoal</strong>. <strong>Não substitui</strong> acompanhamento médico, psicológico ou psiquiátrico profissional. Se estiver passando por dificuldades emocionais sérias, procure um profissional de saúde.</p>
-          </div>
+      <div className="bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-300 dark:border-amber-700 rounded-2xl p-4 mb-4 flex items-start gap-3 shadow-sm">
+        <span className="text-2xl flex-shrink-0">⚕️</span>
+        <div>
+          <p className="font-bold text-amber-800 dark:text-amber-200 text-sm">Aviso importante</p>
+          <p className="text-amber-700 dark:text-amber-300 text-xs mt-0.5">Este aplicativo é uma ferramenta de <strong>autoconhecimento e monitoramento pessoal</strong>. <strong>Não substitui</strong> acompanhamento médico, psicológico ou psiquiátrico profissional. Se estiver passando por dificuldades emocionais sérias, procure um profissional de saúde.</p>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-30">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="flex gap-1 overflow-x-auto scrollbar-hide py-1">
-            {tabs.map(t => (
-              <button key={t.id} onClick={() => setActiveTab(t.id)} className={`flex items-center gap-1.5 py-3 px-4 font-semibold text-sm border-b-2 transition-all whitespace-nowrap ${activeTab === t.id ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'}`}>
-                <span>{t.icon}</span><span>{t.label}</span>
-              </button>
-            ))}
-          </div>
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl mb-6 sticky top-[58px] z-40 overflow-hidden">
+        <div className="flex gap-1 overflow-x-auto scrollbar-hide px-2">
+          {tabs.map(t => (
+            <button key={t.id} onClick={() => setActiveTab(t.id)} className={`flex items-center gap-1.5 py-3 px-4 font-semibold text-sm border-b-2 transition-all whitespace-nowrap ${activeTab === t.id ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'}`}>
+              <span>{t.icon}</span><span>{t.label}</span>
+            </button>
+          ))}
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 py-6">
-
-        {/* ── REGISTRO ── */}
-        {activeTab === 'registro' && (
-          <form onSubmit={handleSubmit} className="space-y-6">
-
-            {savedMsg && (
-              <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-2xl p-5 text-white text-center shadow-xl">
-                <p className="text-lg font-bold mb-1">✅ Registro salvo!</p>
-                <p className="text-green-100 text-sm">{motivationalMsg}</p>
-              </div>
-            )}
-
-            {/* Mood selector */}
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">😊 Como está seu humor hoje? *</h3>
-              <div className="grid grid-cols-5 gap-2">
-                {MOODS.map(m => (
-                  <button key={m.value} type="button" onClick={() => setMood(m.value)}
-                    className={`p-3 rounded-xl border-2 flex flex-col items-center gap-1 transition-all ${mood === m.value ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 scale-105 shadow' : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 bg-white dark:bg-gray-750'}`}>
-                    <span className="text-3xl">{m.emoji}</span>
-                    <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{m.label}</span>
-                  </button>
-                ))}
-              </div>
+      {/* ── REGISTRO ── */}
+      {activeTab === 'registro' && (
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {savedMsg && (
+            <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-2xl p-5 text-white text-center shadow-xl">
+              <p className="text-lg font-bold mb-1">✅ Registro salvo!</p>
+              <p className="text-green-100 text-sm">{motivationalMsg}</p>
             </div>
+          )}
 
-            {/* Emotional dimensions */}
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-5">📊 Dimensões Emocionais</h3>
-              <div className="space-y-6">
-                <Scale label="⚡ Energia" value={energy} onChange={setEnergy} color="blue" lowLabel="Esgotado" highLabel="Cheio" />
-                <Scale label="😤 Estresse" value={stress} onChange={setStress} color="red" lowLabel="Relaxado" highLabel="Tenso" />
-                <Scale label="😰 Ansiedade" value={anxiety} onChange={setAnxiety} color="orange" lowLabel="Calmo" highLabel="Ansioso" />
-                <Scale label="💪 Motivação" value={motivation} onChange={setMotivation} color="green" lowLabel="Desmotivado" highLabel="Motivado" />
-                <Scale label="🎯 Foco" value={focus} onChange={setFocus} color="purple" lowLabel="Disperso" highLabel="Focado" />
-              </div>
-            </div>
-
-            {/* Feelings */}
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">💭 Como está se sentindo?</h3>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-                {FEELINGS.map(f => (
-                  <button key={f.value} type="button" onClick={() => setFeeling(feeling === f.value ? '' : f.value)}
-                    className={`p-3 rounded-xl border-2 flex items-center gap-2 transition-all ${feeling === f.value ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/30' : 'border-gray-200 dark:border-gray-600 hover:border-purple-300 bg-white dark:bg-gray-750'}`}>
-                    <span className="text-xl">{f.emoji}</span>
-                    <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{f.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Triggers */}
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">⚡ O que influenciou seu humor hoje?</h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">Selecione quantos quiser (opcional)</p>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-                {TRIGGERS.map(t => (
-                  <button key={t.value} type="button" onClick={() => toggleTrigger(t.value)}
-                    className={`p-2.5 rounded-xl border-2 flex items-center gap-2 transition-all text-sm ${triggers.includes(t.value) ? 'border-teal-500 bg-teal-50 dark:bg-teal-900/30' : 'border-gray-200 dark:border-gray-600 hover:border-teal-300 bg-white dark:bg-gray-750'}`}>
-                    <span className="text-lg">{t.emoji}</span>
-                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{t.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Events */}
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white">📌 Eventos do Dia</h3>
-                <button type="button" onClick={() => setShowEventForm(v => !v)} className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700">
-                  <PlusIcon className="h-4 w-4" />Adicionar
+          {/* Mood selector */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">😊 Como está seu humor hoje? *</h3>
+            <div className="grid grid-cols-5 gap-2">
+              {MOODS.map(m => (
+                <button key={m.value} type="button" onClick={() => setMood(m.value)}
+                  className={`p-3 rounded-xl border-2 flex flex-col items-center gap-1 transition-all ${mood === m.value ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 scale-105 shadow' : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 bg-white dark:bg-gray-750'}`}>
+                  <span className="text-3xl">{m.emoji}</span>
+                  <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{m.label}</span>
                 </button>
-              </div>
-              {showEventForm && (
-                <div className="bg-gray-50 dark:bg-gray-700 rounded-xl p-4 mb-4 space-y-3">
-                  <input value={eventForm.description} onChange={e => setEventForm(f => ({ ...f, description: e.target.value }))} placeholder="Descreva o evento..." className="w-full px-3 py-2 rounded-xl border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-indigo-500 focus:outline-none text-sm" />
-                  <div className="grid grid-cols-2 gap-3">
-                    <select value={eventForm.category} onChange={e => setEventForm(f => ({ ...f, category: e.target.value }))} className="px-3 py-2 rounded-xl border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-indigo-500 focus:outline-none text-sm">
-                      {EVENT_CATS.map(c => <option key={c}>{c}</option>)}
-                    </select>
-                    <select value={eventForm.impact} onChange={e => setEventForm(f => ({ ...f, impact: Number(e.target.value) }))} className="px-3 py-2 rounded-xl border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-indigo-500 focus:outline-none text-sm">
-                      {EVENT_IMPACTS.map(i => <option key={i.value} value={i.value}>{i.emoji} {i.label}</option>)}
-                    </select>
-                  </div>
-                  <div className="flex gap-2">
-                    <button type="button" onClick={addEvent} className="flex-1 py-2 bg-indigo-600 text-white rounded-xl font-semibold text-sm hover:bg-indigo-700">Adicionar</button>
-                    <button type="button" onClick={() => setShowEventForm(false)} className="px-4 py-2 border-2 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 rounded-xl text-sm hover:bg-gray-100 dark:hover:bg-gray-600">Cancelar</button>
-                  </div>
-                </div>
-              )}
-              {events.length > 0 ? (
-                <div className="space-y-2">
-                  {events.map(ev => {
-                    const imp = EVENT_IMPACTS.find(i => i.value === ev.impact);
-                    return (
-                      <div key={ev.id} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-xl">
-                        <span className="text-xl">{imp?.emoji}</span>
-                        <div className="flex-1">
-                          <p className="text-sm font-semibold text-gray-900 dark:text-white">{ev.description}</p>
-                          <p className="text-xs text-gray-500">{ev.category} • {imp?.label}</p>
-                        </div>
-                        <button type="button" onClick={() => setEvents(e => e.filter(x => x.id !== ev.id))} className="text-red-400 hover:text-red-600"><XMarkIcon className="h-4 w-4" /></button>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="text-sm text-gray-400 dark:text-gray-500">Nenhum evento adicionado. Registrar eventos ajuda a identificar padrões.</p>
-              )}
+              ))}
             </div>
-
-            {/* Physical */}
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">🌡️ Dados Físicos</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">😴 Horas de sono *</label>
-                  <input type="number" min="0" max="24" step="0.5" value={sleepHours} onChange={e => setSleepHours(e.target.value)} placeholder="Ex: 7.5" className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:border-indigo-500 focus:outline-none" />
-                  {sleepHours && <p className={`mt-1 text-xs font-semibold ${parseFloat(sleepHours) >= 7 ? 'text-green-600' : parseFloat(sleepHours) >= 6 ? 'text-yellow-600' : 'text-red-600'}`}>{parseFloat(sleepHours) >= 7 ? '✅ Ótimo!' : parseFloat(sleepHours) >= 6 ? '⚠️ Razoável' : '❌ Insuficiente'}</p>}
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">💧 Água (litros)</label>
-                  <input type="number" min="0" max="10" step="0.1" value={waterIntake} onChange={e => setWaterIntake(parseFloat(e.target.value) || 0)} className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:border-indigo-500 focus:outline-none" />
-                  <div className="flex gap-1 mt-1">{[0.5,1,1.5,2,2.5].map(a => <button key={a} type="button" onClick={() => setWaterIntake(a)} className="flex-1 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 rounded text-xs font-semibold hover:bg-blue-100">{a}L</button>)}</div>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">💪 Exercício (min)</label>
-                  <input type="number" min="0" max="500" step="5" value={exerciseMinutes} onChange={e => setExerciseMinutes(parseInt(e.target.value) || 0)} className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:border-indigo-500 focus:outline-none" />
-                  <div className="flex gap-1 mt-1">{[15,30,45,60].map(m => <button key={m} type="button" onClick={() => setExerciseMinutes(m)} className="flex-1 py-1 bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 rounded text-xs font-semibold hover:bg-orange-100">{m}m</button>)}</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Guided Journal */}
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow">
-              <button type="button" onClick={() => setJournalExpanded(v => !v)} className="w-full flex items-center justify-between p-5">
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white">📔 Diário Guiado (opcional)</h3>
-                {journalExpanded ? <ChevronUpIcon className="h-5 w-5 text-gray-500" /> : <ChevronDownIcon className="h-5 w-5 text-gray-500" />}
-              </button>
-              {journalExpanded && (
-                <div className="px-5 pb-5 space-y-4">
-                  {[
-                    { key: 'positive', label: '🌟 O que foi positivo hoje?', ph: 'Uma conquista, momento agradável, coisa boa...' },
-                    { key: 'improve', label: '💡 O que poderia melhorar?', ph: 'Algo que gostaria de ter feito diferente...' },
-                    { key: 'learned', label: '📚 Algo que você aprendeu?', ph: 'Um insight, lição, nova perspectiva...' },
-                    { key: 'worried', label: '😟 Algo que te preocupou?', ph: 'Uma situação, sentimento ou pensamento...' },
-                  ].map(({ key, label, ph }) => (
-                    <div key={key}>
-                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">{label}</label>
-                      <textarea value={journal[key]} onChange={e => setJournal(j => ({ ...j, [key]: e.target.value }))} rows="2" placeholder={ph} className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:border-indigo-500 focus:outline-none resize-none text-sm" />
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Notes */}
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3">📝 Anotações Livres</h3>
-              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows="4" placeholder="Algo mais que queira registrar sobre seu dia..." className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:border-indigo-500 focus:outline-none resize-none" />
-            </div>
-
-            {/* Submit */}
-            <div className="flex gap-4">
-              <button type="submit" className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold py-4 px-6 rounded-xl shadow-lg transition-all">
-                💾 Salvar Registro
-              </button>
-              <button type="button" onClick={() => { setMood(3); setEnergy(3); setStress(3); setAnxiety(3); setMotivation(3); setFocus(3); setFeeling(''); setTriggers([]); setSleepHours(''); setNotes(''); setWaterIntake(0); setExerciseMinutes(0); setEvents([]); }} className="px-6 py-4 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-semibold rounded-xl transition-all">
-                🗑️ Limpar
-              </button>
-            </div>
-
-          </form>
-        )}
-
-        {/* ── PAINEL ── */}
-        {activeTab === 'painel' && (
-          <div className="space-y-5">
-            {entries.length === 0 ? (
-              <div className="text-center py-16"><span className="text-6xl block mb-4">📊</span><p className="text-gray-500">Faça seu primeiro check-in para ver o painel!</p><button onClick={() => setActiveTab('registro')} className="mt-4 px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700">Fazer Check-in</button></div>
-            ) : (
-              <>
-                {/* Balance Score */}
-                <BalanceScore entries={entries} />
-
-                {/* Weekly stats */}
-                {weekStats && (
-                  <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5">
-                    <h3 className="font-bold text-gray-900 dark:text-white mb-4">📈 Resumo dos Últimos 7 Dias</h3>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-                      {[
-                        { label: 'Humor Médio', value: weekStats.avgMood, icon: '😊', color: 'text-indigo-600 dark:text-indigo-400' },
-                        { label: 'Energia Média', value: weekStats.avgEnergy, icon: '⚡', color: 'text-blue-600 dark:text-blue-400' },
-                        { label: 'Estresse Médio', value: weekStats.avgStress, icon: '😤', color: 'text-red-600 dark:text-red-400' },
-                        { label: 'Foco Médio', value: weekStats.avgFocus, icon: '🎯', color: 'text-purple-600 dark:text-purple-400' },
-                      ].map(s => (
-                        <div key={s.label} className="bg-gray-50 dark:bg-gray-700 rounded-xl p-3 text-center">
-                          <div className="text-2xl mb-1">{s.icon}</div>
-                          <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
-                          <div className="text-xs text-gray-500 mt-1">{s.label}</div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-sm text-gray-600 dark:text-gray-400">Tendência emocional:</span>
-                      {weekStats.trend === 'up' ? (
-                        <span className="flex items-center gap-1 text-green-600 font-bold text-sm"><ArrowTrendingUpIcon className="h-4 w-4" />Subindo</span>
-                      ) : weekStats.trend === 'down' ? (
-                        <span className="flex items-center gap-1 text-red-600 font-bold text-sm"><ArrowTrendingDownIcon className="h-4 w-4" />Caindo</span>
-                      ) : <span className="text-gray-400 text-sm">Estável</span>}
-                    </div>
-                    {weekStats.bestDay && <p className="text-xs text-green-600 dark:text-green-400">🌟 Melhor dia: {fmtShort(weekStats.bestDay.date)}</p>}
-                    {weekStats.worstStress && <p className="text-xs text-red-500 dark:text-red-400">⚠ Maior estresse: {fmtShort(weekStats.worstStress.date)}</p>}
-                  </div>
-                )}
-
-                {/* Charts */}
-                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5">
-                  <h3 className="font-bold text-gray-900 dark:text-white mb-4">📉 Evolução Recente</h3>
-                  <div className="space-y-5">
-                    <MiniLineChart data={chartData} color="#6366f1" label="Humor (últimos 7 dias)" />
-                    <MiniLineChart data={stressData} color="#ef4444" label="Estresse (últimos 7 dias)" />
-                  </div>
-                </div>
-
-                {/* Heatmap */}
-                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5">
-                  <h3 className="font-bold text-gray-900 dark:text-white mb-4">🗓️ Mapa de Humor (30 dias)</h3>
-                  <MoodHeatmap entries={entries} />
-                </div>
-
-                {/* Trigger analysis */}
-                {entries.some(e => e.triggers?.length > 0) && (
-                  <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5">
-                    <h3 className="font-bold text-gray-900 dark:text-white mb-4">⚡ Análise de Gatilhos</h3>
-                    {(() => {
-                      const tCount = {};
-                      entries.forEach(e => (e.triggers || []).forEach(t => { tCount[t] = (tCount[t] || 0) + 1; }));
-                      return Object.entries(tCount).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => {
-                        const trig = TRIGGERS.find(t => t.value === k);
-                        const max = Math.max(...Object.values(tCount));
-                        return (
-                          <div key={k} className="flex items-center gap-3 mb-2">
-                            <span className="text-lg">{trig?.emoji || '⚡'}</span>
-                            <span className="text-sm text-gray-700 dark:text-gray-300 w-28">{trig?.label || k}</span>
-                            <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                              <div className="bg-indigo-500 h-2 rounded-full" style={{ width: `${(v / max) * 100}%` }} />
-                            </div>
-                            <span className="text-xs text-gray-500">{v}x</span>
-                          </div>
-                        );
-                      });
-                    })()}
-                  </div>
-                )}
-
-                {/* Event category analysis */}
-                {entries.some(e => e.events?.length > 0) && (
-                  <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5">
-                    <h3 className="font-bold text-gray-900 dark:text-white mb-4">📌 Impacto por Categoria</h3>
-                    {(() => {
-                      const catImpact = {};
-                      entries.forEach(e => (e.events || []).forEach(ev => {
-                        if (!catImpact[ev.category]) catImpact[ev.category] = { sum: 0, count: 0 };
-                        catImpact[ev.category].sum += ev.impact;
-                        catImpact[ev.category].count += 1;
-                      }));
-                      return Object.entries(catImpact).map(([cat, data]) => {
-                        const avg = (data.sum / data.count).toFixed(1);
-                        const positive = avg > 0;
-                        return (
-                          <div key={cat} className="flex items-center gap-3 mb-2">
-                            <span className="text-sm font-semibold text-gray-700 dark:text-gray-300 w-24">{cat}</span>
-                            <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${positive ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400' : avg < 0 ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}`}>{avg > 0 ? '+' : ''}{avg}</span>
-                            <span className="text-xs text-gray-400">{data.count} evento(s)</span>
-                          </div>
-                        );
-                      });
-                    })()}
-                  </div>
-                )}
-              </>
-            )}
           </div>
-        )}
 
-        {/* ── HISTÓRICO ── */}
-        {activeTab === 'historico' && (
-          <div>
-            {entries.length === 0 ? (
-              <div className="text-center py-16">
-                <span className="text-6xl block mb-4">📋</span>
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Nenhum registro ainda</h3>
-                <button onClick={() => setActiveTab('registro')} className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700">Criar Primeiro Check-in</button>
+          {/* Emotional dimensions */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-5">📊 Dimensões Emocionais</h3>
+            <div className="space-y-6">
+              <Scale label="⚡ Energia" value={energy} onChange={setEnergy} color="blue" lowLabel="Esgotado" highLabel="Cheio" />
+              <Scale label="😤 Estresse" value={stress} onChange={setStress} color="red" lowLabel="Relaxado" highLabel="Tenso" />
+              <Scale label="😰 Ansiedade" value={anxiety} onChange={setAnxiety} color="orange" lowLabel="Calmo" highLabel="Ansioso" />
+              <Scale label="💪 Motivação" value={motivation} onChange={setMotivation} color="green" lowLabel="Desmotivado" highLabel="Motivado" />
+              <Scale label="🎯 Foco" value={focus} onChange={setFocus} color="purple" lowLabel="Disperso" highLabel="Focado" />
+            </div>
+          </div>
+
+          {/* Feelings */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">💭 Como está se sentindo?</h3>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+              {FEELINGS.map(f => (
+                <button key={f.value} type="button" onClick={() => setFeeling(feeling === f.value ? '' : f.value)}
+                  className={`p-3 rounded-xl border-2 flex items-center gap-2 transition-all ${feeling === f.value ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/30' : 'border-gray-200 dark:border-gray-600 hover:border-purple-300 bg-white dark:bg-gray-750'}`}>
+                  <span className="text-xl">{f.emoji}</span>
+                  <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{f.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Triggers */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">⚡ O que influenciou seu humor hoje?</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">Selecione quantos quiser (opcional)</p>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+              {TRIGGERS.map(t => (
+                <button key={t.value} type="button" onClick={() => toggleTrigger(t.value)}
+                  className={`p-2.5 rounded-xl border-2 flex items-center gap-2 transition-all text-sm ${triggers.includes(t.value) ? 'border-teal-500 bg-teal-50 dark:bg-teal-900/30' : 'border-gray-200 dark:border-gray-600 hover:border-teal-300 bg-white dark:bg-gray-750'}`}>
+                  <span className="text-lg">{t.emoji}</span>
+                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{t.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Events */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white">📌 Eventos do Dia</h3>
+              <button type="button" onClick={() => setShowEventForm(v => !v)} className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700">
+                <PlusIcon className="h-4 w-4" />Adicionar
+              </button>
+            </div>
+            {showEventForm && (
+              <div className="bg-gray-50 dark:bg-gray-700 rounded-xl p-4 mb-4 space-y-3">
+                <input value={eventForm.description} onChange={e => setEventForm(f => ({ ...f, description: e.target.value }))} placeholder="Descreva o evento..." className="w-full px-3 py-2 rounded-xl border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-indigo-500 focus:outline-none text-sm" />
+                <div className="grid grid-cols-2 gap-3">
+                  <select value={eventForm.category} onChange={e => setEventForm(f => ({ ...f, category: e.target.value }))} className="px-3 py-2 rounded-xl border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-indigo-500 focus:outline-none text-sm">
+                    {EVENT_CATS.map(c => <option key={c}>{c}</option>)}
+                  </select>
+                  <select value={eventForm.impact} onChange={e => setEventForm(f => ({ ...f, impact: Number(e.target.value) }))} className="px-3 py-2 rounded-xl border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-indigo-500 focus:outline-none text-sm">
+                    {EVENT_IMPACTS.map(i => <option key={i.value} value={i.value}>{i.emoji} {i.label}</option>)}
+                  </select>
+                </div>
+                <div className="flex gap-2">
+                  <button type="button" onClick={addEvent} className="flex-1 py-2 bg-indigo-600 text-white rounded-xl font-semibold text-sm hover:bg-indigo-700">Adicionar</button>
+                  <button type="button" onClick={() => setShowEventForm(false)} className="px-4 py-2 border-2 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 rounded-xl text-sm hover:bg-gray-100 dark:hover:bg-gray-600">Cancelar</button>
+                </div>
               </div>
-            ) : (
-              <div className="space-y-4">
-                {[...entries].reverse().map(entry => {
-                  const moodObj = MOODS.find(m => m.value === entry.mood);
-                  const feelObj = FEELINGS.find(f => f.value === entry.feeling);
+            )}
+            {events.length > 0 ? (
+              <div className="space-y-2">
+                {events.map(ev => {
+                  const imp = EVENT_IMPACTS.find(i => i.value === ev.impact);
                   return (
-                    <div key={entry.id} className="bg-white dark:bg-gray-800 rounded-2xl shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
-                      {/* Header */}
-                      <div className="flex items-center gap-4 p-4 border-b border-gray-100 dark:border-gray-700">
-                        <span className="text-4xl">{moodObj?.emoji}</span>
-                        <div className="flex-1">
-                          <p className="font-bold text-gray-900 dark:text-white">{moodObj?.label} {feelObj ? `• ${feelObj.emoji} ${feelObj.label}` : ''}</p>
-                          <p className="text-xs text-gray-500">{fmtDate(entry.date)}</p>
-                        </div>
+                    <div key={ev.id} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-xl">
+                      <span className="text-xl">{imp?.emoji}</span>
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-gray-900 dark:text-white">{ev.description}</p>
+                        <p className="text-xs text-gray-500">{ev.category} • {imp?.label}</p>
                       </div>
-                      {/* Scales */}
-                      <div className="px-4 py-3 grid grid-cols-3 md:grid-cols-6 gap-2">
-                        {[
-                          { l: '⚡ Energia', v: entry.energy },
-                          { l: '😤 Estresse', v: entry.stress },
-                          { l: '😰 Ansied.', v: entry.anxiety },
-                          { l: '💪 Motiv.', v: entry.motivation },
-                          { l: '🎯 Foco', v: entry.focus },
-                          { l: '😴 Sono', v: entry.sleepHours, suffix: 'h' },
-                        ].map(s => (
-                          <div key={s.l} className="text-center bg-gray-50 dark:bg-gray-700 rounded-xl p-2">
-                            <p className="text-xs text-gray-500 mb-0.5">{s.l}</p>
-                            <p className="font-bold text-gray-900 dark:text-white text-sm">{s.v || '—'}{s.suffix || (s.v ? '/5' : '')}</p>
-                          </div>
-                        ))}
-                      </div>
-                      {/* Triggers */}
-                      {entry.triggers?.length > 0 && (
-                        <div className="px-4 pb-3 flex flex-wrap gap-1">
-                          {entry.triggers.map(t => {
-                            const tr = TRIGGERS.find(x => x.value === t);
-                            return <span key={t} className="text-xs bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400 px-2 py-0.5 rounded-full">{tr?.emoji} {tr?.label}</span>;
-                          })}
-                        </div>
-                      )}
-                      {/* Events */}
-                      {entry.events?.length > 0 && (
-                        <div className="px-4 pb-3">
-                          {entry.events.map((ev, i) => {
-                            const imp = EVENT_IMPACTS.find(x => x.value === ev.impact);
-                            return <span key={i} className="inline-flex items-center gap-1 mr-2 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-0.5 rounded-full">{imp?.emoji} {ev.description} ({ev.category})</span>;
-                          })}
-                        </div>
-                      )}
-                      {/* Journal snippets */}
-                      {entry.journal?.positive && (
-                        <div className="px-4 pb-3">
-                          <p className="text-xs text-green-600 dark:text-green-400">🌟 {entry.journal.positive}</p>
-                        </div>
-                      )}
-                      {entry.notes && (
-                        <div className="px-4 pb-4">
-                          <p className="text-xs text-gray-500 bg-gray-50 dark:bg-gray-700 rounded-xl px-3 py-2">{entry.notes}</p>
-                        </div>
-                      )}
+                      <button type="button" onClick={() => setEvents(e => e.filter(x => x.id !== ev.id))} className="text-red-400 hover:text-red-600"><XMarkIcon className="h-4 w-4" /></button>
                     </div>
                   );
                 })}
               </div>
+            ) : (
+              <p className="text-sm text-gray-400 dark:text-gray-500">Nenhum evento adicionado. Registrar eventos ajuda a identificar padrões.</p>
             )}
           </div>
-        )}
 
-        {/* ── FERRAMENTAS ── */}
-        {activeTab === 'ferramentas' && (
-          <div className="space-y-4">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">🧰 Ferramentas Ativas</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Pequenas intervenções para regular seu estado emocional.</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {[
-                { icon: '🌬️', title: 'Respiração 4-7-8', desc: 'Técnica comprovada para reduzir ansiedade e estresse rapidamente.', color: 'from-blue-600 to-indigo-600', action: () => setShowBreathing(true) },
-                { icon: '🙏', title: 'Gratidão', desc: 'Registre 3 coisas pelas quais você é grato hoje.', color: 'from-yellow-500 to-orange-500', action: () => setShowGratitude(true) },
-                { icon: '⏸', title: 'Pausa Mental', desc: 'Configure um timer para descansar das telas.', color: 'from-teal-600 to-cyan-600', action: () => setShowPause(true) },
-                {
-                  icon: '💭', title: 'Reestruturação Cognitiva',
-                  desc: 'Técnica simples: identifique um pensamento negativo, questione sua evidência, reformule de forma mais equilibrada.',
-                  color: 'from-purple-600 to-pink-600', action: null, content: true
-                },
-              ].map((tool, i) => (
-                <div key={i} className="bg-white dark:bg-gray-800 rounded-2xl shadow overflow-hidden">
-                  <div className={`bg-gradient-to-r ${tool.color} p-4 flex items-center gap-3`}>
-                    <span className="text-3xl">{tool.icon}</span>
-                    <h3 className="text-white font-bold text-lg">{tool.title}</h3>
-                  </div>
-                  <div className="p-4">
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{tool.desc}</p>
-                    {tool.content && (
-                      <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-3 mb-3 text-sm text-purple-800 dark:text-purple-200 space-y-1">
-                        <p>1️⃣ <strong>Identifique:</strong> "Que pensamento me incomoda?"</p>
-                        <p>2️⃣ <strong>Questione:</strong> "Tenho provas reais disso?"</p>
-                        <p>3️⃣ <strong>Reformule:</strong> "Como pensaria de forma mais equilibrada?"</p>
-                      </div>
-                    )}
-                    {tool.action && (
-                      <button onClick={tool.action} className={`w-full py-2.5 bg-gradient-to-r ${tool.color} text-white rounded-xl font-bold hover:opacity-90 transition-opacity`}>
-                        Abrir
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
+          {/* Physical */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">🌡️ Dados Físicos</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">😴 Horas de sono *</label>
+                <input type="number" min="0" max="24" step="0.5" value={sleepHours} onChange={e => setSleepHours(e.target.value)} placeholder="Ex: 7.5" className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:border-indigo-500 focus:outline-none" />
+                {sleepHours && <p className={`mt-1 text-xs font-semibold ${parseFloat(sleepHours) >= 7 ? 'text-green-600' : parseFloat(sleepHours) >= 6 ? 'text-yellow-600' : 'text-red-600'}`}>{parseFloat(sleepHours) >= 7 ? '✅ Ótimo!' : parseFloat(sleepHours) >= 6 ? '⚠️ Razoável' : '❌ Insuficiente'}</p>}
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">💧 Água (litros)</label>
+                <input type="number" min="0" max="10" step="0.1" value={waterIntake} onChange={e => setWaterIntake(parseFloat(e.target.value) || 0)} className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:border-indigo-500 focus:outline-none" />
+                <div className="flex gap-1 mt-1">{[0.5,1,1.5,2,2.5].map(a => <button key={a} type="button" onClick={() => setWaterIntake(a)} className="flex-1 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 rounded text-xs font-semibold hover:bg-blue-100">{a}L</button>)}</div>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">💪 Exercício (min)</label>
+                <input type="number" min="0" max="500" step="5" value={exerciseMinutes} onChange={e => setExerciseMinutes(parseInt(e.target.value) || 0)} className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:border-indigo-500 focus:outline-none" />
+                <div className="flex gap-1 mt-1">{[15,30,45,60].map(m => <button key={m} type="button" onClick={() => setExerciseMinutes(m)} className="flex-1 py-1 bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 rounded text-xs font-semibold hover:bg-orange-100">{m}m</button>)}</div>
+              </div>
             </div>
+          </div>
 
-            {/* Gratitude log */}
-            {gratitudeLogs.length > 0 && (
-              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5">
-                <h3 className="font-bold text-gray-900 dark:text-white mb-4">🙏 Histórico de Gratidão</h3>
-                <div className="space-y-3">
-                  {[...gratitudeLogs].reverse().slice(0, 5).map((log, i) => (
-                    <div key={i} className="bg-yellow-50 dark:bg-yellow-900/20 rounded-xl p-3">
-                      <p className="text-xs text-gray-500 mb-1">{fmtDate(log.date)}</p>
-                      {log.items.map((item, j) => <p key={j} className="text-sm text-gray-700 dark:text-gray-300">{'🌟✨💛'.split('')[j]} {item}</p>)}
-                    </div>
-                  ))}
-                </div>
+          {/* Guided Journal */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow">
+            <button type="button" onClick={() => setJournalExpanded(v => !v)} className="w-full flex items-center justify-between p-5">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white">📔 Diário Guiado (opcional)</h3>
+              {journalExpanded ? <ChevronUpIcon className="h-5 w-5 text-gray-500" /> : <ChevronDownIcon className="h-5 w-5 text-gray-500" />}
+            </button>
+            {journalExpanded && (
+              <div className="px-5 pb-5 space-y-4">
+                {[
+                  { key: 'positive', label: '🌟 O que foi positivo hoje?', ph: 'Uma conquista, momento agradável, coisa boa...' },
+                  { key: 'improve', label: '💡 O que poderia melhorar?', ph: 'Algo que gostaria de ter feito diferente...' },
+                  { key: 'learned', label: '📚 Algo que você aprendeu?', ph: 'Um insight, lição, nova perspectiva...' },
+                  { key: 'worried', label: '😟 Algo que te preocupou?', ph: 'Uma situação, sentimento ou pensamento...' },
+                ].map(({ key, label, ph }) => (
+                  <div key={key}>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">{label}</label>
+                    <textarea value={journal[key]} onChange={e => setJournal(j => ({ ...j, [key]: e.target.value }))} rows="2" placeholder={ph} className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:border-indigo-500 focus:outline-none resize-none text-sm" />
+                  </div>
+                ))}
               </div>
             )}
           </div>
-        )}
 
-        {/* ── METAS ── */}
-        {activeTab === 'metas' && (
-          <div className="space-y-4">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">🎯 Metas de Bem-Estar</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Acompanhe seu progresso semanal.</p>
+          {/* Notes */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3">📝 Anotações Livres</h3>
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows="4" placeholder="Algo mais que queira registrar sobre seu dia..." className="w-full px-4 py-3 rounded-xl border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:border-indigo-500 focus:outline-none resize-none" />
+          </div>
 
-            {GOALS.map(goal => {
-              const prog = goalsProgress[goal.id] || 0;
-              const isStress = goal.id === 'stress_baixo';
-              const isHumor = goal.id === 'humor_alto';
-              const achieved = isStress ? prog <= goal.target && entries.length > 0 : isHumor ? prog >= goal.target && entries.length > 0 : prog >= goal.target;
-              const pct = isStress
-                ? entries.length > 0 ? Math.min(((5 - prog) / (5 - goal.target)) * 100, 100) : 0
-                : isHumor
-                ? Math.min((prog / goal.target) * 100, 100)
-                : Math.min((prog / goal.target) * 100, 100);
-              return (
-                <div key={goal.id} className={`bg-white dark:bg-gray-800 rounded-2xl shadow p-5 border-2 transition-all ${achieved ? 'border-green-400 dark:border-green-600' : 'border-gray-200 dark:border-gray-700'}`}>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <span className="text-3xl">{goal.icon}</span>
-                      <div>
-                        <p className="font-bold text-gray-900 dark:text-white">{goal.label}</p>
-                        <p className="text-xs text-gray-500">Esta semana</p>
+          {/* Submit */}
+          <div className="flex gap-4">
+            <button type="submit" className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold py-4 px-6 rounded-xl shadow-lg transition-all">
+              💾 Salvar Registro
+            </button>
+            <button type="button" onClick={() => { setMood(3); setEnergy(3); setStress(3); setAnxiety(3); setMotivation(3); setFocus(3); setFeeling(''); setTriggers([]); setSleepHours(''); setNotes(''); setWaterIntake(0); setExerciseMinutes(0); setEvents([]); }} className="px-6 py-4 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-semibold rounded-xl transition-all">
+              🗑️ Limpar
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* ── PAINEL ── */}
+      {activeTab === 'painel' && (
+        <div className="space-y-5">
+          {entries.length === 0 ? (
+            <div className="text-center py-16"><span className="text-6xl block mb-4">📊</span><p className="text-gray-500">Faça seu primeiro check-in para ver o painel!</p><button onClick={() => setActiveTab('registro')} className="mt-4 px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700">Fazer Check-in</button></div>
+          ) : (
+            <>
+              <BalanceScore entries={entries} />
+
+              {weekStats && (
+                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5">
+                  <h3 className="font-bold text-gray-900 dark:text-white mb-4">📈 Resumo dos Últimos 7 Dias</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+                    {[
+                      { label: 'Humor Médio', value: weekStats.avgMood, icon: '😊', color: 'text-indigo-600 dark:text-indigo-400' },
+                      { label: 'Energia Média', value: weekStats.avgEnergy, icon: '⚡', color: 'text-blue-600 dark:text-blue-400' },
+                      { label: 'Estresse Médio', value: weekStats.avgStress, icon: '😤', color: 'text-red-600 dark:text-red-400' },
+                      { label: 'Foco Médio', value: weekStats.avgFocus, icon: '🎯', color: 'text-purple-600 dark:text-purple-400' },
+                    ].map(s => (
+                      <div key={s.label} className="bg-gray-50 dark:bg-gray-700 rounded-xl p-3 text-center">
+                        <div className="text-2xl mb-1">{s.icon}</div>
+                        <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
+                        <div className="text-xs text-gray-500 mt-1">{s.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-sm text-gray-600 dark:text-gray-400">Tendência emocional:</span>
+                    {weekStats.trend === 'up' ? (
+                      <span className="flex items-center gap-1 text-green-600 font-bold text-sm"><ArrowTrendingUpIcon className="h-4 w-4" />Subindo</span>
+                    ) : weekStats.trend === 'down' ? (
+                      <span className="flex items-center gap-1 text-red-600 font-bold text-sm"><ArrowTrendingDownIcon className="h-4 w-4" />Caindo</span>
+                    ) : <span className="text-gray-400 text-sm">Estável</span>}
+                  </div>
+                  {weekStats.bestDay && <p className="text-xs text-green-600 dark:text-green-400">🌟 Melhor dia: {fmtShort(weekStats.bestDay.date)}</p>}
+                  {weekStats.worstStress && <p className="text-xs text-red-500 dark:text-red-400">⚠ Maior estresse: {fmtShort(weekStats.worstStress.date)}</p>}
+                </div>
+              )}
+
+              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5">
+                <h3 className="font-bold text-gray-900 dark:text-white mb-4">📉 Evolução Recente</h3>
+                <div className="space-y-5">
+                  <MiniLineChart data={chartData} color="#6366f1" label="Humor (últimos 7 dias)" />
+                  <MiniLineChart data={stressData} color="#ef4444" label="Estresse (últimos 7 dias)" />
+                </div>
+              </div>
+
+              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5">
+                <h3 className="font-bold text-gray-900 dark:text-white mb-4">🗓️ Mapa de Humor (30 dias)</h3>
+                <MoodHeatmap entries={entries} />
+              </div>
+
+              {entries.some(e => e.triggers?.length > 0) && (
+                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5">
+                  <h3 className="font-bold text-gray-900 dark:text-white mb-4">⚡ Análise de Gatilhos</h3>
+                  {(() => {
+                    const tCount = {};
+                    entries.forEach(e => (e.triggers || []).forEach(t => { tCount[t] = (tCount[t] || 0) + 1; }));
+                    return Object.entries(tCount).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => {
+                      const trig = TRIGGERS.find(t => t.value === k);
+                      const max = Math.max(...Object.values(tCount));
+                      return (
+                        <div key={k} className="flex items-center gap-3 mb-2">
+                          <span className="text-lg">{trig?.emoji || '⚡'}</span>
+                          <span className="text-sm text-gray-700 dark:text-gray-300 w-28">{trig?.label || k}</span>
+                          <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                            <div className="bg-indigo-500 h-2 rounded-full" style={{ width: `${(v / max) * 100}%` }} />
+                          </div>
+                          <span className="text-xs text-gray-500">{v}x</span>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              )}
+
+              {entries.some(e => e.events?.length > 0) && (
+                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5">
+                  <h3 className="font-bold text-gray-900 dark:text-white mb-4">📌 Impacto por Categoria</h3>
+                  {(() => {
+                    const catImpact = {};
+                    entries.forEach(e => (e.events || []).forEach(ev => {
+                      if (!catImpact[ev.category]) catImpact[ev.category] = { sum: 0, count: 0 };
+                      catImpact[ev.category].sum += ev.impact;
+                      catImpact[ev.category].count += 1;
+                    }));
+                    return Object.entries(catImpact).map(([cat, data]) => {
+                      const avg = (data.sum / data.count).toFixed(1);
+                      const positive = avg > 0;
+                      return (
+                        <div key={cat} className="flex items-center gap-3 mb-2">
+                          <span className="text-sm font-semibold text-gray-700 dark:text-gray-300 w-24">{cat}</span>
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${positive ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400' : avg < 0 ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}`}>{avg > 0 ? '+' : ''}{avg}</span>
+                          <span className="text-xs text-gray-400">{data.count} evento(s)</span>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── HISTÓRICO ── */}
+      {activeTab === 'historico' && (
+        <div>
+          {entries.length === 0 ? (
+            <div className="text-center py-16">
+              <span className="text-6xl block mb-4">📋</span>
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Nenhum registro ainda</h3>
+              <button onClick={() => setActiveTab('registro')} className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700">Criar Primeiro Check-in</button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {[...entries].reverse().map(entry => {
+                const moodObj = MOODS.find(m => m.value === entry.mood);
+                const feelObj = FEELINGS.find(f => f.value === entry.feeling);
+                return (
+                  <div key={entry.id} className="bg-white dark:bg-gray-800 rounded-2xl shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
+                    <div className="flex items-center gap-4 p-4 border-b border-gray-100 dark:border-gray-700">
+                      <span className="text-4xl">{moodObj?.emoji}</span>
+                      <div className="flex-1">
+                        <p className="font-bold text-gray-900 dark:text-white">{moodObj?.label} {feelObj ? `• ${feelObj.emoji} ${feelObj.label}` : ''}</p>
+                        <p className="text-xs text-gray-500">{fmtDate(entry.date)}</p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-xl font-bold text-gray-900 dark:text-white">{isStress || isHumor ? (entries.length > 0 ? prog : '—') : prog}{isStress || isHumor ? goal.unit : `/${goal.target}`}</p>
-                      {achieved && <span className="text-xs text-green-600 font-bold">✅ Meta atingida!</span>}
+                    <div className="px-4 py-3 grid grid-cols-3 md:grid-cols-6 gap-2">
+                      {[
+                        { l: '⚡ Energia', v: entry.energy },
+                        { l: '😤 Estresse', v: entry.stress },
+                        { l: '😰 Ansied.', v: entry.anxiety },
+                        { l: '💪 Motiv.', v: entry.motivation },
+                        { l: '🎯 Foco', v: entry.focus },
+                        { l: '😴 Sono', v: entry.sleepHours, suffix: 'h' },
+                      ].map(s => (
+                        <div key={s.l} className="text-center bg-gray-50 dark:bg-gray-700 rounded-xl p-2">
+                          <p className="text-xs text-gray-500 mb-0.5">{s.l}</p>
+                          <p className="font-bold text-gray-900 dark:text-white text-sm">{s.v || '—'}{s.suffix || (s.v ? '/5' : '')}</p>
+                        </div>
+                      ))}
+                    </div>
+                    {entry.triggers?.length > 0 && (
+                      <div className="px-4 pb-3 flex flex-wrap gap-1">
+                        {entry.triggers.map(t => {
+                          const tr = TRIGGERS.find(x => x.value === t);
+                          return <span key={t} className="text-xs bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400 px-2 py-0.5 rounded-full">{tr?.emoji} {tr?.label}</span>;
+                        })}
+                      </div>
+                    )}
+                    {entry.events?.length > 0 && (
+                      <div className="px-4 pb-3">
+                        {entry.events.map((ev, i) => {
+                          const imp = EVENT_IMPACTS.find(x => x.value === ev.impact);
+                          return <span key={i} className="inline-flex items-center gap-1 mr-2 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-0.5 rounded-full">{imp?.emoji} {ev.description} ({ev.category})</span>;
+                        })}
+                      </div>
+                    )}
+                    {entry.journal?.positive && (
+                      <div className="px-4 pb-3">
+                        <p className="text-xs text-green-600 dark:text-green-400">🌟 {entry.journal.positive}</p>
+                      </div>
+                    )}
+                    {entry.notes && (
+                      <div className="px-4 pb-4">
+                        <p className="text-xs text-gray-500 bg-gray-50 dark:bg-gray-700 rounded-xl px-3 py-2">{entry.notes}</p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── FERRAMENTAS ── */}
+      {activeTab === 'ferramentas' && (
+        <div className="space-y-4">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white">🧰 Ferramentas Ativas</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Pequenas intervenções para regular seu estado emocional.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[
+              { icon: '🌬️', title: 'Respiração 4-7-8', desc: 'Técnica comprovada para reduzir ansiedade e estresse rapidamente.', color: 'from-blue-600 to-indigo-600', action: () => setShowBreathing(true) },
+              { icon: '🙏', title: 'Gratidão', desc: 'Registre 3 coisas pelas quais você é grato hoje.', color: 'from-yellow-500 to-orange-500', action: () => setShowGratitude(true) },
+              { icon: '⏸', title: 'Pausa Mental', desc: 'Configure um timer para descansar das telas.', color: 'from-teal-600 to-cyan-600', action: () => setShowPause(true) },
+              { icon: '💭', title: 'Reestruturação Cognitiva', desc: 'Técnica simples: identifique um pensamento negativo, questione sua evidência, reformule de forma mais equilibrada.', color: 'from-purple-600 to-pink-600', action: null, content: true },
+            ].map((tool, i) => (
+              <div key={i} className="bg-white dark:bg-gray-800 rounded-2xl shadow overflow-hidden">
+                <div className={`bg-gradient-to-r ${tool.color} p-4 flex items-center gap-3`}>
+                  <span className="text-3xl">{tool.icon}</span>
+                  <h3 className="text-white font-bold text-lg">{tool.title}</h3>
+                </div>
+                <div className="p-4">
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{tool.desc}</p>
+                  {tool.content && (
+                    <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-3 mb-3 text-sm text-purple-800 dark:text-purple-200 space-y-1">
+                      <p>1️⃣ <strong>Identifique:</strong> "Que pensamento me incomoda?"</p>
+                      <p>2️⃣ <strong>Questione:</strong> "Tenho provas reais disso?"</p>
+                      <p>3️⃣ <strong>Reformule:</strong> "Como pensaria de forma mais equilibrada?"</p>
+                    </div>
+                  )}
+                  {tool.action && (
+                    <button onClick={tool.action} className={`w-full py-2.5 bg-gradient-to-r ${tool.color} text-white rounded-xl font-bold hover:opacity-90 transition-opacity`}>
+                      Abrir
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {gratitudeLogs.length > 0 && (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5">
+              <h3 className="font-bold text-gray-900 dark:text-white mb-4">🙏 Histórico de Gratidão</h3>
+              <div className="space-y-3">
+                {[...gratitudeLogs].reverse().slice(0, 5).map((log, i) => (
+                  <div key={i} className="bg-yellow-50 dark:bg-yellow-900/20 rounded-xl p-3">
+                    <p className="text-xs text-gray-500 mb-1">{fmtDate(log.date)}</p>
+                    {log.items.map((item, j) => <p key={j} className="text-sm text-gray-700 dark:text-gray-300">{'🌟✨💛'.split('')[j]} {item}</p>)}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── METAS ── */}
+      {activeTab === 'metas' && (
+        <div className="space-y-4">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white">🎯 Metas de Bem-Estar</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Acompanhe seu progresso semanal.</p>
+
+          {GOALS.map(goal => {
+            const prog = goalsProgress[goal.id] || 0;
+            const isStress = goal.id === 'stress_baixo';
+            const isHumor = goal.id === 'humor_alto';
+            const achieved = isStress ? prog <= goal.target && entries.length > 0 : isHumor ? prog >= goal.target && entries.length > 0 : prog >= goal.target;
+            const pct = isStress
+              ? entries.length > 0 ? Math.min(((5 - prog) / (5 - goal.target)) * 100, 100) : 0
+              : Math.min((prog / goal.target) * 100, 100);
+            return (
+              <div key={goal.id} className={`bg-white dark:bg-gray-800 rounded-2xl shadow p-5 border-2 transition-all ${achieved ? 'border-green-400 dark:border-green-600' : 'border-gray-200 dark:border-gray-700'}`}>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <span className="text-3xl">{goal.icon}</span>
+                    <div>
+                      <p className="font-bold text-gray-900 dark:text-white">{goal.label}</p>
+                      <p className="text-xs text-gray-500">Esta semana</p>
                     </div>
                   </div>
-                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
-                    <div className={`h-2.5 rounded-full transition-all ${achieved ? 'bg-green-500' : 'bg-indigo-500'}`} style={{ width: `${pct}%` }} />
+                  <div className="text-right">
+                    <p className="text-xl font-bold text-gray-900 dark:text-white">{isStress || isHumor ? (entries.length > 0 ? prog : '—') : prog}{isStress || isHumor ? goal.unit : `/${goal.target}`}</p>
+                    {achieved && <span className="text-xs text-green-600 font-bold">✅ Meta atingida!</span>}
                   </div>
                 </div>
-              );
-            })}
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+                  <div className={`h-2.5 rounded-full transition-all ${achieved ? 'bg-green-500' : 'bg-indigo-500'}`} style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+            );
+          })}
 
-            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl p-5 text-white">
-              <h3 className="font-bold mb-2">💡 Como atingir suas metas</h3>
-              <ul className="text-sm text-indigo-100 space-y-1">
-                <li>• Faça check-in todos os dias, mesmo que breve</li>
-                <li>• Use as ferramentas de respiração em momentos de estresse</li>
-                <li>• Registre eventos para entender seus gatilhos</li>
-                <li>• Pratique gratidão regularmente</li>
-              </ul>
-            </div>
+          <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl p-5 text-white">
+            <h3 className="font-bold mb-2">💡 Como atingir suas metas</h3>
+            <ul className="text-sm text-indigo-100 space-y-1">
+              <li>• Faça check-in todos os dias, mesmo que breve</li>
+              <li>• Use as ferramentas de respiração em momentos de estresse</li>
+              <li>• Registre eventos para entender seus gatilhos</li>
+              <li>• Pratique gratidão regularmente</li>
+            </ul>
           </div>
-        )}
-
-      </div>
+        </div>
+      )}
 
       {/* Modals */}
       {showBreathing && <BreathingExercise onClose={() => setShowBreathing(false)} />}
       {showGratitude && <GratitudeModal onClose={() => setShowGratitude(false)} onSave={items => setGratitudeLogs(l => [{ items, date: new Date().toISOString() }, ...l])} />}
       {showPause && <PauseTimer onClose={() => setShowPause(false)} />}
-    </div>
+    </PageLayout>
   );
 }

@@ -1,22 +1,164 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../hooks/useAuth';
+import { AppContext } from '../context/AppContext';
 import { generateText } from '../services/gemini';
-import { MicrophoneIcon, PlusIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
+import PageLayout from '../components/PageLayout';
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const todayStr = () => new Date().toISOString().split('T')[0];
+
+const GREETINGS = [
+  (name) => `Bom dia, ${name}.`,
+  (name) => `Olá, ${name}.`,
+  (name) => `Bem-vindo de volta, ${name}.`,
+];
+
+const STRATEGIC_PHRASES = [
+  'Organização é ritmo, não excesso.',
+  'Hoje é dia de constância.',
+  'Pequenos passos constroem grandes resultados.',
+  'Foco no processo, não na perfeição.',
+  'Clareza cria espaço para o que importa.',
+  'Uma coisa de cada vez.',
+  'A disciplina é a ponte entre metas e conquistas.',
+  'Feito é melhor que perfeito.',
+];
+
+function getGreeting() {
+  const h = new Date().getHours();
+  if (h < 12) return 'Bom dia';
+  if (h < 18) return 'Boa tarde';
+  return 'Boa noite';
+}
+
+function getPhrase() {
+  return STRATEGIC_PHRASES[Math.floor(Math.random() * STRATEGIC_PHRASES.length)];
+}
+
+function formatDateFull() {
+  return new Date().toLocaleDateString('pt-BR', {
+    weekday: 'long', day: 'numeric', month: 'long',
+  });
+}
+
+// ─── 360° Wheel ───────────────────────────────────────────────────────────────
+function Wheel360({ scores }) {
+  // scores: { casa, estudos, financas, calendario, saudeFisica, saudeMental }
+  // each 0–1
+  const size = 180;
+  const cx = size / 2, cy = size / 2;
+  const r = 68, innerR = 28;
+
+  const sectors = [
+    { key: 'casa',         label: 'Casa',         emoji: '🏠', color: '#a7f3d0' },
+    { key: 'estudos',      label: 'Estudos',      emoji: '📚', color: '#bfdbfe' },
+    { key: 'financas',     label: 'Finanças',     emoji: '💰', color: '#fde68a' },
+    { key: 'calendario',   label: 'Agenda',       emoji: '📅', color: '#e9d5ff' },
+    { key: 'saudeFisica',  label: 'Saúde Física', emoji: '💪', color: '#fbcfe8' },
+    { key: 'saudeMental',  label: 'Saúde Mental', emoji: '🧠', color: '#fed7aa' },
+  ];
+
+  const n = sectors.length;
+  const angleStep = (2 * Math.PI) / n;
+
+  const polarToCart = (angle, radius) => ({
+    x: cx + radius * Math.cos(angle),
+    y: cy + radius * Math.sin(angle),
+  });
+
+  const describeArc = (startAngle, endAngle, outerR, innerRad) => {
+    const gap = 0.06;
+    const s = startAngle + gap;
+    const e = endAngle - gap;
+    const o1 = polarToCart(s, outerR);
+    const o2 = polarToCart(e, outerR);
+    const i1 = polarToCart(e, innerRad);
+    const i2 = polarToCart(s, innerRad);
+    return `M${o1.x},${o1.y} A${outerR},${outerR} 0 0,1 ${o2.x},${o2.y} L${i1.x},${i1.y} A${innerRad},${innerRad} 0 0,0 ${i2.x},${i2.y} Z`;
+  };
+
+  // lowest score = sector to highlight
+  const minKey = Object.entries(scores).sort((a, b) => a[1] - b[1])[0]?.[0];
+  const minSector = sectors.find(s => s.key === minKey);
+
+  const startOffset = -Math.PI / 2;
+
+  return (
+    <div className="flex flex-col items-center">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="drop-shadow-sm">
+        {sectors.map((sec, i) => {
+          const startAngle = startOffset + i * angleStep;
+          const endAngle = startOffset + (i + 1) * angleStep;
+          const score = scores[sec.key] ?? 0.7;
+          const arcR = innerR + (r - innerR) * score;
+          return (
+            <g key={sec.key}>
+              {/* Background track */}
+              <path
+                d={describeArc(startAngle, endAngle, r, innerR)}
+                fill="#f3f4f6"
+                className="dark:fill-gray-700"
+              />
+              {/* Filled arc */}
+              <path
+                d={describeArc(startAngle, endAngle, arcR, innerR)}
+                fill={sec.color}
+                opacity="0.85"
+                style={{ transition: 'all 0.8s ease' }}
+              />
+            </g>
+          );
+        })}
+        {/* Center dot */}
+        <circle cx={cx} cy={cy} r={innerR - 4} fill="white" className="dark:fill-gray-800" />
+        <text x={cx} y={cy + 5} textAnchor="middle" fontSize="14" className="select-none">🌿</text>
+      </svg>
+
+      {/* Status text */}
+      <p className="text-center text-sm text-gray-500 dark:text-gray-400 mt-3 max-w-[200px] leading-snug">
+        {minSector
+          ? <><span className="font-semibold text-gray-700 dark:text-gray-300">Atenção maior em:</span> {minSector.emoji} {minSector.label}</>
+          : 'Sua vida está estável esta semana.'}
+      </p>
+    </div>
+  );
+}
+
+// ─── Nav Portal Card ──────────────────────────────────────────────────────────
+function PortalCard({ emoji, label, to, accent, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex flex-col items-center justify-center gap-2 rounded-2xl border-2 p-4 transition-all hover:scale-105 hover:shadow-md active:scale-95"
+      style={{ borderColor: accent + '55', background: accent + '18' }}
+    >
+      <span className="text-2xl">{emoji}</span>
+      <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 text-center leading-tight">{label}</span>
+    </button>
+  );
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
 export default function Home() {
   const { user } = useAuth();
-  const [voiceInput, setVoiceInput] = useState('');
-  const [isListening, setIsListening] = useState(false);
+  const navigate = useNavigate();
+  const { wellnessEntries } = useContext(AppContext);
+
   const [homeTasks, setHomeTasks] = useState([]);
-  const [newTask, setNewTask] = useState('');
-  const [showAddTask, setShowAddTask] = useState(false);
-  const [stats, setStats] = useState({
-    studyGoal: '6h/dia',
-    objective: 'Graduação',
-    exercise: '3-4x',
-    budget: '2600'
+  const [topPriority, setTopPriority] = useState(null);
+  const [phrase] = useState(getPhrase);
+
+  // Derive 360 scores from available data
+  const [scores, setScores] = useState({
+    casa: 0.7,
+    estudos: 0.7,
+    financas: 0.7,
+    calendario: 0.7,
+    saudeFisica: 0.7,
+    saudeMental: 0.7,
   });
 
   useEffect(() => {
@@ -25,319 +167,125 @@ export default function Home() {
     }
   }, [user]);
 
+  // Derive scores
+  useEffect(() => {
+    const last7Wellness = (wellnessEntries || []).slice(-7);
+
+    // Mental health from wellness
+    const avgMood = last7Wellness.length
+      ? last7Wellness.reduce((s, e) => s + (e.mood || 3), 0) / last7Wellness.length / 5
+      : 0.6;
+    const avgStress = last7Wellness.length
+      ? 1 - (last7Wellness.reduce((s, e) => s + (e.stress || 3), 0) / last7Wellness.length / 5)
+      : 0.6;
+    const avgEnergy = last7Wellness.length
+      ? last7Wellness.reduce((s, e) => s + (e.energy || 3), 0) / last7Wellness.length / 5
+      : 0.6;
+
+    // Casa: from completed tasks ratio
+    const completedRatio = homeTasks.length > 0
+      ? homeTasks.filter(t => t.completed).length / homeTasks.length
+      : 0.6;
+
+    setScores({
+      casa: completedRatio,
+      estudos: 0.65,        // placeholder — could wire to study sessions
+      financas: 0.7,        // placeholder — could wire to financial data
+      calendario: 0.72,     // placeholder
+      saudeFisica: avgEnergy,
+      saudeMental: (avgMood + avgStress) / 2,
+    });
+  }, [wellnessEntries, homeTasks]);
+
   const loadHomeTasks = async () => {
     try {
-      const tasksRef = collection(db, 'homeTasks');
-      const today = new Date().toISOString().split('T')[0];
-      
+      const today = todayStr();
       const q = query(
-        tasksRef,
+        collection(db, 'homeTasks'),
         where('userId', '==', user.uid),
         where('date', '==', today)
       );
-      
       const snapshot = await getDocs(q);
-      const tasks = [];
-      
-      snapshot.forEach((doc) => {
-        tasks.push({ id: doc.id, ...doc.data() });
-      });
-      
+      const tasks = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       setHomeTasks(tasks);
-    } catch (error) {
-      console.error('Erro ao carregar tarefas:', error);
+
+      // top priority = first incomplete
+      const first = tasks.find(t => !t.completed);
+      setTopPriority(first?.title || null);
+    } catch (e) {
+      console.error(e);
     }
   };
 
-  const handleVoiceInput = async () => {
-    if (!voiceInput.trim()) return;
+  const firstName = user?.displayName?.split(' ')[0] || 'você';
+  const greeting = getGreeting();
 
-    try {
-      // Usar Gemini para processar a entrada de voz
-      const prompt = `
-Você é um assistente que converte frases naturais em eventos de calendário.
-
-Frase do usuário: "${voiceInput}"
-
-Extraia:
-- Título do evento
-- Data (formato: YYYY-MM-DD, considere hoje como ${new Date().toISOString().split('T')[0]})
-- Horário (se mencionado)
-- Local (se mencionado)
-
-Responda APENAS em formato JSON válido:
-{
-  "title": "título",
-  "date": "YYYY-MM-DD",
-  "time": "HH:MM ou vazio",
-  "location": "local ou vazio"
-}
-`;
-
-      const result = await generateText(prompt);
-      const eventData = JSON.parse(result);
-
-      // Adicionar ao Firestore
-      await addDoc(collection(db, 'events'), {
-        ...eventData,
-        userId: user.uid,
-        createdAt: serverTimestamp(),
-        description: voiceInput
-      });
-
-      alert('✅ Evento adicionado ao calendário!');
-      setVoiceInput('');
-    } catch (error) {
-      console.error('Erro ao processar voz:', error);
-      alert('❌ Erro ao processar. Tente novamente.');
-    }
-  };
-
-  const handleVoiceTaskList = async () => {
-    const input = prompt('Digite todas as tarefas de casa separadas por vírgula:');
-    
-    if (!input) return;
-
-    try {
-      const prompt = `
-Você é um assistente que organiza tarefas domésticas.
-
-Lista: "${input}"
-
-Separe cada tarefa e retorne em formato JSON:
-{
-  "tasks": ["tarefa 1", "tarefa 2", "tarefa 3"]
-}
-`;
-
-      const result = await generateText(prompt);
-      const data = JSON.parse(result);
-
-      const today = new Date().toISOString().split('T')[0];
-
-      for (const task of data.tasks) {
-        await addDoc(collection(db, 'homeTasks'), {
-          title: task,
-          completed: false,
-          date: today,
-          userId: user.uid,
-          createdAt: serverTimestamp()
-        });
-      }
-
-      loadHomeTasks();
-      alert('✅ Tarefas adicionadas!');
-    } catch (error) {
-      console.error('Erro:', error);
-      alert('❌ Erro ao adicionar tarefas');
-    }
-  };
-
-  const handleAddTask = async () => {
-    if (!newTask.trim()) return;
-
-    try {
-      const today = new Date().toISOString().split('T')[0];
-
-      await addDoc(collection(db, 'homeTasks'), {
-        title: newTask,
-        completed: false,
-        date: today,
-        userId: user.uid,
-        createdAt: serverTimestamp()
-      });
-
-      setNewTask('');
-      setShowAddTask(false);
-      loadHomeTasks();
-    } catch (error) {
-      console.error('Erro ao adicionar tarefa:', error);
-    }
-  };
-
-  const toggleTask = async (taskId, completed) => {
-    try {
-      await updateDoc(doc(db, 'homeTasks', taskId), {
-        completed: !completed
-      });
-      
-      loadHomeTasks();
-    } catch (error) {
-      console.error('Erro ao atualizar tarefa:', error);
-    }
-  };
-
-  const deleteTask = async (taskId) => {
-    try {
-      await deleteDoc(doc(db, 'homeTasks', taskId));
-      loadHomeTasks();
-    } catch (error) {
-      console.error('Erro ao deletar tarefa:', error);
-    }
-  };
+  const portals = [
+    { emoji: '✅', label: 'Tarefas',    accent: '#a7f3d0', path: '/tasks' },
+    { emoji: '📅', label: 'Calendário', accent: '#bfdbfe', path: '/calendar' },
+    { emoji: '💰', label: 'Finanças',   accent: '#fde68a', path: '/financeiro' },
+    { emoji: '💚', label: 'Saúde',      accent: '#fbcfe8', path: '/wellness' },
+    { emoji: '📚', label: 'Estudos',    accent: '#e9d5ff', path: '/study' },
+    { emoji: '🌐', label: 'Visão 360°', accent: '#fed7aa', path: '/dashboard' },
+  ];
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white pb-32">
-      
-      {/* Header com Saudação */}
-      <div className="bg-gradient-to-r from-green-600 to-green-500 p-8">
-        <h1 className="text-4xl font-bold">Boa noite, {user?.displayName?.split(' ')[0]}! 👋</h1>
-        <p className="text-green-100 mt-2">3º Semestre • uesc • {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
-      </div>
+    <PageLayout showHeader={false}>
+      <div className="min-h-screen pb-32">
 
-      <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-        
-        {/* Cards de Estatísticas */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div className="bg-gradient-to-br from-blue-600 to-blue-500 rounded-2xl p-6">
-            <div className="text-blue-100 text-sm mb-2">Meta de Estudo</div>
-            <div className="text-4xl font-bold">{stats.studyGoal}</div>
-            <div className="text-blue-100 text-sm mt-2">Período: Noite</div>
-          </div>
+        {/* ── Saudação ─────────────────────────────────────────────────────── */}
+        <div className="pt-10 pb-6 px-2 text-center">
+          <p className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2">
+            {formatDateFull()}
+          </p>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white tracking-tight">
+            {greeting}, {firstName}.
+          </h1>
+          <p className="mt-2 text-sm text-gray-400 dark:text-gray-500 italic">
+            "{phrase}"
+          </p>
+        </div>
 
-          <div className="bg-gradient-to-br from-purple-600 to-pink-600 rounded-2xl p-6">
-            <div className="text-purple-100 text-sm mb-2">Objetivo</div>
-            <div className="text-4xl font-bold">{stats.objective}</div>
-          </div>
-
-          <div className="bg-gradient-to-br from-green-600 to-green-500 rounded-2xl p-6">
-            <div className="text-green-100 text-sm mb-2">Exercícios</div>
-            <div className="text-4xl font-bold">{stats.exercise}</div>
-            <div className="text-green-100 text-sm mt-2">Água: 4L/dia</div>
-          </div>
-
-          <div className="bg-gradient-to-br from-orange-600 to-red-600 rounded-2xl p-6">
-            <div className="text-orange-100 text-sm mb-2">Orçamento</div>
-            <div className="text-4xl font-bold">Definido</div>
-            <div className="text-orange-100 text-sm mt-2">{stats.budget}</div>
+        {/* ── Wheel 360 + Status ───────────────────────────────────────────── */}
+        <div className="flex justify-center mb-8">
+          <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 px-8 py-6 flex flex-col items-center">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4">Equilíbrio Semanal</p>
+            <Wheel360 scores={scores} />
           </div>
         </div>
 
-        {/* Input de Voz */}
-        <div className="bg-gray-800 rounded-2xl p-6">
-          <div className="flex gap-3">
-            <input
-              type="text"
-              placeholder="Digite como você fala... ex: tenho prova dia 20"
-              value={voiceInput}
-              onChange={(e) => setVoiceInput(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleVoiceInput()}
-              className="flex-1 px-6 py-4 rounded-xl bg-gray-700 text-white border-2 border-gray-600 focus:border-green-500 focus:outline-none"
-            />
-            <button
-              onClick={handleVoiceInput}
-              className="px-6 py-4 bg-green-600 hover:bg-green-700 rounded-xl font-bold transition-all"
-            >
-              ➤
-            </button>
-          </div>
-        </div>
-
-        {/* Atividades de Casa */}
-        <div className="bg-gray-800 rounded-2xl p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold">🏠 ATIVIDADES DE CASA</h2>
-            
-            <div className="flex gap-3">
-              <button
-                onClick={handleVoiceTaskList}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-xl font-semibold transition-all flex items-center gap-2"
-              >
-                <MicrophoneIcon className="h-5 w-5" />
-                IA
-              </button>
-              
-              <button
-                onClick={() => setShowAddTask(!showAddTask)}
-                className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-xl font-semibold transition-all flex items-center gap-2"
-              >
-                <PlusIcon className="h-5 w-5" />
-                Manual
-              </button>
-            </div>
-          </div>
-
-          {showAddTask && (
-            <div className="mb-6 flex gap-3">
-              <input
-                type="text"
-                placeholder="Nova tarefa..."
-                value={newTask}
-                onChange={(e) => setNewTask(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleAddTask()}
-                className="flex-1 px-4 py-3 rounded-xl bg-gray-700 text-white border-2 border-gray-600 focus:border-green-500 focus:outline-none"
-              />
-              <button
-                onClick={handleAddTask}
-                className="px-6 py-3 bg-green-600 hover:bg-green-700 rounded-xl font-bold"
-              >
-                Adicionar
-              </button>
-            </div>
-          )}
-
-          <div className="space-y-3">
-            {homeTasks.length === 0 ? (
-              <div className="text-center py-12 text-gray-400">
-                <span className="text-6xl mb-4 block">📋</span>
-                <p>Nenhuma tarefa para hoje</p>
-              </div>
-            ) : (
-              homeTasks.map((task) => (
-                <div
-                  key={task.id}
-                  onClick={() => toggleTask(task.id, task.completed)}
-                  className={`p-4 rounded-xl cursor-pointer transition-all ${
-                    task.completed
-                      ? 'bg-green-900/30 border-2 border-green-600'
-                      : 'bg-gray-700 border-2 border-gray-600 hover:border-green-500'
-                  }`}
-                  style={task.completed ? {
-                    backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(34, 197, 94, 0.1) 10px, rgba(34, 197, 94, 0.1) 20px)'
-                  } : {}}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center ${
-                        task.completed
-                          ? 'bg-green-600 border-green-600'
-                          : 'border-gray-500'
-                      }`}>
-                        {task.completed && <CheckCircleIcon className="h-5 w-5 text-white" />}
-                      </div>
-                      <span className={task.completed ? 'line-through text-gray-400' : ''}>
-                        {task.title}
-                      </span>
-                    </div>
-
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteTask(task.id);
-                      }}
-                      className="text-red-400 hover:text-red-300 text-sm"
-                    >
-                      Excluir
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Banner Motivacional */}
-        <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl p-6">
-          <div className="flex items-center gap-4">
-            <span className="text-5xl">💪</span>
+        {/* ── Prioridade do Dia ─────────────────────────────────────────────── */}
+        <div className="mb-8">
+          <div className="bg-gradient-to-r from-violet-50 to-indigo-50 dark:from-violet-900/20 dark:to-indigo-900/20 border-2 border-violet-200 dark:border-violet-700 rounded-2xl p-5 flex items-start gap-4">
+            <span className="text-3xl mt-0.5">🎯</span>
             <div>
-              <h3 className="text-2xl font-bold">Continue Focado, {user?.displayName?.split(' ')[0]}!</h3>
-              <p className="text-purple-100 mt-1">Cada tarefa concluída te aproxima dos seus objetivos</p>
+              <p className="text-xs font-bold text-violet-500 dark:text-violet-400 uppercase tracking-widest mb-1">Prioridade de hoje</p>
+              {topPriority ? (
+                <p className="text-base font-bold text-gray-900 dark:text-white">{topPriority}</p>
+              ) : (
+                <p className="text-sm text-gray-500 dark:text-gray-400">Nenhuma tarefa pendente. Bom trabalho! 🎉</p>
+              )}
             </div>
           </div>
         </div>
 
+        {/* ── Portais de Navegação ─────────────────────────────────────────── */}
+        <div className="mb-6">
+          <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-4">Para onde ir agora</p>
+          <div className="grid grid-cols-3 gap-3">
+            {portals.map(p => (
+              <PortalCard
+                key={p.path}
+                emoji={p.emoji}
+                label={p.label}
+                accent={p.accent}
+                onClick={() => navigate(p.path)}
+              />
+            ))}
+          </div>
+        </div>
+
       </div>
-    </div>
+    </PageLayout>
   );
 }

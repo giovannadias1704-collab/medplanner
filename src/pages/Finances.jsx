@@ -1,6 +1,6 @@
 import { useState, useMemo, useContext, useCallback } from 'react';
 import { AppContext } from '../context/AppContext';
-import PageHeader from '../components/PageHeader';
+import PageLayout from '../components/PageLayout';
 import {
   PlusIcon, XMarkIcon, TrashIcon, CheckCircleIcon, ClockIcon,
   ChartBarIcon, ArrowTrendingUpIcon, ArrowTrendingDownIcon,
@@ -60,7 +60,7 @@ function TabButton({ active, onClick, children }) {
   );
 }
 
-function MiniProgressBar({ value, max, color = '#10b981', alert80 = false }) {
+function MiniProgressBar({ value, max, color = '#10b981' }) {
   const pct = max > 0 ? Math.min((value / max) * 100, 100) : 0;
   const barColor = pct >= 100 ? '#ef4444' : pct >= 80 ? '#f59e0b' : color;
   return (
@@ -221,7 +221,6 @@ function TransactionModal({ onClose, onSave, editData = null }) {
           </button>
         </div>
 
-        {/* Tipo */}
         <div className="flex gap-2 mb-5">
           {[['expense', '💸 Despesa'], ['income', '💰 Receita']].map(([val, label]) => (
             <button key={val} type="button" onClick={() => set('type', val)}
@@ -474,7 +473,6 @@ function BillModal({ onClose, onSave }) {
 export default function Finances() {
   const { bills, addBill, toggleBillPaid, deleteBill } = useContext(AppContext);
 
-  // Estado local de transações (salvo no localStorage — pode migrar pro Firebase depois)
   const [transactions, setTransactions] = useState(() => {
     try { return JSON.parse(localStorage.getItem('fin_transactions') || '[]'); } catch { return []; }
   });
@@ -527,7 +525,6 @@ export default function Finances() {
     [byCategory]
   );
 
-  // Evolução mensal (últimos 6 meses)
   const monthlyEvolution = useMemo(() => {
     const months = [];
     for (let i = 5; i >= 0; i--) {
@@ -541,10 +538,8 @@ export default function Finances() {
     return months;
   }, [transactions]);
 
-  // Análise comportamental
   const behaviorInsights = useMemo(() => {
     const insights = [];
-    // Compara categoria delivery com meses anteriores
     const lastMonths = [];
     for (let i = 1; i <= 3; i++) {
       const d = new Date();
@@ -569,12 +564,10 @@ export default function Finances() {
     return insights;
   }, [byCategory, savingsRate, totalIncome, transactions]);
 
-  // Bills stats
   const unpaidBills = useMemo(() => bills.filter(b => !b.paid), [bills]);
-  const totalDue = useMemo(() => unpaidBills.reduce((s, b) => s + b.amount, 0), [unpaidBills]);
+  const totalDue    = useMemo(() => unpaidBills.reduce((s, b) => s + b.amount, 0), [unpaidBills]);
   const overdueBills = useMemo(() => unpaidBills.filter(b => daysUntil(b.dueDate) < 0), [unpaidBills]);
 
-  // Filtered transactions
   const filteredTx = useMemo(() => {
     let list = monthTx;
     if (filterCat !== 'all') list = list.filter(t => t.category === filterCat);
@@ -606,26 +599,35 @@ export default function Finances() {
     try { await addBill(data); } catch { alert('Erro ao adicionar conta'); }
   };
 
+  // ─── Header Right: botão Nova Transação ──────────────────────────
+  const headerRight = (
+    <button
+      onClick={() => setShowTransModal(true)}
+      className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl font-semibold shadow-lg hover:from-emerald-700 hover:to-teal-700 transition-all text-sm"
+    >
+      <PlusIcon className="h-4 w-4" /> Nova Transação
+    </button>
+  );
+
   // ─── Renderização ─────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-32">
-      <PageHeader
-        title="Finanças"
-        subtitle="Controle financeiro completo"
-        emoji="💰"
-        imageQuery="money,finance,budget"
-      />
-
-      <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+    <PageLayout
+      title="Finanças"
+      subtitle="Controle financeiro completo"
+      emoji="💰"
+      urgentCount={overdueBills.length}
+      headerRight={headerRight}
+    >
+      <div className="max-w-7xl mx-auto space-y-6">
 
         {/* ── Tabs ── */}
         <div className="flex flex-wrap gap-2">
           {[
-            ['dashboard', '📊 Dashboard'],
+            ['dashboard',    '📊 Dashboard'],
             ['transactions', '💸 Transações'],
-            ['budget', '📋 Orçamento'],
-            ['bills', '🧾 Contas'],
-            ['goals', '🎯 Metas'],
+            ['budget',       '📋 Orçamento'],
+            ['bills',        '🧾 Contas'],
+            ['goals',        '🎯 Metas'],
           ].map(([id, label]) => (
             <TabButton key={id} active={tab === id} onClick={() => setTab(id)}>{label}</TabButton>
           ))}
@@ -675,10 +677,10 @@ export default function Finances() {
 
             {/* Stats cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <StatCard icon="💸" title="Gastos este mês" value={formatCurrency(totalExpenses)} sub={`${expenses.length} transações`} color="red" />
-              <StatCard icon="💰" title="Receitas" value={formatCurrency(totalIncome)} sub="incluindo renda base" color="emerald" />
-              <StatCard icon="🚨" title="Contas atrasadas" value={overdueBills.length} sub={overdueBills.length > 0 ? 'Atenção!' : 'Em dia!'} color={overdueBills.length > 0 ? 'red' : 'emerald'} />
-              <StatCard icon="📈" title="% Poupança" value={`${savingsRate}%`} sub={savingsRate >= 20 ? 'Ótimo!' : savingsRate >= 10 ? 'Razoável' : 'Atenção'} color={savingsRate >= 20 ? 'emerald' : savingsRate >= 10 ? 'amber' : 'red'} />
+              <StatCard icon="💸" title="Gastos este mês"  value={formatCurrency(totalExpenses)} sub={`${expenses.length} transações`} color="red" />
+              <StatCard icon="💰" title="Receitas"          value={formatCurrency(totalIncome)}   sub="incluindo renda base"            color="emerald" />
+              <StatCard icon="🚨" title="Contas atrasadas"  value={overdueBills.length}            sub={overdueBills.length > 0 ? 'Atenção!' : 'Em dia!'} color={overdueBills.length > 0 ? 'red' : 'emerald'} />
+              <StatCard icon="📈" title="% Poupança"        value={`${savingsRate}%`}              sub={savingsRate >= 20 ? 'Ótimo!' : savingsRate >= 10 ? 'Razoável' : 'Atenção'} color={savingsRate >= 20 ? 'emerald' : savingsRate >= 10 ? 'amber' : 'red'} />
             </div>
 
             {/* Gráfico pizza + evolução */}
@@ -787,7 +789,6 @@ export default function Finances() {
               </select>
             </div>
 
-            {/* Resumo rápido */}
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl p-4 border border-emerald-200 dark:border-emerald-800">
                 <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">Receitas</p>
@@ -803,7 +804,6 @@ export default function Finances() {
               </div>
             </div>
 
-            {/* Lista de transações */}
             {filteredTx.length === 0 ? (
               <div className="bg-white dark:bg-gray-800 rounded-2xl p-12 text-center shadow-sm border border-gray-100 dark:border-gray-700">
                 <div className="text-6xl mb-4">💸</div>
@@ -865,7 +865,6 @@ export default function Finances() {
               </button>
             </div>
 
-            {/* Fluxo de caixa projetado */}
             {totalIncome > 0 && (
               <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-2xl p-5 border border-blue-200 dark:border-blue-800">
                 <h3 className="font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
@@ -895,7 +894,6 @@ export default function Finances() {
               </div>
             )}
 
-            {/* Categorias com orçamento */}
             <div className="space-y-3">
               {CATEGORIES.map(cat => {
                 const spent = byCategory[cat.id] || 0;
@@ -928,7 +926,7 @@ export default function Finances() {
                         <MiniProgressBar value={spent} max={limit} color={cat.color} />
                         <div className="flex justify-between mt-1">
                           <span className="text-xs text-gray-400">{pct.toFixed(0)}% do limite</span>
-                          {over && <span className="text-xs text-red-600 font-semibold">⚠️ Limite ultrapassado!</span>}
+                          {over      && <span className="text-xs text-red-600 font-semibold">⚠️ Limite ultrapassado!</span>}
                           {alert80 && !over && <span className="text-xs text-amber-600 font-semibold">⚡ Próximo do limite</span>}
                           {!over && !alert80 && limit > 0 && <span className="text-xs text-emerald-600">{formatCurrency(limit - spent)} restante</span>}
                         </div>
@@ -957,14 +955,12 @@ export default function Finances() {
               </button>
             </div>
 
-            {/* Stats bills */}
             <div className="grid grid-cols-3 gap-3">
               <StatCard icon="⏳" title="Total pendente" value={formatCurrency(totalDue)} sub={`${unpaidBills.length} contas`} color="amber" />
-              <StatCard icon="🚨" title="Atrasadas" value={overdueBills.length} sub={overdueBills.length > 0 ? 'Urgente!' : 'Nenhuma'} color={overdueBills.length > 0 ? 'red' : 'emerald'} />
-              <StatCard icon="✅" title="Pagas" value={bills.filter(b => b.paid).length} sub="este ciclo" color="emerald" />
+              <StatCard icon="🚨" title="Atrasadas"      value={overdueBills.length}       sub={overdueBills.length > 0 ? 'Urgente!' : 'Nenhuma'} color={overdueBills.length > 0 ? 'red' : 'emerald'} />
+              <StatCard icon="✅" title="Pagas"           value={bills.filter(b => b.paid).length} sub="este ciclo" color="emerald" />
             </div>
 
-            {/* Lista */}
             {unpaidBills.length === 0 ? (
               <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-2xl p-12 text-center border-2 border-green-200 dark:border-green-800">
                 <div className="text-6xl mb-4">🎉</div>
@@ -975,7 +971,7 @@ export default function Finances() {
               <div className="space-y-4">
                 {[...unpaidBills].sort((a, b) => daysUntil(a.dueDate) - daysUntil(b.dueDate)).map((bill) => {
                   const days = daysUntil(bill.dueDate);
-                  const isLate = days < 0;
+                  const isLate   = days < 0;
                   const isUrgent = days >= 0 && days <= 3;
                   return (
                     <div key={bill.id} className={`rounded-2xl p-5 shadow-sm border-2 ${isLate ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700' : isUrgent ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'}`}>
@@ -985,7 +981,7 @@ export default function Finances() {
                           <div>
                             <h3 className="font-bold text-gray-900 dark:text-white">{bill.title}</h3>
                             <p className="text-sm text-gray-500">Vence: {new Date(bill.dueDate).toLocaleDateString('pt-BR')}
-                              {isLate && <span className="ml-2 text-red-600 font-semibold">(Atrasada {Math.abs(days)}d)</span>}
+                              {isLate   && <span className="ml-2 text-red-600 font-semibold">(Atrasada {Math.abs(days)}d)</span>}
                               {isUrgent && !isLate && <span className="ml-2 text-amber-600 font-semibold">(em {days}d)</span>}
                             </p>
                           </div>
@@ -1007,7 +1003,6 @@ export default function Finances() {
               </div>
             )}
 
-            {/* Pagas */}
             {bills.filter(b => b.paid).length > 0 && (
               <div>
                 <h3 className="font-semibold text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
@@ -1049,7 +1044,6 @@ export default function Finances() {
               </button>
             </div>
 
-            {/* Reserva de emergência */}
             {totalIncome > 0 && (
               <div className="bg-gradient-to-br from-teal-50 to-cyan-50 dark:from-teal-900/20 dark:to-cyan-900/20 rounded-2xl p-5 border border-teal-200 dark:border-teal-800">
                 <div className="flex items-center gap-3 mb-3">
@@ -1070,7 +1064,6 @@ export default function Finances() {
               </div>
             )}
 
-            {/* Lista de metas */}
             {goals.length === 0 ? (
               <div className="bg-white dark:bg-gray-800 rounded-2xl p-12 text-center shadow-sm border border-gray-100 dark:border-gray-700">
                 <div className="text-6xl mb-4">🎯</div>
@@ -1141,10 +1134,10 @@ export default function Finances() {
       </div>
 
       {/* ── Modais ── */}
-      {showTransModal && <TransactionModal onClose={() => setShowTransModal(false)} onSave={addTransaction} />}
-      {showGoalModal  && <GoalModal        onClose={() => setShowGoalModal(false)}  onSave={addGoal} />}
-      {showBudgetModal && <BudgetModal     onClose={() => setShowBudgetModal(false)} budgets={budgets} onSave={saveBudgets} />}
-      {showBillModal   && <BillModal       onClose={() => setShowBillModal(false)}   onSave={handleAddBill} />}
-    </div>
+      {showTransModal  && <TransactionModal onClose={() => setShowTransModal(false)}  onSave={addTransaction} />}
+      {showGoalModal   && <GoalModal        onClose={() => setShowGoalModal(false)}   onSave={addGoal} />}
+      {showBudgetModal && <BudgetModal      onClose={() => setShowBudgetModal(false)} budgets={budgets} onSave={saveBudgets} />}
+      {showBillModal   && <BillModal        onClose={() => setShowBillModal(false)}   onSave={handleAddBill} />}
+    </PageLayout>
   );
 }

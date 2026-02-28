@@ -4,6 +4,7 @@ import {
   SparklesIcon, CheckCircleIcon, FireIcon, ChartBarIcon, ClockIcon,
   StarIcon, ArrowTrendingUpIcon, LightBulbIcon
 } from '@heroicons/react/24/outline';
+import PageLayout from '../components/PageLayout';
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
 const todayStr = () => new Date().toISOString().split('T')[0];
@@ -562,7 +563,7 @@ function DashboardSection({ userId }) {
           { label: 'Projetos ativos', value: activeProjects, sub: `${projects.length} total`, color: 'emerald' },
           { label: 'Revisões', value: reviews.length, sub: 'no total', color: 'amber' },
         ].map(kpi => (
-          <div key={kpi.label} className={`bg-white dark:bg-gray-800 rounded-2xl p-4 shadow border border-gray-200 dark:border-gray-700 text-center`}>
+          <div key={kpi.label} className="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow border border-gray-200 dark:border-gray-700 text-center">
             <p className="text-xs text-gray-500 font-semibold">{kpi.label}</p>
             <p className={`text-3xl font-bold text-${kpi.color}-600 dark:text-${kpi.color}-400`}>{kpi.value}</p>
             <p className="text-xs text-gray-400 mt-0.5">{kpi.sub}</p>
@@ -593,17 +594,14 @@ export default function Estrategia() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-32">
-      <div className="bg-gradient-to-br from-violet-900 via-indigo-900 to-blue-900 px-4 pt-10 pb-16 relative overflow-hidden">
-        <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle at 20% 50%, #a78bfa 0%, transparent 50%), radial-gradient(circle at 80% 20%, #60a5fa 0%, transparent 50%)' }} />
-        <div className="max-w-4xl mx-auto relative">
-          <p className="text-violet-300 text-xs font-bold tracking-widest uppercase mb-1">Sistema de</p>
-          <h1 className="text-4xl font-black text-white mb-1">Estratégia</h1>
-          <p className="text-violet-200 text-sm">Visão clara. Execução precisa. Vida equilibrada.</p>
-        </div>
-      </div>
-      <div className="max-w-4xl mx-auto px-4 -mt-8 mb-6 relative z-10">
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+    <PageLayout
+      title="Estratégia"
+      subtitle="Visão clara. Execução precisa. Vida equilibrada."
+      emoji="🗺️"
+    >
+      <div className="space-y-6">
+        {/* Tabs */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
           <div className="flex overflow-x-auto scrollbar-hide">
             {tabs.map(tab => (
               <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex-shrink-0 flex flex-col items-center gap-1 py-3 px-4 text-xs font-bold border-b-2 transition-all ${activeTab === tab.id ? 'border-violet-600 text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/20' : 'border-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
@@ -612,16 +610,16 @@ export default function Estrategia() {
             ))}
           </div>
         </div>
+
+        {/* Content */}
+        {activeTab === 'dashboard'    && <DashboardSection userId={userId} />}
+        {activeTab === 'visao'        && <AnnualGoalsSection userId={userId} />}
+        {activeTab === 'okr'          && <OKRSection userId={userId} />}
+        {activeTab === 'projetos'     && <ProjectsSection userId={userId} />}
+        {activeTab === 'prioridades'  && <EisenhowerSection userId={userId} />}
+        {activeTab === 'qualidade'    && <QualidadeVidaSection userId={userId} />}
+        {activeTab === 'revisao'      && <RevisaoSection userId={userId} />}
       </div>
-      <div className="max-w-4xl mx-auto px-4">
-        {activeTab === 'dashboard' && <DashboardSection userId={userId} />}
-        {activeTab === 'visao' && <AnnualGoalsSection userId={userId} />}
-        {activeTab === 'okr' && <OKRSection userId={userId} />}
-        {activeTab === 'projetos' && <ProjectsSection userId={userId} />}
-        {activeTab === 'prioridades' && <EisenhowerSection userId={userId} />}
-        {activeTab === 'qualidade' && <QualidadeVidaSection userId={userId} />}
-        {activeTab === 'revisao' && <RevisaoSection userId={userId} />}
-      </div>
-    </div>
+    </PageLayout>
   );
 }

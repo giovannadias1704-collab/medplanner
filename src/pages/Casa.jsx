@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../hooks/useAuth';
-import PageHeader from '../components/PageHeader';
+import PageLayout from '../components/PageLayout';
 import {
   MicrophoneIcon, PlusIcon, CheckCircleIcon, TrashIcon, XMarkIcon, StopIcon,
   ClockIcon, ChartBarIcon, BellIcon, UserGroupIcon, CalendarIcon,
@@ -183,12 +183,9 @@ function TaskCard({ task, onToggle, onDelete, onStartTimer, onEditSubtask, onAss
     }`}>
       <div className="p-4">
         <div className="flex items-start gap-3">
-          {/* Checkbox */}
           <button onClick={() => onToggle(task)} className={`mt-0.5 w-6 h-6 rounded-md border-2 flex-shrink-0 flex items-center justify-center transition-all ${task.completed ? 'bg-green-600 border-green-600' : 'border-gray-400 hover:border-green-500'}`}>
             {task.completed && <CheckIcon className="h-4 w-4 text-white" />}
           </button>
-
-          {/* Content */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-lg">{ENV_EMOJIS[task.environment] || '📌'}</span>
@@ -204,7 +201,6 @@ function TaskCard({ task, onToggle, onDelete, onStartTimer, onEditSubtask, onAss
               {daysAgo !== null && <span>✅ há {daysAgo}d</span>}
               {!task.completed && <span className={`${overdue ? 'text-red-500 font-bold' : ''}`}>📅 {nextDue}</span>}
             </div>
-            {/* Subtasks progress */}
             {task.subtasks && task.subtasks.length > 0 && (
               <div className="mt-2">
                 <div className="flex items-center gap-2">
@@ -216,8 +212,6 @@ function TaskCard({ task, onToggle, onDelete, onStartTimer, onEditSubtask, onAss
               </div>
             )}
           </div>
-
-          {/* Actions */}
           <div className="flex items-center gap-1 flex-shrink-0">
             <button onClick={() => onStartTimer(task)} title="Cronômetro" className="p-1.5 text-purple-500 hover:text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded-lg transition-all">
               <ClockIcon className="h-4 w-4" />
@@ -233,8 +227,6 @@ function TaskCard({ task, onToggle, onDelete, onStartTimer, onEditSubtask, onAss
           </div>
         </div>
       </div>
-
-      {/* Subtasks expanded */}
       {expanded && task.subtasks && (
         <div className="border-t border-gray-200 dark:border-gray-600 px-4 py-3 space-y-2">
           {task.subtasks.map((sub, i) => (
@@ -277,14 +269,12 @@ function AddTaskModal({ onClose, onSave }) {
           <h3 className="text-xl font-bold text-gray-900 dark:text-white">➕ Nova Tarefa</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><XMarkIcon className="h-6 w-6" /></button>
         </div>
-
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Título *</label>
             <input value={form.title} onChange={e => { set('title', e.target.value); applyTemplate(e.target.value); }}
               placeholder="Ex: Limpar banheiro" className="w-full px-4 py-2.5 rounded-xl border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:border-purple-500 focus:outline-none" />
           </div>
-
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Ambiente</label>
@@ -299,7 +289,6 @@ function AddTaskModal({ onClose, onSave }) {
               </select>
             </div>
           </div>
-
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Frequência</label>
@@ -312,14 +301,12 @@ function AddTaskModal({ onClose, onSave }) {
               <input type="number" value={form.estimatedTime} onChange={e => set('estimatedTime', e.target.value)} placeholder="30" className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:border-purple-500 focus:outline-none" />
             </div>
           </div>
-
           {form.frequency === 'personalizada' && (
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Repetir a cada (dias)</label>
               <input type="number" value={form.customInterval} onChange={e => set('customInterval', e.target.value)} placeholder="10" className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:border-purple-500 focus:outline-none" />
             </div>
           )}
-
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Atribuir a (opcional)</label>
             <select value={form.assignedTo} onChange={e => set('assignedTo', e.target.value)} className="w-full px-3 py-2.5 rounded-xl border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:border-purple-500 focus:outline-none">
@@ -327,8 +314,6 @@ function AddTaskModal({ onClose, onSave }) {
               {MEMBERS.map(m => <option key={m}>{m}</option>)}
             </select>
           </div>
-
-          {/* Subtasks */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Subtarefas</label>
             <div className="flex gap-2 mb-2">
@@ -347,7 +332,6 @@ function AddTaskModal({ onClose, onSave }) {
             )}
           </div>
         </div>
-
         <div className="flex gap-3 mt-6">
           <button onClick={onClose} className="flex-1 py-3 border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl font-semibold hover:bg-gray-50 dark:hover:bg-gray-700">Cancelar</button>
           <button onClick={() => form.title.trim() && onSave(form)} disabled={!form.title.trim()} className="flex-1 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-bold hover:from-purple-700 hover:to-pink-700 disabled:opacity-50">Salvar Tarefa</button>
@@ -362,7 +346,7 @@ export default function Casa() {
   const { user } = useAuth();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('dashboard'); // dashboard | tasks | history | members | settings
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [activeEnv, setActiveEnv] = useState('Todos');
   const [filterPriority, setFilterPriority] = useState('Todas');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -461,7 +445,6 @@ export default function Casa() {
     loadTasks();
   };
 
-  // Voice
   const startRecording = () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) { alert('Use o Chrome para reconhecimento de voz.'); return; }
@@ -508,15 +491,12 @@ export default function Casa() {
     return due >= today && due <= weekEnd.toISOString().split('T')[0];
   });
 
-  // Maintenance % (tasks not overdue / total)
   const maintenancePct = tasks.length > 0 ? Math.round(((tasks.length - overdueTasks.length) / tasks.length) * 100) : 100;
 
-  // Most neglected environment
   const envOverdue = {};
   overdueTasks.forEach(t => { envOverdue[t.environment] = (envOverdue[t.environment] || 0) + 1; });
   const mostNeglected = Object.entries(envOverdue).sort((a, b) => b[1] - a[1])[0]?.[0];
 
-  // AI suggestions
   const suggestions = [];
   if (mostNeglected) suggestions.push(`${ENV_EMOJIS[mostNeglected]} Ambiente "${mostNeglected}" está mais negligenciado com ${envOverdue[mostNeglected]} tarefa(s) atrasada(s).`);
   tasks.forEach(t => {
@@ -528,7 +508,6 @@ export default function Casa() {
   const todayLong = todayTasks.filter(t => (t.estimatedTime || 0) > 30);
   if (todayLong.length >= 2) suggestions.push(`📅 Hoje tem ${todayLong.length} tarefas longas. Considere redistribuir.`);
 
-  // Filtered tasks
   const filtered = tasks.filter(t => {
     const envMatch = activeEnv === 'Todos' || t.environment === activeEnv;
     const priMatch = filterPriority === 'Todas' || t.priority === filterPriority;
@@ -543,13 +522,16 @@ export default function Casa() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-32">
-      <PageHeader title="Casa" subtitle="Gestão doméstica inteligente" emoji="🏠" imageQuery="home,house,cleaning,organization" />
-
-      <div className="max-w-7xl mx-auto px-4 py-6">
+    <PageLayout
+      title="Casa"
+      subtitle="Gestão doméstica inteligente"
+      emoji="🏠"
+      urgentCount={overdueTasks.length}
+    >
+      <div className="space-y-6">
 
         {/* Top Actions */}
-        <div className="flex flex-wrap gap-3 mb-6">
+        <div className="flex flex-wrap gap-3">
           <button onClick={() => setShowAIModal(true)} className="px-4 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl font-semibold flex items-center gap-2 shadow-lg">
             <MicrophoneIcon className="h-5 w-5" /> IA + Voz
           </button>
@@ -562,7 +544,7 @@ export default function Casa() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-2 mb-6 bg-white dark:bg-gray-800 p-1.5 rounded-2xl shadow">
+        <div className="flex gap-2 bg-white dark:bg-gray-800 p-1.5 rounded-2xl shadow">
           {tabs.map(t => (
             <button key={t.id} onClick={() => setActiveTab(t.id)} className={`flex-1 py-2 px-3 rounded-xl font-semibold text-sm transition-all ${activeTab === t.id ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>
               {t.icon} {t.label}
@@ -573,7 +555,6 @@ export default function Casa() {
         {/* ── DASHBOARD TAB ── */}
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
-            {/* Stats Grid */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 border-2 border-blue-200 dark:border-blue-800">
                 <p className="text-xs text-blue-600 dark:text-blue-400 font-semibold">Pendentes Hoje</p>
@@ -593,7 +574,6 @@ export default function Casa() {
               </div>
             </div>
 
-            {/* Maintenance bar */}
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-bold text-gray-900 dark:text-white">🏠 Saúde da Casa</h3>
@@ -602,7 +582,6 @@ export default function Casa() {
               <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 mb-4">
                 <div className={`h-3 rounded-full transition-all ${maintenancePct >= 80 ? 'bg-green-500' : maintenancePct >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`} style={{ width: `${maintenancePct}%` }} />
               </div>
-              {/* Per-environment */}
               <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
                 {ENVIRONMENTS.filter(e => e !== 'Todos').map(env => {
                   const envTasks = tasks.filter(t => t.environment === env);
@@ -619,7 +598,6 @@ export default function Casa() {
               </div>
             </div>
 
-            {/* AI Suggestions */}
             {suggestions.length > 0 && (
               <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl p-5 text-white">
                 <h3 className="font-bold text-lg mb-3 flex items-center gap-2"><SparklesIcon className="h-5 w-5" /> Sugestões Inteligentes</h3>
@@ -631,7 +609,6 @@ export default function Casa() {
               </div>
             )}
 
-            {/* Próximas da semana */}
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5">
               <h3 className="font-bold text-gray-900 dark:text-white mb-3">📅 Próximos 7 Dias ({weekTasks.length})</h3>
               {weekTasks.length === 0 ? (
@@ -654,7 +631,6 @@ export default function Casa() {
         {/* ── TASKS TAB ── */}
         {activeTab === 'tasks' && (
           <div className="space-y-4">
-            {/* Filters */}
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-4">
               <div className="flex items-center gap-2 mb-3">
                 <FunnelIcon className="h-4 w-4 text-gray-500" />
@@ -674,7 +650,6 @@ export default function Casa() {
               </div>
             </div>
 
-            {/* Overdue section */}
             {overdueTasks.filter(t => (activeEnv === 'Todos' || t.environment === activeEnv)).length > 0 && (
               <div className="space-y-2">
                 <h3 className="font-bold text-red-600 dark:text-red-400 flex items-center gap-2"><ExclamationTriangleIcon className="h-5 w-5" /> Atrasadas</h3>
@@ -684,7 +659,6 @@ export default function Casa() {
               </div>
             )}
 
-            {/* Pending today */}
             {todayTasks.filter(t => !t.completed && !isOverdue(t) && (activeEnv === 'Todos' || t.environment === activeEnv)).length > 0 && (
               <div className="space-y-2">
                 <h3 className="font-bold text-blue-600 dark:text-blue-400">📌 Para Hoje</h3>
@@ -694,7 +668,6 @@ export default function Casa() {
               </div>
             )}
 
-            {/* All tasks */}
             <div className="space-y-2">
               <h3 className="font-bold text-gray-700 dark:text-gray-300">Todas as Tarefas ({filtered.length})</h3>
               {filtered.length === 0 ? (
@@ -747,7 +720,6 @@ export default function Casa() {
               )}
             </div>
 
-            {/* Time stats */}
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5">
               <h3 className="font-bold text-gray-900 dark:text-white mb-4">⏱ Controle de Tempo</h3>
               <div className="space-y-3">
@@ -811,14 +783,10 @@ export default function Casa() {
       </div>
 
       {/* ── MODALS ── */}
-
-      {/* Add Task Modal */}
       {showAddModal && <AddTaskModal onClose={() => setShowAddModal(false)} onSave={saveTask} />}
 
-      {/* Timer Modal */}
       {timerTask && <TimerModal task={timerTask} onClose={() => setTimerTask(null)} onSave={(mins) => saveTimer(timerTask, mins)} />}
 
-      {/* Templates Modal */}
       {showTemplateModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full p-6">
@@ -839,7 +807,6 @@ export default function Casa() {
         </div>
       )}
 
-      {/* AI Modal */}
       {showAIModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-2xl w-full p-6">
@@ -871,6 +838,6 @@ export default function Casa() {
           </div>
         </div>
       )}
-    </div>
+    </PageLayout>
   );
 }

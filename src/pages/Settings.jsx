@@ -1,7 +1,6 @@
 import { useState, useContext, useRef, useEffect } from 'react';
 import { AppContext } from '../context/AppContext';
 import { useOnboarding } from '../hooks/useOnboarding';
-import PageHeader from '../components/PageHeader';
 import ThemeSelector from '../components/ThemeSelector';
 import { applyTheme, getStoredTheme } from '../utils/themeManager';
 import { auth } from '../services/firebase';
@@ -13,6 +12,7 @@ import {
   BeakerIcon, BellIcon, TrashIcon, PencilIcon, CheckIcon, XMarkIcon,
   PencilSquareIcon, ArrowPathIcon, DocumentTextIcon
 } from '@heroicons/react/24/outline';
+import PageLayout from '../components/PageLayout';
 
 // ─── NAVIGATION ───────────────────────────────────────────────────────────────
 const NAV_ITEMS = [
@@ -228,7 +228,11 @@ export default function Settings() {
 
   // ─── RENDER ────────────────────────────────────────────────────────────────
   return (
-    <>
+    <PageLayout
+      title="Configurações"
+      subtitle="Personalize cada detalhe do seu MedPlanner"
+      emoji="⚙️"
+    >
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
         .settings-wrap * { box-sizing: border-box; }
@@ -242,22 +246,23 @@ export default function Settings() {
         input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:#6366f1; box-shadow:0 2px 6px rgba(99,102,241,.4); cursor:pointer; }
       `}</style>
 
-      <div className="settings-wrap min-h-screen bg-gray-50 dark:bg-gray-900 pb-32">
+      <div className="settings-wrap pb-32">
 
-        {/* ── STICKY HEADER ─────────────────────────────────────────── */}
-        <div className="sticky top-0 z-30 bg-white/90 dark:bg-gray-900/90 backdrop-blur-lg border-b border-gray-200 dark:border-gray-700">
-          <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-md flex-shrink-0">
-              <span className="text-base">⚙️</span>
-            </div>
-            <div>
-              <h1 className="text-base font-bold text-gray-900 dark:text-white leading-none">Configurações</h1>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Personalize cada detalhe do seu MedPlanner</p>
-            </div>
+        {/* ── MOBILE NAV ────────────────────────────────────────────── */}
+        <div className="lg:hidden w-full mb-6 -mx-0 overflow-x-auto">
+          <div className="flex gap-2 min-w-max pb-2">
+            {NAV_ITEMS.map(n => (
+              <button key={n.id} onClick={() => scrollTo(n.id)}
+                className={`snav-btn flex items-center gap-1.5 px-3 py-2 text-xs font-bold whitespace-nowrap border ${
+                  activeSection === n.id ? 'is-active border-transparent' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700'
+                }`}>
+                <span>{n.icon}</span><span>{n.label}</span>
+              </button>
+            ))}
           </div>
         </div>
 
-        <div className="max-w-6xl mx-auto px-4 pt-6 flex gap-6">
+        <div className="flex gap-6">
 
           {/* ── DESKTOP SIDEBAR ───────────────────────────────────────── */}
           <aside className="hidden lg:flex flex-col gap-1 w-52 flex-shrink-0 sticky top-24 self-start">
@@ -280,20 +285,6 @@ export default function Settings() {
               </button>
             </div>
           </aside>
-
-          {/* ── MOBILE NAV ────────────────────────────────────────────── */}
-          <div className="lg:hidden w-full mb-4 -mx-4 px-4 overflow-x-auto">
-            <div className="flex gap-2 min-w-max pb-2">
-              {NAV_ITEMS.map(n => (
-                <button key={n.id} onClick={() => scrollTo(n.id)}
-                  className={`snav-btn flex items-center gap-1.5 px-3 py-2 text-xs font-bold whitespace-nowrap border ${
-                    activeSection === n.id ? 'is-active border-transparent' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700'
-                  }`}>
-                  <span>{n.icon}</span><span>{n.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
 
           {/* ── SECTIONS ──────────────────────────────────────────────── */}
           <div className="flex-1 space-y-6 sfade min-w-0">
@@ -430,6 +421,7 @@ export default function Settings() {
             ══════════════════════════════════════════════════ */}
             <SectionCard id="visual" icon="🎨" label="Personalização" gradient="from-pink-500 to-rose-600">
 
+              {/* ThemeSelector mantido dentro do SectionCard, apenas sem o wrapper extra */}
               <div className="rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-700">
                 <ThemeSelector currentTheme={selectedTheme} onThemeChange={(t) => {
                   setSelectedTheme(t);
@@ -822,6 +814,6 @@ export default function Settings() {
           </div>{/* end sections */}
         </div>{/* end layout */}
       </div>
-    </>
+    </PageLayout>
   );
 }

@@ -5,7 +5,7 @@ import { db } from '../config/firebase';
 import { useAuth } from '../hooks/useAuth';
 import { useSubscription } from '../hooks/useSubscription';
 import { AppContext } from '../context/AppContext';
-import PageHeader from '../components/PageHeader';
+import PageLayout from '../components/PageLayout';
 import {
   PlusIcon, XMarkIcon, ClockIcon, MapPinIcon, DocumentTextIcon,
   ChevronLeftIcon, ChevronRightIcon, FunnelIcon, FlagIcon,
@@ -292,6 +292,7 @@ function EventModal({ onClose, onSave, initial = null, defaultDate = '' }) {
         </div>
       </div>
     </div>
+    
   );
 }
 
@@ -997,15 +998,13 @@ export default function Calendar() {
 
   // ─── Render principal ─────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-32">
-      <PageHeader
-        title="Agenda"
-        subtitle="Organize sua vida com inteligência"
-        emoji="📅"
-        imageQuery="calendar,planner,schedule"
-      />
-
-      <div className="max-w-7xl mx-auto px-4 py-6 space-y-5">
+    <PageLayout
+      title="Agenda"
+      subtitle="Organize sua vida com inteligência"
+      emoji="📅"
+      urgentCount={stats.overdue}
+    >
+      <div className="space-y-5">
 
         {/* ── Tabs principais ── */}
         <div className="flex flex-wrap gap-2">
@@ -1178,6 +1177,6 @@ export default function Calendar() {
           onToggleComplete={handleToggleComplete}
         />
       )}
-    </div>
+    </PageLayout>
   );
 }

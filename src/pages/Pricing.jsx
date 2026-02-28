@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth';
 import { db } from '../config/firebase';
 import React from 'react';
 import { doc, updateDoc, setDoc } from 'firebase/firestore';
+import PageLayout from '../components/PageLayout';
 
 const WHATSAPP_NUMBER = '5571992883976';
 
@@ -278,21 +279,13 @@ ${rejectLink}`;
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-900 pb-32">
-      {/* Header */}
-      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 py-8 text-center">
-          <h1 className="text-4xl md:text-5xl font-bold text-gray-900 dark:text-white mb-4">
-            🎯 Planos do Planner
-          </h1>
-          <p className="text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
-            Descrição e Diferenças — Escolha o plano ideal para suas necessidades
-          </p>
-        </div>
-      </div>
+    <PageLayout
+      title="Planos do Planner"
+      subtitle="Descrição e Diferenças — Escolha o plano ideal para suas necessidades"
+      emoji="🎯"
+    >
+      <div className="min-h-screen pb-32">
 
-      <div className="max-w-7xl mx-auto px-4 py-12">
-        
         {/* Aviso de Pagamento */}
         <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl p-6 mb-12 text-white shadow-lg">
           <div className="flex items-start gap-4">
@@ -563,6 +556,6 @@ ${rejectLink}`;
         </div>
 
       </div>
-    </div>
+    </PageLayout>
   );
 }

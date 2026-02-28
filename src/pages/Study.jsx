@@ -5,7 +5,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useSubscription } from '../hooks/useSubscription';
 import PremiumBlock from '../components/PremiumBlock';
 import LimitReached from '../components/LimitReached';
-import PageHeader from '../components/PageHeader';
+import PageLayout from '../components/PageLayout';
 import { generateText } from '../services/gemini';
 import {
   AcademicCapIcon, ClockIcon, ChartBarIcon, BeakerIcon,
@@ -242,7 +242,6 @@ function PlanejamentoModule({ userId, studyConfig }) {
 
   const disciplines = ls.get(`disciplines_${userId}`);
 
-  // Totals
   const totalPlanned = Object.values(weekPlan).flat().reduce((s, b) => s + (b.hours || 0), 0);
   const weekStart = (() => { const d = new Date(); d.setDate(d.getDate() - d.getDay()); return d.toISOString().split('T')[0]; })();
   const realHoursThisWeek = sessions.filter(s => s.date >= weekStart).reduce((s, x) => s + (x.duration || 0) / 60, 0);
@@ -280,7 +279,6 @@ function PlanejamentoModule({ userId, studyConfig }) {
 
   return (
     <div className="space-y-6">
-      {/* Goals */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5 border border-gray-200 dark:border-gray-700">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-bold text-gray-900 dark:text-white">🎯 Metas de Estudo</h3>
@@ -300,7 +298,6 @@ function PlanejamentoModule({ userId, studyConfig }) {
             <p className={`text-2xl font-bold ${adherence >= 80 ? 'text-emerald-900 dark:text-emerald-100' : 'text-amber-900 dark:text-amber-100'}`}>{adherence}%</p>
           </div>
         </div>
-        {/* Real vs planned */}
         <div className="mt-4">
           <div className="flex justify-between text-xs text-gray-500 mb-1">
             <span>Realizado: {realHoursThisWeek.toFixed(1)}h</span>
@@ -312,7 +309,6 @@ function PlanejamentoModule({ userId, studyConfig }) {
         </div>
       </div>
 
-      {/* Weekly planner */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5 border border-gray-200 dark:border-gray-700">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-bold text-gray-900 dark:text-white">🗓️ Planejamento Semanal</h3>
@@ -339,7 +335,6 @@ function PlanejamentoModule({ userId, studyConfig }) {
         </div>
       </div>
 
-      {/* Add block modal */}
       {showBlockModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-sm w-full p-6">
@@ -374,7 +369,6 @@ function PlanejamentoModule({ userId, studyConfig }) {
         </div>
       )}
 
-      {/* Goals modal */}
       {showGoalModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-sm w-full p-6">
@@ -472,7 +466,6 @@ function ConteudosModule({ userId }) {
         </div>
       </div>
 
-      {/* Pending reviews alert */}
       {pendingReview.length > 0 && (
         <div className="bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-300 dark:border-amber-700 rounded-2xl p-4">
           <p className="font-bold text-amber-800 dark:text-amber-200 mb-2">🔔 {pendingReview.length} revisão(ões) pendente(s) hoje!</p>
@@ -488,7 +481,6 @@ function ConteudosModule({ userId }) {
         </div>
       )}
 
-      {/* Status overview */}
       <div className="grid grid-cols-4 gap-2">
         {CONTENT_STATUS.map(s => (
           <div key={s} className={`${STATUS_COLORS[s]} rounded-xl p-3 text-center`}>
@@ -498,7 +490,6 @@ function ConteudosModule({ userId }) {
         ))}
       </div>
 
-      {/* Topics list */}
       {topics.length === 0 ? (
         <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-2xl shadow border border-gray-200 dark:border-gray-700">
           <div className="text-5xl mb-3">📋</div>
@@ -638,7 +629,6 @@ function ProvasModule({ userId }) {
         </div>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow border border-gray-200 dark:border-gray-700 text-center">
           <p className="text-xs text-gray-500">Total de provas</p>
@@ -751,37 +741,29 @@ function PerformanceModule({ userId }) {
   const disciplines = ls.get(`disciplines_${userId}`);
   const goals = ls.get(`studyGoals_${userId}`, { daily: 2, weekly: 12 });
 
-  // Wellness data (from Wellness module)
   const wellnessEntries = ls.get('wellnessEntries_wellness', []);
 
   const weekStart = (() => { const d = new Date(); d.setDate(d.getDate() - d.getDay()); return d.toISOString().split('T')[0]; })();
   const weekSessions = sessions.filter(s => s.date >= weekStart);
   const weekHours = weekSessions.reduce((s, x) => s + (x.duration || 0) / 60, 0);
 
-  // Hours by discipline
   const hoursByDisc = sessions.reduce((acc, s) => { if (s.discipline) acc[s.discipline] = (acc[s.discipline] || 0) + (s.duration || 0) / 60; return acc; }, {});
   const sortedDiscs = Object.entries(hoursByDisc).sort((a, b) => b[1] - a[1]);
   const maxDiscHours = sortedDiscs[0]?.[1] || 1;
 
-  // Most/least studied
   const mostStudied = sortedDiscs[0]?.[0] || '—';
   const leastStudied = disciplines.length > 0 ? disciplines.reduce((min, d) => (hoursByDisc[d.name] || 0) < (hoursByDisc[min?.name] || 0) ? d : min, disciplines[0])?.name : '—';
 
-  // Avg grade
   const gradeEntries = exams.filter(e => e.grade && e.totalGrade);
   const avgGrade = gradeEntries.length > 0 ? (gradeEntries.reduce((s, e) => s + (parseFloat(e.grade) / parseFloat(e.totalGrade)) * 10, 0) / gradeEntries.length).toFixed(1) : null;
 
-  // Consolidation rate
   const consolidatedPct = topics.length > 0 ? Math.round((topics.filter(t => t.status === 'Consolidado').length / topics.length) * 100) : 0;
 
-  // Consistency: how many days studied in last 14
   const studyDays = new Set(sessions.map(s => s.date));
   const last14 = Array.from({ length: 14 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - i); return d.toISOString().split('T')[0]; });
   const consistency = Math.round((last14.filter(d => studyDays.has(d)).length / 14) * 100);
 
-  // Correlations: sleep vs performance
   const correlations = wellnessEntries.filter(e => e.sleepHours > 0).map(w => {
-    const dayExam = exams.find(e => e.date === w.date?.split('T')[0]);
     const daySessions = sessions.filter(s => s.date === w.date?.split('T')[0]);
     return {
       date: w.date,
@@ -795,7 +777,6 @@ function PerformanceModule({ userId }) {
     <div className="space-y-5">
       <h2 className="text-xl font-bold text-gray-900 dark:text-white">📊 Análise de Performance</h2>
 
-      {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
           { label: 'Horas esta semana', value: `${weekHours.toFixed(1)}h`, sub: `Meta: ${goals.weekly}h`, color: weekHours >= goals.weekly ? 'emerald' : 'amber' },
@@ -811,7 +792,6 @@ function PerformanceModule({ userId }) {
         ))}
       </div>
 
-      {/* Hours by discipline */}
       {sortedDiscs.length > 0 && (
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5 border border-gray-200 dark:border-gray-700">
           <h3 className="font-bold text-gray-900 dark:text-white mb-4">📚 Horas por Disciplina (total)</h3>
@@ -833,7 +813,6 @@ function PerformanceModule({ userId }) {
         </div>
       )}
 
-      {/* Correlation panel */}
       {correlations.length >= 3 && (
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5 border border-gray-200 dark:border-gray-700">
           <h3 className="font-bold text-gray-900 dark:text-white mb-2">🔎 Correlações</h3>
@@ -855,7 +834,6 @@ function PerformanceModule({ userId }) {
         </div>
       )}
 
-      {/* Study calendar last 21 days */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-5 border border-gray-200 dark:border-gray-700">
         <h3 className="font-bold text-gray-900 dark:text-white mb-3">📅 Calendário de Estudo (21 dias)</h3>
         <div className="grid grid-cols-7 gap-1.5">
@@ -879,7 +857,7 @@ function PerformanceModule({ userId }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ── MODULE: PBL AVANÇADO (Medicina anos 3+) ────────────────────────────────────
+// ── MODULE: PBL AVANÇADO ───────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
 function PBLAdvancedModule({ userId }) {
   const [cases, setCases] = useState(() => ls.get(`pblCases_${userId}`));
@@ -927,9 +905,7 @@ function PBLAdvancedModule({ userId }) {
     alert(`✅ Caso clínico importado de "${fileName}"`);
   };
 
-  // Specialty stats
   const bySpecialty = cases.reduce((acc, c) => { acc[c.specialty || 'Outros'] = (acc[c.specialty || 'Outros'] || 0) + 1; return acc; }, {});
-
   const openCase = cases.find(c => c.id === activeCase);
 
   return (
@@ -944,15 +920,12 @@ function PBLAdvancedModule({ userId }) {
         </div>
       </div>
 
-      {/* Case viewer */}
       {openCase && (
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-6 border-2 border-teal-200 dark:border-teal-800">
           <div className="flex items-center justify-between mb-5">
             <h3 className="text-lg font-bold text-gray-900 dark:text-white">{openCase.title}</h3>
             <button onClick={() => setActiveCase(null)} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"><XMarkIcon className="h-5 w-5 text-gray-400" /></button>
           </div>
-
-          {/* Clinical data */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
             {[
               { label: '🏥 Queixa Principal', key: 'chiefComplaint' },
@@ -967,8 +940,6 @@ function PBLAdvancedModule({ userId }) {
               </div>
             ))}
           </div>
-
-          {/* Hypotheses */}
           <div className="mb-5">
             <div className="flex items-center justify-between mb-3">
               <h4 className="font-bold text-gray-800 dark:text-gray-200">🧪 Hipóteses Diagnósticas</h4>
@@ -986,8 +957,6 @@ function PBLAdvancedModule({ userId }) {
               ))}
             </div>
           </div>
-
-          {/* Learning objectives */}
           <div className="mb-5">
             <div className="flex items-center justify-between mb-3">
               <h4 className="font-bold text-gray-800 dark:text-gray-200">🎯 Objetivos de Aprendizagem</h4>
@@ -1018,8 +987,6 @@ function PBLAdvancedModule({ userId }) {
               ))}
             </div>
           </div>
-
-          {/* Clinical integration */}
           <div>
             <h4 className="font-bold text-gray-800 dark:text-gray-200 mb-3">🩺 Integração Clínica (Pós-Discussão)</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1039,10 +1006,8 @@ function PBLAdvancedModule({ userId }) {
         </div>
       )}
 
-      {/* Cases list */}
       {!openCase && (
         <>
-          {/* Specialty distribution */}
           {Object.keys(bySpecialty).length > 0 && (
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-4 border border-gray-200 dark:border-gray-700">
               <p className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-3">Distribuição por Especialidade</p>
@@ -1053,7 +1018,6 @@ function PBLAdvancedModule({ userId }) {
               </div>
             </div>
           )}
-
           {cases.length === 0 ? (
             <div className="text-center py-14 bg-white dark:bg-gray-800 rounded-2xl shadow border border-gray-200 dark:border-gray-700">
               <div className="text-6xl mb-4">🩺</div>
@@ -1142,7 +1106,6 @@ export default function Study() {
     setActiveTab(tabId);
   };
 
-  // Determine if advanced PBL (years 3+) or basic
   const isAdvancedPBL = studyConfig?.isPBL && studyConfig?.medYear >= 3;
   const isBasicPBL = studyConfig?.isPBL && (!studyConfig?.medYear || studyConfig?.medYear < 3);
 
@@ -1160,25 +1123,23 @@ export default function Study() {
     { id: 'avaliacao', label: 'Avaliação', emoji: '📈' },
   ];
 
+  // Questionnaire screen — also wrapped in PageLayout for consistency
   if (!hasCompletedQuestionnaire) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-32">
-        <PageHeader title="Configurar Estudos" subtitle="Vamos personalizar sua experiência de estudo" emoji="📚" />
+      <PageLayout title="Configurar Estudos" subtitle="Vamos personalizar sua experiência de estudo" emoji="📚">
         <StudyQuestionnaire onComplete={(config) => {
           localStorage.setItem(`studyConfig_${user.uid}`, JSON.stringify(config));
           setStudyConfig(config); setHasCompletedQuestionnaire(true);
         }} />
-      </div>
+      </PageLayout>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-32">
-      <PageHeader title="Estudos" subtitle="Gerencie sua vida acadêmica" emoji="📚" imageQuery="study,books,university,academic" />
-
-      {/* Plan banners */}
+    <PageLayout title="Estudos" subtitle="Gerencie sua vida acadêmica" emoji="📚">
+      {/* Plan banner */}
       {isFree() && (
-        <div className="max-w-7xl mx-auto px-4 mb-4">
+        <div className="mb-4">
           <div className="bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-300 dark:border-blue-700 rounded-xl p-4 flex items-start justify-between gap-4">
             <p className="text-sm text-blue-800 dark:text-blue-200">📚 <strong>Plano Gratuito:</strong> Acesso ao planejamento básico. Faça upgrade para geração de questões e revisão inteligente!</p>
             <button onClick={() => navigate('/pricing')} className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-semibold text-sm whitespace-nowrap">⭐ Ver Planos</button>
@@ -1186,23 +1147,22 @@ export default function Study() {
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="flex gap-1 overflow-x-auto scrollbar-hide">
-            {tabs.map(tab => (
-              <button key={tab.id} onClick={() => handleTabChange(tab.id)}
-                className={`flex items-center gap-1.5 py-3.5 px-3 font-semibold text-xs border-b-2 transition-all whitespace-nowrap relative ${activeTab === tab.id ? 'border-purple-600 text-purple-600 dark:text-purple-400' : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'}`}>
-                <span>{tab.emoji}</span>
-                <span className="hidden sm:inline">{tab.label}</span>
-                {tab.premium && <span className="ml-1 text-xs bg-purple-500 text-white px-1.5 py-0.5 rounded-full">Pro</span>}
-              </button>
-            ))}
-          </div>
+      {/* Tabs — sticky within the PageLayout main area */}
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl mb-6 sticky top-[58px] z-40 overflow-hidden">
+        <div className="flex gap-1 overflow-x-auto scrollbar-hide px-2">
+          {tabs.map(tab => (
+            <button key={tab.id} onClick={() => handleTabChange(tab.id)}
+              className={`flex items-center gap-1.5 py-3.5 px-3 font-semibold text-xs border-b-2 transition-all whitespace-nowrap relative ${activeTab === tab.id ? 'border-purple-600 text-purple-600 dark:text-purple-400' : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'}`}>
+              <span>{tab.emoji}</span>
+              <span className="hidden sm:inline">{tab.label}</span>
+              {tab.premium && <span className="ml-1 text-xs bg-purple-500 text-white px-1.5 py-0.5 rounded-full">Pro</span>}
+            </button>
+          ))}
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-6">
+      {/* Tab content */}
+      <div>
         {activeTab === 'disciplinas' && <DisciplinasModule userId={user?.uid} />}
         {activeTab === 'planejamento' && <PlanejamentoModule userId={user?.uid} studyConfig={studyConfig} />}
         {activeTab === 'conteudos' && <ConteudosModule userId={user?.uid} />}
@@ -1220,11 +1180,11 @@ export default function Study() {
         {activeTab === 'avaliacao' && <StudyWeeklyEval studyConfig={studyConfig} />}
       </div>
 
-      {/* Reset questionnaire */}
+      {/* Reset questionnaire button */}
       <div className="fixed bottom-24 right-6 z-50">
         <button onClick={() => { if (window.confirm('Refazer questionário? Isso resetará suas configurações.')) { localStorage.removeItem(`studyConfig_${user.uid}`); setHasCompletedQuestionnaire(false); setStudyConfig(null); } }}
           className="px-4 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-xl shadow-lg font-semibold text-sm">🔄 Reconfigurar</button>
       </div>
-    </div>
+    </PageLayout>
   );
 }
