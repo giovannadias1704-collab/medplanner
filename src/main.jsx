@@ -6,7 +6,9 @@ import { initTheme } from './utils/themeManager.js';
 import { AppProvider } from './context/AppContext';
 import { SubscriptionProvider } from './context/SubscriptionContext';
 import { CouponProvider } from './context/CouponContext';
-import './sentry'; // 
+import { ThemeProvider } from './components/PageLayout';
+import './sentry';
+
 // Inicializar tema
 initTheme();
 
@@ -17,8 +19,6 @@ if ('serviceWorker' in navigator) {
       .then((registration) => {
         console.log('✅ Service Worker registrado com sucesso!');
         console.log('📍 Scope:', registration.scope);
-        
-        // Verificar atualizações do Service Worker
         registration.addEventListener('updatefound', () => {
           const newWorker = registration.installing;
           newWorker.addEventListener('statechange', () => {
@@ -36,12 +36,14 @@ if ('serviceWorker' in navigator) {
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <AppProvider>
-      <CouponProvider>
-        <SubscriptionProvider>
-          <App />
-        </SubscriptionProvider>
-      </CouponProvider>
-    </AppProvider>
+    <ThemeProvider>
+      <AppProvider>
+        <CouponProvider>
+          <SubscriptionProvider>
+            <App />
+          </SubscriptionProvider>
+        </CouponProvider>
+      </AppProvider>
+    </ThemeProvider>
   </React.StrictMode>
 );
