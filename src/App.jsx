@@ -32,7 +32,12 @@ import GlobalAIButton from './components/GlobalAIButton';
 
 function AppContent() {
   const { user, loading } = useAuth();
-  const { latestNotification, dismissNotification, removeNotification } = useNotifications();
+  const { 
+    latestNotification, 
+    dismissNotification, 
+    removeNotification,
+    notificationsEnabled,
+  } = useNotifications();
   const { isAccessBlocked, showPaymentModal } = useSubscription();
 
   if (loading) {
@@ -46,6 +51,15 @@ function AppContent() {
   if (user && isAccessBlocked()) {
     return <PaymentBlockedScreen />;
   }
+
+  // Toast só aparece se:
+  // 1. Há usuário logado
+  // 2. Notificações internas estão habilitadas (notifInternal)
+  // 3. Existe uma notificação não lida e do tipo habilitado (já filtrado pelo hook)
+  const shouldShowToast = user 
+    && notificationsEnabled 
+    && latestNotification 
+    && !latestNotification.read;
 
   return (
     <Router>
@@ -87,7 +101,7 @@ function AppContent() {
 
         {user && <InstallPWA />}
 
-        {user && latestNotification && !latestNotification.read && (
+        {shouldShowToast && (
           <div className="fixed top-4 right-4 z-50">
             <NotificationToast
               notification={latestNotification}
