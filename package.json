@@ -16,6 +16,9 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@heroicons/react": "^2.2.0",
+    "@sendgrid/mail": "^8.1.6",
+    "@sentry/nextjs": "^10.40.0",
+    "@sentry/react": "^10.40.0",
     "@vitejs/plugin-react": "^5.1.4",
     "chrono-node": "^2.7.6",
     "date-fns": "^3.3.1",
