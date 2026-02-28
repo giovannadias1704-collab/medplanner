@@ -6,6 +6,9 @@ import { auth } from '../config/firebase';
 import { isValidEmail } from '../utils/helpers';
 import ForgotPasswordModal from '../components/ForgotPasswordModal';
 import { sendWelcomeEmail } from '../services/emailService';
+import { checkRateLimit, registerFailedAttempt, resetRateLimit } from '../services/rateLimitService';
+
+const MAX_ATTEMPTS = 5;
 
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
@@ -47,7 +50,6 @@ export default function Auth() {
 
           if (result.isNewUser) {
             console.log('🆕 Novo usuário - enviando boas-vindas e indo para onboarding');
-            // ✅ Email de boas-vindas para novos usuários via Google
             await sendWelcomeEmail({
               displayName: result.user.displayName,
               email: result.user.email,
@@ -126,11 +128,21 @@ export default function Auth() {
 
     try {
       if (isLogin) {
+        // ✅ Verificar rate limit ANTES de tentar o login
+        const rateCheck = await checkRateLimit(email);
+        if (rateCheck.blocked) {
+          setError(`Muitas tentativas. Tente novamente em ${rateCheck.remainingMin} minuto(s).`);
+          setLoading(false);
+          return;
+        }
+
         console.log('📧 Tentando login com email...');
         const result = await loginWithEmail(email, password);
 
         if (result.success) {
           console.log('✅ Login com email bem-sucedido');
+          // ✅ Resetar contador após login bem-sucedido
+          await resetRateLimit(email);
           if (!result.emailVerified) {
             setSuccess('Login realizado! Verifique seu email para ter acesso completo.');
           }
@@ -138,8 +150,14 @@ export default function Auth() {
             navigate('/dashboard', { replace: true });
           }, 500);
         } else {
+          // ✅ Registrar tentativa falha
+          const failResult = await registerFailedAttempt(email);
           console.error('❌ Erro no login:', result.message);
-          setError(result.message);
+          if (failResult.blocked) {
+            setError(`Conta bloqueada por 15 minutos após ${MAX_ATTEMPTS} tentativas incorretas.`);
+          } else {
+            setError(`${result.message} (${failResult.attemptsLeft} tentativa(s) restante(s))`);
+          }
           setLoading(false);
         }
       } else {
@@ -148,7 +166,6 @@ export default function Auth() {
 
         if (result.success) {
           console.log('✅ Registro bem-sucedido');
-          // ✅ Email de boas-vindas para novos usuários via email
           await sendWelcomeEmail({ displayName, email });
           setSuccess(result.message);
           setTimeout(() => {
