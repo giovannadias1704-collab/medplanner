@@ -16,7 +16,10 @@ import {
 import { 
   doc, 
   getDoc, 
-  updateDoc 
+  updateDoc,
+  collection,
+  addDoc,
+  serverTimestamp
 } from 'firebase/firestore';
 
 import { auth, googleProvider, db } from '../config/firebase';
@@ -26,6 +29,25 @@ import { createOrUpdateUserProfile } from './userService';
    👑 EMAIL ADMIN PRINCIPAL
 ====================================================== */
 const ADMIN_EMAIL = 'medplanner@gmail.com';
+
+/* ======================================================
+   📋 AUDITORIA DE ACESSOS
+====================================================== */
+async function logAudit(action, details = {}) {
+  try {
+    const user = auth.currentUser;
+    await addDoc(collection(db, 'audit_logs'), {
+      uid: user?.uid || 'anonymous',
+      email: user?.email || details.email || 'anonymous',
+      action,
+      details,
+      timestamp: serverTimestamp(),
+      userAgent: navigator.userAgent,
+    });
+  } catch (err) {
+    console.error('Erro ao salvar log de auditoria:', err);
+  }
+}
 
 /* ======================================================
    🔒 GARANTE ROLE ADMIN CORRETO
@@ -69,13 +91,9 @@ export async function registerWithEmail(email, password, displayName) {
 
     await updateProfile(user, { displayName });
     await sendEmailVerification(user);
-
-    await createOrUpdateUserProfile({
-      ...user,
-      displayName
-    });
-
+    await createOrUpdateUserProfile({ ...user, displayName });
     await ensureAdminRole(user);
+    await logAudit('register', { email: user.email, displayName });
 
     return {
       success: true,
@@ -84,6 +102,7 @@ export async function registerWithEmail(email, password, displayName) {
     };
 
   } catch (error) {
+    await logAudit('register_failed', { email, error: error.code });
     return {
       success: false,
       error: error.code,
@@ -102,6 +121,7 @@ export async function loginWithEmail(email, password) {
 
     await createOrUpdateUserProfile(user);
     await ensureAdminRole(user);
+    await logAudit('login_email', { email: user.email });
 
     return {
       success: true,
@@ -110,6 +130,7 @@ export async function loginWithEmail(email, password) {
     };
 
   } catch (error) {
+    await logAudit('login_email_failed', { email, error: error.code });
     return {
       success: false,
       error: error.code,
@@ -128,6 +149,7 @@ export async function loginWithGoogle() {
 
     await createOrUpdateUserProfile(user);
     await ensureAdminRole(user);
+    await logAudit('login_google', { email: user.email });
 
     return {
       success: true,
@@ -141,15 +163,11 @@ export async function loginWithGoogle() {
       try {
         sessionStorage.setItem('googleLoginInProgress', 'true');
         sessionStorage.setItem('googleLoginTimestamp', Date.now().toString());
-
         await signInWithRedirect(auth, googleProvider);
-
         return { success: true, redirecting: true };
-
       } catch (redirectError) {
         sessionStorage.removeItem('googleLoginInProgress');
         sessionStorage.removeItem('googleLoginTimestamp');
-
         return {
           success: false,
           error: redirectError.code,
@@ -166,6 +184,7 @@ export async function loginWithGoogle() {
       };
     }
 
+    await logAudit('login_google_failed', { error: error.code });
     return {
       success: false,
       error: error.code,
@@ -193,6 +212,7 @@ export async function handleRedirectResult() {
     if (result?.user) {
       await createOrUpdateUserProfile(result.user);
       await ensureAdminRole(result.user);
+      await logAudit('login_google_redirect', { email: result.user.email });
 
       return {
         success: true,
@@ -206,7 +226,7 @@ export async function handleRedirectResult() {
   } catch (error) {
     sessionStorage.removeItem('googleLoginInProgress');
     sessionStorage.removeItem('googleLoginTimestamp');
-
+    await logAudit('login_google_redirect_failed', { error: error.code });
     return {
       success: false,
       error: error.code,
@@ -220,6 +240,7 @@ export async function handleRedirectResult() {
 ====================================================== */
 export async function logout() {
   try {
+    await logAudit('logout', {});
     await signOut(auth);
     sessionStorage.clear();
     return { success: true };
@@ -242,12 +263,15 @@ export async function resetPassword(email) {
       handleCodeInApp: false
     });
 
+    await logAudit('password_reset_requested', { email });
+
     return {
       success: true,
       message: 'Email de recuperação enviado!'
     };
 
   } catch (error) {
+    await logAudit('password_reset_failed', { email, error: error.code });
     return {
       success: false,
       error: error.code,
@@ -267,6 +291,7 @@ export async function resendVerificationEmail() {
     if (user.emailVerified) return { success: false, message: 'Email já verificado!' };
 
     await sendEmailVerification(user);
+    await logAudit('verification_email_resent', { email: user.email });
 
     return {
       success: true,
@@ -296,10 +321,12 @@ export async function changePassword(currentPassword, newPassword) {
     const credential = EmailAuthProvider.credential(user.email, currentPassword);
     await reauthenticateWithCredential(user, credential);
     await updatePassword(user, newPassword);
+    await logAudit('password_changed', { email: user.email });
 
     return { success: true, message: 'Senha alterada com sucesso!' };
 
   } catch (error) {
+    await logAudit('password_change_failed', { error: error.code });
     return {
       success: false,
       error: error.code,
