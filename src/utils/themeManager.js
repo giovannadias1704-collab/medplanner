@@ -1,8 +1,8 @@
-import { THEMES } from '../components/ThemeSelector';
+import { THEME_PALETTES } from '../components/PageLayout';
 
 export const applyTheme = (themeId) => {
-  const theme = THEMES.find(t => t.id === themeId);
-  if (!theme) return;
+  const palette = THEME_PALETTES[themeId];
+  if (!palette) return;
 
   const root = document.documentElement;
 
@@ -12,15 +12,15 @@ export const applyTheme = (themeId) => {
     root.classList.remove('dark');
   }
 
-  root.style.setProperty('--theme-bg', theme.colors.bg);
-  root.style.setProperty('--theme-text', theme.colors.text);
-  root.style.setProperty('--theme-primary', theme.colors.primary);
+  root.style.setProperty('--theme-bg',      palette.bg);
+  root.style.setProperty('--theme-text',    palette.text);
+  root.style.setProperty('--theme-primary', palette.accent);
   root.setAttribute('data-theme', themeId);
-  localStorage.setItem('app-theme', themeId);
+  localStorage.setItem('medplanner_theme', themeId);
 };
 
 export const getStoredTheme = () => {
-  return localStorage.getItem('app-theme') || 'light';
+  return localStorage.getItem('medplanner_theme') || 'light';
 };
 
 export const initTheme = () => {
