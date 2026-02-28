@@ -29,8 +29,29 @@ const NAV_ITEMS = [
   { id: 'legal',        icon: '🧾', label: 'Legal',            color: 'from-gray-500 to-slate-600' },
 ];
 
-// ─── SHARED COMPONENTS ────────────────────────────────────────────────────────
+// ─── DEFAULTS (usados só como fallback) ───────────────────────────────────────
+const SETTINGS_DEFAULTS = {
+  notifEvents: true, notifTasks: true, notifBills: true,
+  notifWater: true, notifStudy: true, notifHealth: false,
+  notifEmail: false, notifPush: true, notifInternal: true,
+  notifFrequency: 'daily',
+  analysisPeriod: '30', autoCorrelations: true,
+  scoreWeightHealth: 30, scoreWeightMental: 30,
+  scoreWeightProd: 30, scoreWeightFinance: 10,
+  aiAutoSave: false, aiHistorical: true,
+  aiSuggestions: true, aiStyle: 'balanced', aiInsightsPerDay: 5,
+  weekStartsOn: 'monday', timezone: 'America/Sao_Paulo',
+  dateFormat: 'dd/mm/yyyy', defaultReminderTime: '09:00',
+  weightUnit: 'kg', heightUnit: 'cm',
+  waterGoal: 2.0, sleepGoal: 8, exerciseGoal: 30,
+  pomodoroDuration: 25, pomodoroBreak: 5,
+  spacedRepFreq: 'daily', weeklyStudyGoal: 20,
+  currency: 'BRL', monthStart: 1, savingsGoal: 500, overspendAlert: true,
+  language: 'pt-BR', region: 'BR',
+  fontSize: 'medium', highContrast: false, reduceAnimations: false,
+};
 
+// ─── SHARED COMPONENTS ────────────────────────────────────────────────────────
 function Toggle({ value, onChange }) {
   return (
     <button
@@ -111,7 +132,6 @@ function NumberRow({ icon, title, desc, value, onChange, min, max, step, unit })
 }
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
-
 export default function Settings() {
   const {
     user, userProfile, settings,
@@ -131,27 +151,16 @@ export default function Settings() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [processingPDF, setProcessingPDF] = useState(false);
 
-  // Unified config state
-  const [cfg, setCfg] = useState({
-    notifEvents: true, notifTasks: true, notifBills: true,
-    notifWater: true, notifStudy: true, notifHealth: false,
-    notifEmail: false, notifPush: true, notifInternal: true,
-    notifFrequency: 'daily',
-    analysisPeriod: '30', autoCorrelations: true,
-    scoreWeightHealth: 30, scoreWeightMental: 30,
-    scoreWeightProd: 30, scoreWeightFinance: 10,
-    aiAutoSave: false, aiHistorical: true,
-    aiSuggestions: true, aiStyle: 'balanced', aiInsightsPerDay: 5,
-    weekStartsOn: 'monday', timezone: 'America/Sao_Paulo',
-    dateFormat: 'dd/mm/yyyy', defaultReminderTime: '09:00',
-    weightUnit: 'kg', heightUnit: 'cm',
-    waterGoal: 2.0, sleepGoal: 8, exerciseGoal: 30,
-    pomodoroDuration: 25, pomodoroBreak: 5,
-    spacedRepFreq: 'daily', weeklyStudyGoal: 20,
-    currency: 'BRL', monthStart: 1, savingsGoal: 500, overspendAlert: true,
-    language: 'pt-BR', region: 'BR',
-    fontSize: 'medium', highContrast: false, reduceAnimations: false,
-  });
+  // ─── cfg é sempre inicializado a partir do settings do contexto ─────────────
+  // Começa com defaults e sobrescreve com o que vem do Firebase
+  const [cfg, setCfg] = useState(() => ({ ...SETTINGS_DEFAULTS, ...settings }));
+
+  // Sincroniza cfg quando settings do contexto (Firebase) atualiza
+  useEffect(() => {
+    if (settings) {
+      setCfg(prev => ({ ...SETTINGS_DEFAULTS, ...settings }));
+    }
+  }, [settings]);
 
   useEffect(() => {
     if (userProfile) {
@@ -162,18 +171,22 @@ export default function Settings() {
     }
   }, [userProfile, user]);
 
-  useEffect(() => {
-    if (settings) {
-      setCfg(prev => ({ ...prev, ...settings }));
-      document.documentElement.classList.toggle('dark', settings.theme === 'dark');
-    }
-  }, [settings]);
+  // ─── Debounce para não chamar Firestore a cada keystroke ──────────────────
+  const saveTimer = useRef(null);
 
   const set = (key, val) => {
     const next = { ...cfg, [key]: val };
     setCfg(next);
-    updateSettings?.(next);
+
+    // Cancela timer anterior e agenda novo save após 600ms
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      updateSettings?.({ [key]: val }); // Salva só o campo que mudou
+    }, 600);
   };
+
+  // Limpa timer ao desmontar
+  useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
 
   const handlePhotoUpload = async (e) => {
     const file = e.target.files[0];
@@ -187,8 +200,10 @@ export default function Settings() {
   };
 
   const handleSaveName = async () => {
-    try { await updateUserProfile({ displayName: localProfile.displayName }); setEditingName(false); }
-    catch { alert('Erro ao atualizar nome'); }
+    try {
+      await updateUserProfile({ displayName: localProfile.displayName });
+      setEditingName(false);
+    } catch { alert('Erro ao atualizar nome'); }
   };
 
   const handlePDFUpload = async (e) => {
@@ -380,13 +395,11 @@ export default function Settings() {
                 ]} />
             </SectionCard>
 
-            {/* 3. PERSONALIZAÇÃO — ThemeSelector sem props */}
+            {/* 3. PERSONALIZAÇÃO */}
             <SectionCard id="visual" icon="🎨" label="Personalização" gradient="from-pink-500 to-rose-600">
               <div className="rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-700">
-                {/* ✅ ThemeSelector usa useTheme() internamente — sem props necessárias */}
                 <ThemeSelector />
               </div>
-
               <SelectRow icon="📐" title="Layout" desc="Modo de exibição das informações"
                 value="expanded" onChange={() => {}}
                 options={[{ value: 'compact', label: '🗜️ Compacto' }, { value: 'expanded', label: '📋 Expandido' }]} />
@@ -423,6 +436,8 @@ export default function Settings() {
                   </button>
                 )}
               </div>
+
+              {/* Canais de notificação */}
               <div className="grid grid-cols-3 gap-2">
                 {[
                   { key: 'notifEmail',    icon: '📧', label: 'Email'   },
@@ -439,6 +454,8 @@ export default function Settings() {
                   </button>
                 ))}
               </div>
+
+              {/* Tipos de notificação */}
               {[
                 { key: 'notifEvents', icon: '📅', label: 'Eventos',    desc: '1 dia antes do evento' },
                 { key: 'notifTasks',  icon: '✅', label: 'Tarefas',    desc: 'Tarefas atrasadas e urgentes' },
@@ -448,9 +465,10 @@ export default function Settings() {
                 { key: 'notifHealth', icon: '🏥', label: 'Saúde',      desc: 'Consultas e medicamentos' },
               ].map(n => (
                 <Row key={n.key} icon={n.icon} title={n.label} desc={n.desc}>
-                  <Toggle value={cfg[n.key]} onChange={v => set(n.key, v)} />
+                  <Toggle value={!!cfg[n.key]} onChange={v => set(n.key, v)} />
                 </Row>
               ))}
+
               <SelectRow icon="🔁" title="Frequência de Resumos" desc="Periodicidade dos resumos automáticos"
                 value={cfg.notifFrequency} onChange={v => set('notifFrequency', v)}
                 options={[
@@ -476,7 +494,7 @@ export default function Settings() {
                 value={cfg.analysisPeriod} onChange={v => set('analysisPeriod', v)}
                 options={[{ value: '7', label: '7 dias' }, { value: '30', label: '30 dias' }, { value: '90', label: '90 dias' }]} />
               <Row icon="🔗" title="Correlações Automáticas" desc="Detectar relações entre variáveis">
-                <Toggle value={cfg.autoCorrelations} onChange={v => set('autoCorrelations', v)} />
+                <Toggle value={!!cfg.autoCorrelations} onChange={v => set('autoCorrelations', v)} />
               </Row>
               <div className="bg-violet-50 dark:bg-violet-900/10 border border-violet-200 dark:border-violet-800 rounded-2xl p-4">
                 <div className="flex items-center justify-between mb-4">
@@ -512,13 +530,13 @@ export default function Settings() {
             {/* 6. IA */}
             <SectionCard id="ia" icon="🧠" label="Inteligência Artificial" gradient="from-emerald-500 to-teal-600">
               <Row icon="🤖" title="Auto-save com IA" desc="Salvar sugestões sem confirmação manual">
-                <Toggle value={cfg.aiAutoSave} onChange={v => set('aiAutoSave', v)} />
+                <Toggle value={!!cfg.aiAutoSave} onChange={v => set('aiAutoSave', v)} />
               </Row>
               <Row icon="📖" title="Acesso ao Histórico" desc="IA analisa seus dados passados para insights melhores">
-                <Toggle value={cfg.aiHistorical} onChange={v => set('aiHistorical', v)} />
+                <Toggle value={!!cfg.aiHistorical} onChange={v => set('aiHistorical', v)} />
               </Row>
               <Row icon="💡" title="Sugestões Proativas" desc="Insights automáticos em tempo real">
-                <Toggle value={cfg.aiSuggestions} onChange={v => set('aiSuggestions', v)} />
+                <Toggle value={!!cfg.aiSuggestions} onChange={v => set('aiSuggestions', v)} />
               </Row>
               <SelectRow icon="🎙️" title="Estilo de Resposta" desc="Tom e formato das mensagens da IA"
                 value={cfg.aiStyle} onChange={v => set('aiStyle', v)}
@@ -619,7 +637,7 @@ export default function Settings() {
                 value={cfg.savingsGoal} onChange={v => set('savingsGoal', v)} min={0} max={99999} step={50}
                 unit={cfg.currency === 'BRL' ? 'R$/mês' : '$/ mês'} />
               <Row icon="⚠️" title="Alerta de Gasto Excessivo" desc="Notificar ao ultrapassar limites do orçamento">
-                <Toggle value={cfg.overspendAlert} onChange={v => set('overspendAlert', v)} />
+                <Toggle value={!!cfg.overspendAlert} onChange={v => set('overspendAlert', v)} />
               </Row>
             </SectionCard>
 
@@ -651,10 +669,10 @@ export default function Settings() {
                     </div>
                   </Row>
                   <Row icon="🌗" title="Alto Contraste" desc="Aumentar contraste para melhor visibilidade">
-                    <Toggle value={cfg.highContrast} onChange={v => set('highContrast', v)} />
+                    <Toggle value={!!cfg.highContrast} onChange={v => set('highContrast', v)} />
                   </Row>
                   <Row icon="🎬" title="Reduzir Animações" desc="Desativar efeitos de movimento">
-                    <Toggle value={cfg.reduceAnimations} onChange={v => set('reduceAnimations', v)} />
+                    <Toggle value={!!cfg.reduceAnimations} onChange={v => set('reduceAnimations', v)} />
                   </Row>
                 </div>
               </div>

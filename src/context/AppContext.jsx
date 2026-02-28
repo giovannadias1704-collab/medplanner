@@ -1,4 +1,4 @@
-import { createContext, useState, useEffect } from 'react';
+import { createContext, useState, useEffect, useRef } from 'react';
 import { auth, db, storage } from '../services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { 
@@ -19,7 +19,7 @@ import { generateText } from '../services/gemini';
 
 export const AppContext = createContext();
 
-// ─── Extrai texto do PDF usando pdf.js via CDN (sem instalar nada) ─────────────
+// ─── Extrai texto do PDF usando pdf.js via CDN ─────────────────────────────────
 async function extractTextFromPDF(file) {
   if (!window.pdfjsLib) {
     await new Promise((resolve, reject) => {
@@ -32,17 +32,14 @@ async function extractTextFromPDF(file) {
     window.pdfjsLib.GlobalWorkerOptions.workerSrc =
       'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   }
-
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-
   let fullText = '';
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const textContent = await page.getTextContent();
     fullText += textContent.items.map(item => item.str).join(' ') + '\n';
   }
-
   return fullText;
 }
 
@@ -94,14 +91,60 @@ export function AppProvider({ children }) {
     currency: 'BRL',
     waterGoal: 2.0,
     notifications: true,
-    notificationTypes: {
-      events: true,
-      tasks: true,
-      bills: true,
-      water: true,
-      study: true
-    }
+    // ── Campos flat usados pelo Settings.jsx ──────────────────────────────
+    notifEvents: true,
+    notifTasks: true,
+    notifBills: true,
+    notifWater: true,
+    notifStudy: true,
+    notifHealth: false,
+    notifEmail: false,
+    notifPush: true,
+    notifInternal: true,
+    notifFrequency: 'daily',
+    analysisPeriod: '30',
+    autoCorrelations: true,
+    scoreWeightHealth: 30,
+    scoreWeightMental: 30,
+    scoreWeightProd: 30,
+    scoreWeightFinance: 10,
+    aiAutoSave: false,
+    aiHistorical: true,
+    aiSuggestions: true,
+    aiStyle: 'balanced',
+    aiInsightsPerDay: 5,
+    timezone: 'America/Sao_Paulo',
+    dateFormat: 'dd/mm/yyyy',
+    defaultReminderTime: '09:00',
+    weightUnit: 'kg',
+    heightUnit: 'cm',
+    sleepGoal: 8,
+    exerciseGoal: 30,
+    pomodoroDuration: 25,
+    pomodoroBreak: 5,
+    spacedRepFreq: 'daily',
+    weeklyStudyGoal: 20,
+    monthStart: 1,
+    savingsGoal: 500,
+    overspendAlert: true,
+    language: 'pt-BR',
+    region: 'BR',
+    fontSize: 'medium',
+    highContrast: false,
+    reduceAnimations: false,
   });
+
+  // ─── Ref sempre atualizado com notifications para evitar stale closure ─────
+  const notificationsRef = useRef([]);
+  useEffect(() => {
+    notificationsRef.current = notifications;
+  }, [notifications]);
+
+  // ─── Ref sempre atualizado com settings ───────────────────────────────────
+  const settingsRef = useRef(settings);
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
 
   // Auth
   useEffect(() => {
@@ -112,11 +155,9 @@ export function AppProvider({ children }) {
         setLoading(false);
         return;
       }
-
       try {
         const userRef = doc(db, "users", firebaseUser.uid);
         const userSnap = await getDoc(userRef);
-
         if (userSnap.exists()) {
           const userData = { uid: firebaseUser.uid, email: firebaseUser.email, ...userSnap.data() };
           setUser(userData);
@@ -128,10 +169,8 @@ export function AppProvider({ children }) {
       } catch (error) {
         console.error("Erro ao carregar usuário:", error);
       }
-
       setLoading(false);
     });
-
     return () => unsubscribe();
   }, []);
 
@@ -143,7 +182,6 @@ export function AppProvider({ children }) {
 
   useEffect(() => {
     if (!user) return;
-
     const unsubscribes = [];
 
     const createListener = (collectionName, setState) => {
@@ -193,9 +231,7 @@ export function AppProvider({ children }) {
     const studyConfigQuery = query(collection(db, 'users', user.uid, 'studyConfig'));
     unsubscribes.push(
       onSnapshot(studyConfigQuery, (snapshot) => {
-        if (!snapshot.empty) {
-          setStudyConfig(snapshot.docs[0].data());
-        }
+        if (!snapshot.empty) setStudyConfig(snapshot.docs[0].data());
       })
     );
 
@@ -204,7 +240,8 @@ export function AppProvider({ children }) {
       onSnapshot(settingsQuery, (snapshot) => {
         if (!snapshot.empty) {
           const settingsData = snapshot.docs[0].data();
-          setSettings(settingsData);
+          // Merge com defaults para garantir todos os campos
+          setSettings(prev => ({ ...prev, ...settingsData }));
           if (settingsData.theme === 'dark') {
             document.documentElement.classList.add('dark');
           } else {
@@ -217,28 +254,53 @@ export function AppProvider({ children }) {
     return () => unsubscribes.forEach(unsub => unsub());
   }, [user]);
 
+  // ─── Checa notificações a cada 5 min usando refs (sem stale closure) ───────
   useEffect(() => {
-    if (!user || !settings.notifications) return;
+    if (!user) return;
     const checkInterval = setInterval(() => {
       checkForNotifications();
     }, 5 * 60 * 1000);
     checkForNotifications();
     return () => clearInterval(checkInterval);
-  }, [user, events, tasks, bills, settings]);
+  }, [user]); // Só depende de user — refs garantem dados frescos
 
   // ==================== NOTIFICATIONS ====================
+
+  // ─── Gera chave única de deduplicação por tipo + entidade + janela de tempo ─
+  const getDedupeKey = (notificationData) => {
+    const today = new Date().toISOString().split('T')[0];
+    if (notificationData.relatedId) {
+      return `${notificationData.type}::${notificationData.relatedId}::${today}`;
+    }
+    // Para notificações sem relatedId (ex: água), usa tipo + hora (janela de 2h)
+    const hour2 = Math.floor(new Date().getHours() / 2);
+    return `${notificationData.type}::${today}::${hour2}`;
+  };
+
   const checkForNotifications = async () => {
+    const currentSettings = settingsRef.current;
+    const currentNotifications = notificationsRef.current;
+
+    if (!currentSettings.notifications) return;
+
+    // Lê eventos/tasks/bills diretamente do estado via closure do useEffect de montagem
+    // mas como usamos refs para settings e notifications, precisamos acessar o estado atual
+    // Usamos um ref separado para dados também
+    const currentEvents = eventsRef.current;
+    const currentTasks = tasksRef.current;
+    const currentBills = billsRef.current;
+
     const now = new Date();
     const tomorrow = new Date(now);
     tomorrow.setDate(tomorrow.getDate() + 1);
     const tomorrowStr = tomorrow.toISOString().split('T')[0];
-    
+
     const in3Days = new Date(now);
     in3Days.setDate(in3Days.getDate() + 3);
     const in3DaysStr = in3Days.toISOString().split('T')[0];
 
-    if (settings.notificationTypes?.events) {
-      for (const event of events) {
+    if (currentSettings.notifEvents !== false) {
+      for (const event of currentEvents) {
         if (event.date === tomorrowStr) {
           await createInAppNotification({
             type: 'event',
@@ -246,14 +308,14 @@ export function AppProvider({ children }) {
             message: `${event.title} acontece amanhã!`,
             relatedId: event.id,
             priority: 'high'
-          });
+          }, currentNotifications);
         }
       }
     }
 
-    if (settings.notificationTypes?.tasks) {
+    if (currentSettings.notifTasks !== false) {
       const todayStr = now.toISOString().split('T')[0];
-      for (const task of tasks) {
+      for (const task of currentTasks) {
         if (!task.completed && task.date < todayStr) {
           await createInAppNotification({
             type: 'task',
@@ -261,13 +323,13 @@ export function AppProvider({ children }) {
             message: `"${task.title}" está atrasada!`,
             relatedId: task.id,
             priority: 'high'
-          });
+          }, currentNotifications);
         }
       }
     }
 
-    if (settings.notificationTypes?.bills) {
-      for (const bill of bills) {
+    if (currentSettings.notifBills !== false) {
+      for (const bill of currentBills) {
         if (!bill.paid && bill.date <= in3DaysStr && bill.date >= tomorrowStr) {
           await createInAppNotification({
             type: 'bill',
@@ -275,48 +337,65 @@ export function AppProvider({ children }) {
             message: `"${bill.title}" vence em breve! Valor: R$ ${bill.amount}`,
             relatedId: bill.id,
             priority: 'medium'
-          });
+          }, currentNotifications);
         }
       }
     }
 
-    if (settings.notificationTypes?.water) {
+    if (currentSettings.notifWater !== false) {
       const hour = now.getHours();
       if (hour >= 8 && hour <= 20 && hour % 2 === 0) {
-        const waterToday = getWaterIntakeToday();
-        if (waterToday < settings.waterGoal) {
+        const waterToday = getWaterIntakeTodayFromLogs(waterLogsRef.current);
+        if (waterToday < (currentSettings.waterGoal || 2.0)) {
           await createInAppNotification({
             type: 'water',
             title: '💧 Hora de Beber Água',
-            message: `Você já bebeu ${waterToday}L de ${settings.waterGoal}L hoje!`,
+            message: `Você já bebeu ${waterToday.toFixed(1)}L de ${currentSettings.waterGoal || 2.0}L hoje!`,
             priority: 'low',
-            autoClose: true
-          });
+          }, currentNotifications);
         }
       }
     }
   };
 
-  const createInAppNotification = async (notificationData) => {
+  // ─── Refs para dados que precisam estar frescos em checkForNotifications ───
+  const eventsRef = useRef([]);
+  const tasksRef = useRef([]);
+  const billsRef = useRef([]);
+  const waterLogsRef = useRef([]);
+
+  useEffect(() => { eventsRef.current = events; }, [events]);
+  useEffect(() => { tasksRef.current = tasks; }, [tasks]);
+  useEffect(() => { billsRef.current = bills; }, [bills]);
+  useEffect(() => { waterLogsRef.current = waterLogs; }, [waterLogs]);
+
+  const getWaterIntakeTodayFromLogs = (logs) => {
+    const today = new Date().toISOString().split('T')[0];
+    return logs.filter(log => log.date === today).reduce((sum, log) => sum + log.amount, 0);
+  };
+
+  // ─── createInAppNotification recebe lista atual como parâmetro ─────────────
+  const createInAppNotification = async (notificationData, currentNotifications = notificationsRef.current) => {
     if (!user) return;
     try {
-      const oneDayAgo = new Date();
-      oneDayAgo.setDate(oneDayAgo.getDate() - 1);
-      
-      const existingNotification = notifications.find(n => 
-        n.type === notificationData.type &&
-        n.relatedId === notificationData.relatedId &&
-        new Date(n.createdAt) > oneDayAgo
-      );
-      if (existingNotification) return;
+      const dedupeKey = getDedupeKey(notificationData);
+
+      // Verifica deduplicação usando a lista passada (sempre fresca)
+      const isDuplicate = currentNotifications.some(n => {
+        const existingKey = getDedupeKey(n);
+        return existingKey === dedupeKey;
+      });
+
+      if (isDuplicate) return;
 
       await addDoc(collection(db, 'users', user.uid, 'notifications'), {
         ...notificationData,
+        dedupeKey, // Salvo para deduplicação persistente
         read: false,
         createdAt: new Date().toISOString()
       });
 
-      if (notificationPermission === 'granted') {
+      if (notificationPermission === 'granted' && settingsRef.current.notifPush !== false) {
         sendBrowserNotification(notificationData.title, notificationData.message);
       }
     } catch (error) {
@@ -331,7 +410,7 @@ export function AppProvider({ children }) {
           body: message,
           icon,
           badge: '/icon-192.png',
-          tag: `medplanner-${Date.now()}`,
+          tag: `medplanner-${title}`, // tag estável por título evita duplicatas no SO
           requireInteraction: false
         });
       } catch (error) {
@@ -371,9 +450,11 @@ export function AppProvider({ children }) {
   const markAllNotificationsAsRead = async () => {
     if (!user) return;
     try {
-      for (const n of notifications.filter(n => !n.read)) {
-        await markNotificationAsRead(n.id);
+      const unread = notificationsRef.current.filter(n => !n.read);
+      for (const n of unread) {
+        await updateDoc(doc(db, 'users', user.uid, 'notifications', n.id), { read: true });
       }
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
     } catch (error) {
       console.error('Erro ao marcar todas como lidas:', error);
     }
@@ -383,6 +464,7 @@ export function AppProvider({ children }) {
     if (!user) return;
     try {
       await deleteDoc(doc(db, 'users', user.uid, 'notifications', notificationId));
+      setNotifications(prev => prev.filter(n => n.id !== notificationId));
     } catch (error) {
       console.error('Erro ao deletar notificação:', error);
     }
@@ -393,7 +475,7 @@ export function AppProvider({ children }) {
     try {
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      const old = notifications.filter(n => new Date(n.createdAt) < thirtyDaysAgo);
+      const old = notificationsRef.current.filter(n => new Date(n.createdAt) < thirtyDaysAgo);
       for (const n of old) await deleteNotification(n.id);
       return old.length;
     } catch (error) {
@@ -407,6 +489,46 @@ export function AppProvider({ children }) {
     await createInAppNotification({ type, title, message, priority, manual: true });
   };
 
+  // ==================== SETTINGS ====================
+  const updateSettings = async (newSettings) => {
+    if (!user) return;
+    try {
+      // Aplica tema imediatamente se mudou
+      if (newSettings.theme) {
+        document.documentElement.classList.toggle('dark', newSettings.theme === 'dark');
+      }
+      // Aplica fontSize imediatamente
+      if (newSettings.fontSize) {
+        const sizes = { small: '14px', medium: '16px', large: '18px' };
+        document.documentElement.style.fontSize = sizes[newSettings.fontSize] || '16px';
+      }
+      // Aplica alto contraste
+      if (typeof newSettings.highContrast === 'boolean') {
+        document.documentElement.classList.toggle('high-contrast', newSettings.highContrast);
+      }
+      // Aplica reduzir animações
+      if (typeof newSettings.reduceAnimations === 'boolean') {
+        document.documentElement.classList.toggle('reduce-motion', newSettings.reduceAnimations);
+      }
+
+      // Persiste no Firestore
+      const snapshot = await getDocs(query(collection(db, 'users', user.uid, 'settings')));
+      if (!snapshot.empty) {
+        await updateDoc(doc(db, 'users', user.uid, 'settings', snapshot.docs[0].id), newSettings);
+      } else {
+        await addDoc(collection(db, 'users', user.uid, 'settings'), newSettings);
+      }
+    } catch (error) {
+      console.error('Erro ao atualizar configurações:', error);
+      throw error;
+    }
+  };
+
+  // ==================== THEME ====================
+  const updateTheme = async (newTheme) => {
+    await updateSettings({ theme: newTheme });
+  };
+
   // ==================== EVENTS ====================
   const addEvent = async (eventData) => {
     if (!user) return;
@@ -415,7 +537,7 @@ export function AppProvider({ children }) {
         ...eventData,
         createdAt: new Date().toISOString()
       });
-      if (settings.notificationTypes?.events && eventData.date) {
+      if (settingsRef.current.notifEvents !== false && eventData.date) {
         const daysUntil = Math.ceil((new Date(eventData.date) - new Date()) / (1000 * 60 * 60 * 24));
         if (daysUntil === 1) {
           await createInAppNotification({
@@ -437,20 +559,14 @@ export function AppProvider({ children }) {
     if (!user) return;
     try {
       await updateDoc(doc(db, 'users', user.uid, 'events', eventId), eventData);
-    } catch (error) {
-      console.error('Erro ao atualizar evento:', error);
-      throw error;
-    }
+    } catch (error) { console.error('Erro ao atualizar evento:', error); throw error; }
   };
 
   const deleteEvent = async (eventId) => {
     if (!user) return;
     try {
       await deleteDoc(doc(db, 'users', user.uid, 'events', eventId));
-    } catch (error) {
-      console.error('Erro ao deletar evento:', error);
-      throw error;
-    }
+    } catch (error) { console.error('Erro ao deletar evento:', error); throw error; }
   };
 
   // ==================== TASKS ====================
@@ -460,14 +576,12 @@ export function AppProvider({ children }) {
       await addDoc(collection(db, 'users', user.uid, 'tasks'), { ...taskData, createdAt: new Date().toISOString() });
     } catch (error) { console.error('Erro ao adicionar tarefa:', error); throw error; }
   };
-
   const updateTask = async (taskId, taskData) => {
     if (!user) return;
     try {
       await updateDoc(doc(db, 'users', user.uid, 'tasks', taskId), taskData);
     } catch (error) { console.error('Erro ao atualizar tarefa:', error); throw error; }
   };
-
   const deleteTask = async (taskId) => {
     if (!user) return;
     try {
@@ -482,21 +596,18 @@ export function AppProvider({ children }) {
       await addDoc(collection(db, 'users', user.uid, 'bills'), { ...billData, createdAt: new Date().toISOString() });
     } catch (error) { console.error('Erro ao adicionar conta:', error); throw error; }
   };
-
   const updateBill = async (billId, billData) => {
     if (!user) return;
     try {
       await updateDoc(doc(db, 'users', user.uid, 'bills', billId), billData);
     } catch (error) { console.error('Erro ao atualizar conta:', error); throw error; }
   };
-
   const deleteBill = async (billId) => {
     if (!user) return;
     try {
       await deleteDoc(doc(db, 'users', user.uid, 'bills', billId));
     } catch (error) { console.error('Erro ao deletar conta:', error); throw error; }
   };
-
   const toggleBillPaid = async (billId, currentPaidStatus) => {
     if (!user) return;
     try {
@@ -514,14 +625,12 @@ export function AppProvider({ children }) {
       await addDoc(collection(db, 'users', user.uid, 'workouts'), { ...workoutData, createdAt: new Date().toISOString() });
     } catch (error) { console.error('Erro ao adicionar treino:', error); throw error; }
   };
-
   const updateWorkout = async (workoutId, workoutData) => {
     if (!user) return;
     try {
       await updateDoc(doc(db, 'users', user.uid, 'workouts', workoutId), workoutData);
     } catch (error) { console.error('Erro ao atualizar treino:', error); throw error; }
   };
-
   const deleteWorkout = async (workoutId) => {
     if (!user) return;
     try {
@@ -536,14 +645,12 @@ export function AppProvider({ children }) {
       await addDoc(collection(db, 'users', user.uid, 'meals'), { ...mealData, createdAt: new Date().toISOString() });
     } catch (error) { console.error('Erro ao adicionar refeição:', error); throw error; }
   };
-
   const updateMeal = async (mealId, mealData) => {
     if (!user) return;
     try {
       await updateDoc(doc(db, 'users', user.uid, 'meals', mealId), mealData);
     } catch (error) { console.error('Erro ao atualizar refeição:', error); throw error; }
   };
-
   const deleteMeal = async (mealId) => {
     if (!user) return;
     try {
@@ -570,19 +677,10 @@ export function AppProvider({ children }) {
     } catch (error) { console.error('Erro ao registrar água:', error); throw error; }
   };
 
-  const getWaterIntakeToday = () => {
-    const today = new Date().toISOString().split('T')[0];
-    return waterLogs.filter(log => log.date === today).reduce((sum, log) => sum + log.amount, 0);
-  };
+  const getWaterIntakeToday = () => getWaterIntakeTodayFromLogs(waterLogs);
 
   const updateWaterGoal = async (newGoal) => {
-    if (!user) return;
-    try {
-      const snapshot = await getDocs(query(collection(db, 'users', user.uid, 'settings')));
-      if (!snapshot.empty) {
-        await updateDoc(doc(db, 'users', user.uid, 'settings', snapshot.docs[0].id), { waterGoal: newGoal });
-      }
-    } catch (error) { console.error('Erro ao atualizar meta de água:', error); throw error; }
+    await updateSettings({ waterGoal: newGoal });
   };
 
   // ==================== PBL ====================
@@ -592,21 +690,18 @@ export function AppProvider({ children }) {
       await addDoc(collection(db, 'users', user.uid, 'pblCases'), { ...caseData, createdAt: new Date().toISOString() });
     } catch (error) { console.error('Erro ao adicionar caso PBL:', error); throw error; }
   };
-
   const updatePBLCase = async (caseId, caseData) => {
     if (!user) return;
     try {
       await updateDoc(doc(db, 'users', user.uid, 'pblCases', caseId), caseData);
     } catch (error) { console.error('Erro ao atualizar caso PBL:', error); throw error; }
   };
-
   const deletePBLCase = async (caseId) => {
     if (!user) return;
     try {
       await deleteDoc(doc(db, 'users', user.uid, 'pblCases', caseId));
     } catch (error) { console.error('Erro ao deletar caso PBL:', error); throw error; }
   };
-
   const addPBLObjective = async (objectiveData) => {
     if (!user) return;
     try {
@@ -615,7 +710,6 @@ export function AppProvider({ children }) {
       });
     } catch (error) { console.error('Erro ao adicionar objetivo PBL:', error); throw error; }
   };
-
   const togglePBLObjective = async (objectiveId, currentCompletedStatus) => {
     if (!user) return;
     try {
@@ -625,14 +719,12 @@ export function AppProvider({ children }) {
       });
     } catch (error) { console.error('Erro ao marcar objetivo como concluído:', error); throw error; }
   };
-
   const addPBLReading = async (readingData) => {
     if (!user) return;
     try {
       await addDoc(collection(db, 'users', user.uid, 'pblReadings'), { ...readingData, createdAt: new Date().toISOString() });
     } catch (error) { console.error('Erro ao adicionar leitura PBL:', error); throw error; }
   };
-
   const deletePBLReading = async (readingId) => {
     if (!user) return;
     try {
@@ -649,21 +741,18 @@ export function AppProvider({ children }) {
       });
     } catch (error) { console.error('Erro ao adicionar tarefa doméstica:', error); throw error; }
   };
-
   const updateHomeTask = async (taskId, taskData) => {
     if (!user) return;
     try {
       await updateDoc(doc(db, 'users', user.uid, 'homeTasks', taskId), taskData);
     } catch (error) { console.error('Erro ao atualizar tarefa doméstica:', error); throw error; }
   };
-
   const deleteHomeTask = async (taskId) => {
     if (!user) return;
     try {
       await deleteDoc(doc(db, 'users', user.uid, 'homeTasks', taskId));
     } catch (error) { console.error('Erro ao deletar tarefa doméstica:', error); throw error; }
   };
-
   const toggleHomeTask = async (taskId, currentCompletedStatus) => {
     if (!user) return;
     try {
@@ -681,46 +770,32 @@ export function AppProvider({ children }) {
       await addDoc(collection(db, 'users', user.uid, 'wellBeingEntries'), { ...entryData, createdAt: new Date().toISOString() });
     } catch (error) { console.error('Erro ao adicionar registro de bem-estar:', error); throw error; }
   };
-
-  const getWellBeingHistory = () => {
-    return wellBeingEntries.sort((a, b) => new Date(b.date) - new Date(a.date));
-  };
-
+  const getWellBeingHistory = () => wellBeingEntries.sort((a, b) => new Date(b.date) - new Date(a.date));
   const getWellBeingStats = (days = 7) => {
     const now = new Date();
     const startDate = new Date(now.setDate(now.getDate() - days));
     const recentEntries = wellBeingEntries.filter(e => new Date(e.date) >= startDate);
-
     if (recentEntries.length === 0) {
       return { avgMood: 0, avgEnergy: 0, avgSleep: 0, totalEntries: 0, moodTrend: 'neutral', insights: [] };
     }
-
     const avgMood = recentEntries.reduce((s, e) => s + (e.mood || 0), 0) / recentEntries.length;
     const avgEnergy = recentEntries.reduce((s, e) => s + (e.energy || 0), 0) / recentEntries.length;
     const avgSleep = recentEntries.reduce((s, e) => s + (parseFloat(e.sleep) || 0), 0) / recentEntries.length;
-
     const half = Math.floor(recentEntries.length / 2);
     const firstHalfAvg = recentEntries.slice(half).reduce((s, e) => s + (e.mood || 0), 0) / (half || 1);
     const secondHalfAvg = recentEntries.slice(0, half).reduce((s, e) => s + (e.mood || 0), 0) / (half || 1);
-    
     let moodTrend = 'neutral';
     if (secondHalfAvg > firstHalfAvg + 0.3) moodTrend = 'improving';
     else if (secondHalfAvg < firstHalfAvg - 0.3) moodTrend = 'declining';
-
     const insights = [];
     if (avgMood >= 4) insights.push('Seu humor está ótimo! Continue assim! 😊');
     else if (avgMood <= 2.5) insights.push('Seu humor está baixo. Considere atividades que te façam bem. 💙');
     if (avgSleep < 6) insights.push('Você está dormindo pouco. Tente priorizar 7-8h de sono. 😴');
     else if (avgSleep >= 8) insights.push('Ótima qualidade de sono! Continue mantendo essa rotina. ✨');
     if (avgEnergy <= 2.5) insights.push('Baixa energia detectada. Exercícios leves podem ajudar! ⚡');
-
     return {
-      avgMood: avgMood.toFixed(1),
-      avgEnergy: avgEnergy.toFixed(1),
-      avgSleep: avgSleep.toFixed(1),
-      totalEntries: recentEntries.length,
-      moodTrend,
-      insights
+      avgMood: avgMood.toFixed(1), avgEnergy: avgEnergy.toFixed(1), avgSleep: avgSleep.toFixed(1),
+      totalEntries: recentEntries.length, moodTrend, insights
     };
   };
 
@@ -748,52 +823,15 @@ export function AppProvider({ children }) {
     } catch (error) { console.error('Erro ao fazer upload da foto:', error); throw error; }
   };
 
-  // ==================== THEME ====================
-  const updateTheme = async (newTheme) => {
-    if (!user) return;
-    try {
-      const snapshot = await getDocs(query(collection(db, 'users', user.uid, 'settings')));
-      if (!snapshot.empty) {
-        await updateDoc(doc(db, 'users', user.uid, 'settings', snapshot.docs[0].id), { theme: newTheme });
-      } else {
-        await addDoc(collection(db, 'users', user.uid, 'settings'), { ...settings, theme: newTheme });
-      }
-      if (newTheme === 'dark') {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
-    } catch (error) { console.error('Erro ao atualizar tema:', error); throw error; }
-  };
-
-  // ==================== SETTINGS ====================
-  const updateSettings = async (newSettings) => {
-    if (!user) return;
-    try {
-      const snapshot = await getDocs(query(collection(db, 'users', user.uid, 'settings')));
-      if (!snapshot.empty) {
-        await updateDoc(doc(db, 'users', user.uid, 'settings', snapshot.docs[0].id), newSettings);
-      } else {
-        await addDoc(collection(db, 'users', user.uid, 'settings'), newSettings);
-      }
-    } catch (error) { console.error('Erro ao atualizar configurações:', error); throw error; }
-  };
-
-  // ==================== PDF PROCESSING (IMPLEMENTADO) ====================
+  // ==================== PDF PROCESSING ====================
   const processPDFWithAI = async (file) => {
     if (!user) return;
-
-    // 1. Extrai texto do PDF via pdf.js (CDN, sem instalar nada)
     const pdfText = await extractTextFromPDF(file);
-
     if (!pdfText || pdfText.trim().length < 20) {
       throw new Error('Não foi possível extrair texto do PDF. O arquivo pode ser uma imagem escaneada.');
     }
-
-    // 2. Envia para o Gemini identificar eventos
     const today = new Date().toISOString().split('T')[0];
     const currentYear = new Date().getFullYear();
-
     const prompt = `Você é um assistente que extrai eventos de textos acadêmicos/universitários.
 
 TEXTO DO PDF:
@@ -827,13 +865,9 @@ REGRAS:
 Retorne SOMENTE o array JSON.`;
 
     const result = await generateText(prompt);
-
-    // 3. Parseia a resposta
     const start = result.indexOf('[');
     const end = result.lastIndexOf(']');
-    if (start === -1 || end === -1) {
-      return { success: true, events: [], savedCount: 0 };
-    }
+    if (start === -1 || end === -1) return { success: true, events: [], savedCount: 0 };
 
     let extractedEvents = [];
     try {
@@ -841,17 +875,13 @@ Retorne SOMENTE o array JSON.`;
     } catch {
       return { success: true, events: [], savedCount: 0 };
     }
-
     if (!Array.isArray(extractedEvents) || extractedEvents.length === 0) {
       return { success: true, events: [], savedCount: 0 };
     }
-
-    // 4. Salva eventos no Firebase
     let savedCount = 0;
     for (const event of extractedEvents) {
       if (!event.title || !event.date) continue;
       if (!/^\d{4}-\d{2}-\d{2}$/.test(event.date)) continue;
-
       await addDoc(collection(db, 'users', user.uid, 'events'), {
         title: event.title,
         date: event.date,
@@ -863,10 +893,8 @@ Retorne SOMENTE o array JSON.`;
         pdfName: file.name,
         createdAt: new Date().toISOString()
       });
-
       savedCount++;
     }
-
     return { success: true, events: extractedEvents, savedCount };
   };
 
@@ -909,26 +937,20 @@ Retorne SOMENTE o array JSON.`;
       const upcomingExams = events
         .filter(e => e.type === 'exam' && new Date(e.date) > new Date())
         .sort((a, b) => new Date(a.date) - new Date(b.date));
-
       if (upcomingExams.length === 0) throw new Error('Nenhuma prova cadastrada no calendário');
-
       const schedule = [];
       const today = new Date();
-      
       for (const exam of upcomingExams) {
         const examDate = new Date(exam.date);
         const daysUntilExam = Math.ceil((examDate - today) / (1000 * 60 * 60 * 24));
         if (daysUntilExam <= 0) continue;
-
         const studyDays = Math.max(1, daysUntilExam - 1);
         const hoursPerDay = studyConfig.hoursPerDay || 4;
         const topics = exam.topics || ['Revisar conteúdo geral'];
         const hoursPerTopic = (studyDays * hoursPerDay) / topics.length;
-
         let currentDate = new Date(today);
         let topicIndex = 0;
         let hoursAllocated = 0;
-
         for (let day = 0; day < studyDays; day++) {
           schedule.push({
             date: new Date(currentDate).toISOString().split('T')[0],
@@ -940,7 +962,6 @@ Retorne SOMENTE o array JSON.`;
           if (hoursAllocated >= hoursPerTopic) { topicIndex++; hoursAllocated = 0; }
           currentDate.setDate(currentDate.getDate() + 1);
         }
-
         schedule.push({
           date: new Date(examDate.getTime() - 86400000).toISOString().split('T')[0],
           examId: exam.id, examTitle: exam.title, examDate: exam.date,
@@ -948,13 +969,11 @@ Retorne SOMENTE o array JSON.`;
           completed: false, isReview: true, createdAt: new Date().toISOString()
         });
       }
-
       const oldDocs = await getDocs(query(collection(db, 'users', user.uid, 'studySchedule')));
       for (const d of oldDocs.docs) await deleteDoc(d.ref);
       for (const item of schedule) {
         await addDoc(collection(db, 'users', user.uid, 'studySchedule'), item);
       }
-
       return schedule;
     } catch (error) { console.error('Erro ao gerar cronograma:', error); throw error; }
   };
