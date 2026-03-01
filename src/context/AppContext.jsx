@@ -86,7 +86,6 @@ export function AppProvider({ children }) {
   
   const [settings, setSettings] = useState({
     theme: 'light',
-    aiAutoSave: false,
     weekStartsOn: 'monday',
     currency: 'BRL',
     waterGoal: 2.0,
