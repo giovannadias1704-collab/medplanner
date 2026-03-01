@@ -6,8 +6,16 @@ if (!API_KEY) {
   console.error('⚠️ VITE_GEMINI_API_KEY não configurada no arquivo .env');
 }
 
-const genAI = new GoogleGenerativeAI(API_KEY);
-const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+let genAI;
+let model;
+
+try {
+  genAI = new GoogleGenerativeAI(API_KEY);
+  // ✅ CORRIGIDO: gemini-2.5-flash causava 503. Usando gemini-1.5-flash (estável)
+  model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+} catch (error) {
+  console.error('❌ Erro ao inicializar Gemini:', error);
+}
 
 // ─── Converte File para base64 ────────────────────────────────────────────────
 async function fileToBase64(file) {
@@ -47,14 +55,6 @@ async function extractPDFText(file) {
 }
 
 // ─── SISTEMA DE INTENÇÕES ─────────────────────────────────────────────────────
-// Actions disponíveis (alinhadas com executeAction no AIChat.jsx):
-//   ADD_BILL       → { description, amount, date }
-//   ADD_EVENT      → { title, date, time, description, eventType }
-//   ADD_TASK       → { title, date, priority, description }
-//   ADD_HOME_TASK  → { title, category, priority }
-//   LOG_WATER      → { amount }
-//   NONE           → só resposta em texto
-
 const INTENT_SYSTEM_PROMPT = `
 Você é o assistente do MedPlanner, um app de organização para estudantes de medicina brasileiros.
 
@@ -120,7 +120,8 @@ Usuário: "me explica o ciclo cardíaco"
 // ─── CHAT PRINCIPAL com histórico e contexto do usuário ──────────────────────
 export async function chatWithAI(message, userContext = {}, files = [], history = []) {
   try {
-    // Monta contexto do usuário
+    if (!model) throw new Error('Modelo Gemini não inicializado. Verifique a VITE_GEMINI_API_KEY.');
+
     const contextBlock = `
 === DADOS DO USUÁRIO ===
 ${userContext.name ? `Nome: ${userContext.name}` : ''}
@@ -132,15 +133,10 @@ Data atual: ${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-
 
     const systemAndContext = `${INTENT_SYSTEM_PROMPT}\n\n${contextBlock}`;
 
-    // Filtra histórico: remove mensagens de sistema/assistente iniciais até achar o primeiro 'user'
-    // O Gemini exige que o histórico comece com 'user' e alterne user/model corretamente
     const filteredHistory = history.filter(m => m.role === 'user' || m.role === 'assistant');
-
-    // Descarta tudo antes do primeiro 'user'
     const firstUserIndex = filteredHistory.findIndex(m => m.role === 'user');
     const trimmedHistory = firstUserIndex >= 0 ? filteredHistory.slice(firstUserIndex) : [];
 
-    // Garante alternância user/model — descarta duplicatas consecutivas do mesmo role
     const alternatedHistory = [];
     for (const msg of trimmedHistory) {
       const lastRole = alternatedHistory[alternatedHistory.length - 1]?.role;
@@ -150,12 +146,10 @@ Data atual: ${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-
       }
     }
 
-    // Se termina com 'model', remove o último (a msg atual vai ser o próximo 'user')
     if (alternatedHistory[alternatedHistory.length - 1]?.role === 'model') {
       alternatedHistory.pop();
     }
 
-    // Converte para formato Gemini e injeta system prompt no primeiro user
     const geminiHistory = alternatedHistory.map((msg, i) => ({
       role: msg.role,
       parts: [{
@@ -165,7 +159,6 @@ Data atual: ${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-
       }]
     }));
 
-    // Monta a mensagem atual com arquivos
     const currentParts = [];
 
     for (const file of files) {
@@ -183,21 +176,17 @@ Data atual: ${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-
       }
     }
 
-    // Se não há histórico, injeta o system prompt direto na mensagem atual
     if (geminiHistory.length === 0) {
       currentParts.push({ text: `${systemAndContext}\n\nUsuário: ${message || 'Analise os arquivos acima.'}` });
     } else {
       currentParts.push({ text: `Usuário: ${message || 'Analise os arquivos acima.'}` });
     }
 
-    // Inicia o chat com histórico validado e envia a mensagem atual
     const chat = model.startChat({ history: geminiHistory });
     const result = await chat.sendMessage(currentParts);
     const text = result.response.text();
 
-    // Tenta parsear como JSON (sistema de intenções)
     try {
-      // Remove possíveis blocos markdown que o modelo às vezes insere
       const cleaned = text.trim().replace(/^```json\s*/i, '').replace(/\s*```$/i, '');
       const parsed = JSON.parse(cleaned);
       return {
@@ -229,6 +218,8 @@ Data atual: ${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-
 
 // ─── FLASHCARDS ───────────────────────────────────────────────────────────────
 export async function generateFlashcards(topic, quantity = 15, pdfText = '') {
+  if (!model) throw new Error('Modelo Gemini não inicializado.');
+
   const sourceText = pdfText
     ? `\n\nConteúdo base para os flashcards:\n${pdfText.substring(0, 8000)}`
     : '';
@@ -261,6 +252,8 @@ Comece agora diretamente com o primeiro flashcard:`;
 
 // ─── CRONOGRAMA ───────────────────────────────────────────────────────────────
 export async function createSchedule(details) {
+  if (!model) throw new Error('Modelo Gemini não inicializado.');
+
   const prompt = `Crie um cronograma de estudos semanal para um estudante de medicina.
 
 Detalhes: ${details}
@@ -292,6 +285,8 @@ Terça-feira:
 
 // ─── ANÁLISE DE PBL ───────────────────────────────────────────────────────────
 export async function analyzePBL(pblText) {
+  if (!model) throw new Error('Modelo Gemini não inicializado.');
+
   const prompt = `Analise este caso PBL de medicina e estruture a abertura de caixa:
 
 ${pblText}
@@ -326,6 +321,7 @@ Retorne neste formato:
 
 // ─── TEXTO SIMPLES ────────────────────────────────────────────────────────────
 export async function generateText(prompt) {
+  if (!model) throw new Error('Modelo Gemini não inicializado. Verifique a VITE_GEMINI_API_KEY.');
   try {
     const result = await model.generateContent(prompt);
     return result.response.text();
