@@ -9,7 +9,7 @@ import {
   HeartIcon, BanknotesIcon, SparklesIcon, HomeIcon,
   ChartBarIcon, CogIcon, UserIcon,
   FaceSmileIcon, CreditCardIcon, WrenchScrewdriverIcon,
-  MapIcon, CalendarIcon,
+  MapIcon, CalendarIcon, AcademicCapIcon,
   ChevronLeftIcon, ChevronRightIcon,
 } from '@heroicons/react/24/outline';
 
@@ -166,11 +166,12 @@ const GROUPS = [
   {
     label: 'VIDA',
     items: [
-      { id: 'calendar', route: '/calendar',  label: 'Calendário',       Icon: CalendarIcon  },
-      { id: 'casa',     route: '/casa',      label: 'Casa',             Icon: HomeIcon      },
-      { id: 'finances', route: '/finances',  label: 'Finanças',         Icon: BanknotesIcon },
-      { id: 'health',   route: '/health',    label: 'Saúde Física',     Icon: HeartIcon     },
-      { id: 'wellness', route: '/wellness',  label: 'Bem-Estar Mental', Icon: FaceSmileIcon },
+      { id: 'calendar', route: '/calendar',  label: 'Calendário',       Icon: CalendarIcon    },
+      { id: 'study',    route: '/study',     label: 'Estudos',          Icon: AcademicCapIcon },
+      { id: 'casa',     route: '/casa',      label: 'Casa',             Icon: HomeIcon        },
+      { id: 'finances', route: '/finances',  label: 'Finanças',         Icon: BanknotesIcon   },
+      { id: 'health',   route: '/health',    label: 'Saúde Física',     Icon: HeartIcon       },
+      { id: 'wellness', route: '/wellness',  label: 'Bem-Estar Mental', Icon: FaceSmileIcon   },
     ],
   },
   {
@@ -213,15 +214,6 @@ function NavItem({ item, active, collapsed, onClick, T }) {
 }
 
 // ─── PageLayout ───────────────────────────────────────────────────────────────
-/**
- * @param {Object}          props
- * @param {React.ReactNode} props.children     - Conteúdo da página
- * @param {string}          props.title        - Título da página
- * @param {string}          props.subtitle     - Subtítulo opcional
- * @param {string}          props.emoji        - Emoji do header
- * @param {React.ReactNode} props.headerRight  - Botões extras no canto superior direito do conteúdo
- * @param {number}          props.urgentCount  - Mantido por compatibilidade (não exibido sem top bar)
- */
 export default function PageLayout({ children, title, subtitle, emoji, headerRight, urgentCount = 0 }) {
   const navigate  = useNavigate();
   const location  = useLocation();
@@ -409,7 +401,7 @@ export default function PageLayout({ children, title, subtitle, emoji, headerRig
         {/* ── MAIN ── */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
 
-          {/* ── Cabeçalho da página (título + ações) ── */}
+          {/* ── Cabeçalho da página ── */}
           {(title || emoji || headerRight) && (
             <div style={{
               padding: '22px 26px 0',
