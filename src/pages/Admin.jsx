@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { collection, getDocs, updateDoc, doc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../hooks/useAuth';
+import { useCoupon } from '../context/CouponContext'; // ← NOVO IMPORT
 import {
   CheckCircleIcon, XCircleIcon, ClockIcon, UserGroupIcon,
   ChartBarIcon, CogIcon, ShieldCheckIcon, DocumentTextIcon,
@@ -26,15 +27,14 @@ const T = {
   shadow:   '0 4px 12px rgba(120,100,80,0.07)',
   shadowMd: '0 8px 24px rgba(120,100,80,0.12)',
 
-  // Cores por seção ADM (mais sérias, menos pastéis)
-  exec:     { p: '#5C7A57', bg: '#EAF1E8', border: '#B8D4B2' },  // verde escuro
-  users:    { p: '#4A7A9B', bg: '#E8F0F5', border: '#A8C4D8' },  // azul slate
-  plans:    { p: '#8FA889', bg: '#EAF1E8', border: '#C5D9C2' },  // verde oliva
-  metrics:  { p: '#8CA3A3', bg: '#E9F0F0', border: '#B8CECE' },  // azul cinza
-  logs:     { p: '#9E8E6A', bg: '#F5EFE0', border: '#D4C49E' },  // dourado
-  support:  { p: '#B7A8B8', bg: '#F1EBF2', border: '#D0C4D1' },  // lavanda
-  config:   { p: '#CBBBA3', bg: '#F2ECE2', border: '#DDD0BC' },  // areia
-  security: { p: '#C48E6B', bg: '#F3E4D8', border: '#E8C4A8' },  // terracota
+  exec:     { p: '#5C7A57', bg: '#EAF1E8', border: '#B8D4B2' },
+  users:    { p: '#4A7A9B', bg: '#E8F0F5', border: '#A8C4D8' },
+  plans:    { p: '#8FA889', bg: '#EAF1E8', border: '#C5D9C2' },
+  metrics:  { p: '#8CA3A3', bg: '#E9F0F0', border: '#B8CECE' },
+  logs:     { p: '#9E8E6A', bg: '#F5EFE0', border: '#D4C49E' },
+  support:  { p: '#B7A8B8', bg: '#F1EBF2', border: '#D0C4D1' },
+  config:   { p: '#CBBBA3', bg: '#F2ECE2', border: '#DDD0BC' },
+  security: { p: '#C48E6B', bg: '#F3E4D8', border: '#E8C4A8' },
 
   danger:   { p: '#C0392B', bg: '#FDEAEA', border: '#F5C6C6' },
   warning:  { p: '#B7770D', bg: '#FEF3CD', border: '#F5D78E' },
@@ -180,7 +180,6 @@ function Card({ children, style: sx = {} }) {
   );
 }
 
-// ─── Mini bar chart (pure CSS) ────────────────────────────────────────────────
 function MiniBar({ data, color, maxVal }) {
   const max = maxVal || Math.max(...data.map(d => d.value), 1);
   return (
@@ -204,7 +203,7 @@ function MiniBar({ data, color, maxVal }) {
 
 // ─── Section Components ────────────────────────────────────────────────────────
 
-function ExecDashboard({ users, coupons }) {
+function ExecDashboard({ users, pendingCouponsCount }) {
   const totalUsers   = users.length;
   const activeUsers  = users.filter(u => u.subscription?.status === 'active' || u.subscriptionStatus === 'active').length;
   const paidUsers    = users.filter(u => ['student','premium','lifetime'].includes(u.subscription?.plan || u.subscriptionPlan)).length;
@@ -230,17 +229,15 @@ function ExecDashboard({ users, coupons }) {
         <Btn label="Exportar CSV" icon={ArrowDownTrayIcon} variant="ghost" small onClick={() => exportUsersCSV(users)} />
       } />
 
-      {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 12 }}>
         <KPI icon={<UserGroupIcon />}      label="Total de Usuários"    value={totalUsers}   sub="Todos os cadastros"        color={T.exec} />
         <KPI icon={<CheckCircleIcon />}    label="Usuários Ativos"      value={activeUsers}  sub="Com plano ativo"           color={T.plans} />
         <KPI icon={<ArrowTrendingUpIcon />}label="Taxa de Conversão"    value={`${convRate}%`} sub="Free → Pago"             color={T.users} />
         <KPI icon={<CurrencyDollarIcon />} label="Usuários Pagos"       value={paidUsers}    sub={`${freeUsers} no free`}   color={T.metrics} />
         <KPI icon={<ExclamationTriangleIcon/>}label="Bloqueados"         value={blockedUsers} sub="Acesso suspenso"          color={T.security} />
-        <KPI icon={<ClockIcon />}          label="Cupons Pendentes"     value={coupons.filter(c=>c.approvalStatus==='waiting').length} sub="Aguardando aprovação" color={T.logs} />
+        <KPI icon={<ClockIcon />}          label="Cupons Pendentes"     value={pendingCouponsCount} sub="Aguardando aprovação" color={T.logs} />
       </div>
 
-      {/* Distribuição de Planos */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         <Card>
           <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: T.text, marginBottom: 14 }}>
@@ -276,7 +273,6 @@ function ExecDashboard({ users, coupons }) {
         </Card>
       </div>
 
-      {/* Resumo de Saúde */}
       <Card>
         <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: T.text, marginBottom: 14 }}>
           🏥 Indicadores de Saúde do Sistema
@@ -285,7 +281,7 @@ function ExecDashboard({ users, coupons }) {
           {[
             { label: 'Usuários ativos / total', value: `${totalUsers > 0 ? ((activeUsers/totalUsers)*100).toFixed(0) : 0}%`, ok: activeUsers/totalUsers > 0.8 },
             { label: 'Taxa de conversão', value: `${convRate}%`, ok: convRate > 10 },
-            { label: 'Cupons aprovados', value: coupons.filter(c=>c.approvalStatus==='approved').length, ok: true },
+            { label: 'Cupons pendentes', value: pendingCouponsCount, ok: pendingCouponsCount === 0 },
             { label: 'Usuários bloqueados', value: blockedUsers, ok: blockedUsers === 0 },
           ].map(ind => (
             <div key={ind.label} style={{
@@ -340,7 +336,6 @@ function UsersPanel({ users, onUpdate, onLog }) {
         <Btn label="Exportar CSV" icon={ArrowDownTrayIcon} variant="ghost" small onClick={() => exportUsersCSV(users)} />
       } />
 
-      {/* Filters */}
       <Card style={{ padding: '14px 18px' }}>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
           <div style={{ flex: 1, minWidth: 200, display: 'flex', alignItems: 'center', gap: 8, background: T.input, borderRadius: 9, padding: '8px 12px', border: `1px solid ${T.border}` }}>
@@ -366,7 +361,6 @@ function UsersPanel({ users, onUpdate, onLog }) {
         </div>
       </Card>
 
-      {/* Table */}
       <Card style={{ padding: 0, overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -427,7 +421,6 @@ function UsersPanel({ users, onUpdate, onLog }) {
           )}
         </div>
 
-        {/* Pagination */}
         {totalPages > 1 && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 18px', borderTop: `1px solid ${T.border}` }}>
             <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: T.textSec }}>Página {page + 1} de {totalPages}</span>
@@ -445,7 +438,6 @@ function UsersPanel({ users, onUpdate, onLog }) {
         )}
       </Card>
 
-      {/* User Detail Modal */}
       {selected && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(60,50,40,0.4)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
           onClick={e => e.target === e.currentTarget && setSelected(null)}>
@@ -488,7 +480,13 @@ function UsersPanel({ users, onUpdate, onLog }) {
   );
 }
 
-function PlansPanel({ coupons, onUpdate, onLog }) {
+// ═══════════════════════════════════════════════════════════════════
+// PLANS PANEL - ATUALIZADO COM INTEGRAÇÃO COUPON CONTEXT
+// ═══════════════════════════════════════════════════════════════════
+function PlansPanel({ onLog }) {
+  // ← USAR HOOK DO COUPON CONTEXT
+  const { pendingCoupons, approvedCoupons, approveCoupon, rejectCoupon } = useCoupon();
+
   const PLANS = [
     { id: 'free',     name: 'Free',      price: 'R$ 0',    color: T.config,   features: ['Calendário básico','Tarefas (limite 10)','Finanças básicas'] },
     { id: 'student',  name: 'Estudante', price: 'R$ 19,90',color: T.plans,    features: ['Tudo do Free','Tarefas ilimitadas','Analytics básico','Estratégia'] },
@@ -496,9 +494,32 @@ function PlansPanel({ coupons, onUpdate, onLog }) {
     { id: 'lifetime', name: 'Vitalício', price: 'Único',   color: T.security, features: ['Tudo do Premium','Acesso vitalício','Sem cobranças futuras'] },
   ];
 
-  const pendingCoupons  = coupons.filter(c => c.approvalStatus === 'waiting');
-  const approvedCoupons = coupons.filter(c => c.approvalStatus === 'approved');
-  const rejectedCoupons = coupons.filter(c => c.approvalStatus === 'rejected');
+  const handleApprove = async (couponId, couponData) => {
+    if (!confirm(`Aprovar cupom para ${couponData.userEmail}?`)) return;
+    
+    const result = await approveCoupon(couponId);
+    
+    if (result.success) {
+      onLog(`Aprovou cupom de ${couponData.userEmail} — ${couponData.couponCode}`);
+      alert('✅ Cupom aprovado com sucesso!');
+    } else {
+      alert('❌ Erro ao aprovar cupom: ' + result.message);
+    }
+  };
+
+  const handleReject = async (couponId, couponData) => {
+    const reason = prompt('Motivo da rejeição (opcional):');
+    if (reason === null) return; // Cancelou
+    
+    const result = await rejectCoupon(couponId, reason);
+    
+    if (result.success) {
+      onLog(`Rejeitou cupom de ${couponData.userEmail}`);
+      alert('❌ Cupom rejeitado.');
+    } else {
+      alert('❌ Erro ao rejeitar cupom: ' + result.message);
+    }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -524,7 +545,7 @@ function PlansPanel({ coupons, onUpdate, onLog }) {
         ))}
       </div>
 
-      {/* Coupon requests */}
+      {/* Coupon requests PENDENTES */}
       {pendingCoupons.length > 0 && (
         <Card>
           <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 14, color: T.warning.p, marginBottom: 14 }}>
@@ -534,23 +555,17 @@ function PlansPanel({ coupons, onUpdate, onLog }) {
             {pendingCoupons.map(r => (
               <div key={r.id} style={{ background: T.warning.bg, border: `1px solid ${T.warning.border}`, borderRadius: 11, padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
                 <div>
-                  <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: T.text }}>{r.email}</div>
+                  <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 600, fontSize: 13, color: T.text }}>{r.userEmail}</div>
                   <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: T.textSec, marginTop: 2 }}>
-                    {r.requestedPlan} • Cupom: {r.requestedCoupon} • {r.requestedDiscount}% OFF → R$ {r.requestedPrice?.toFixed(2)}
+                    Cupom: {r.couponCode} ({r.couponLabel}) • Plano alvo: {r.targetPlan} • Final: R$ {r.finalPrice?.toFixed(2)}
+                  </div>
+                  <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 10, color: T.textSec, marginTop: 4 }}>
+                    Solicitado em: {r.createdAt?.toDate?.()?.toLocaleString('pt-BR') || 'Agora'}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <Btn label="Aprovar" icon={CheckCircleIcon} variant="success" small onClick={() => {
-                    if (!confirm(`Aprovar ${r.requestedDiscount}% para ${r.email}?`)) return;
-                    onUpdate('couponRequests', r.id, { approvalStatus: 'approved', approvedAt: new Date().toISOString() });
-                    onUpdate('users', r.uid, { subscriptionStatus: 'active', 'subscription.plan': r.requestedPlanId, 'subscription.status': 'active' });
-                    onLog(`Aprovou cupom de ${r.email} — ${r.requestedDiscount}% em ${r.requestedPlan}`);
-                  }} />
-                  <Btn label="Rejeitar" icon={XCircleIcon} variant="danger" small onClick={() => {
-                    if (!confirm(`Rejeitar ${r.email}?`)) return;
-                    onUpdate('couponRequests', r.id, { approvalStatus: 'rejected', rejectedAt: new Date().toISOString() });
-                    onLog(`Rejeitou cupom de ${r.email}`);
-                  }} />
+                  <Btn label="✅ Aprovar" icon={CheckCircleIcon} variant="success" small onClick={() => handleApprove(r.id, r)} />
+                  <Btn label="❌ Rejeitar" icon={XCircleIcon} variant="danger" small onClick={() => handleReject(r.id, r)} />
                 </div>
               </div>
             ))}
@@ -558,31 +573,46 @@ function PlansPanel({ coupons, onUpdate, onLog }) {
         </Card>
       )}
 
-      {/* Coupon history */}
-      {(approvedCoupons.length > 0 || rejectedCoupons.length > 0) && (
+      {/* Coupon history APROVADOS */}
+      {approvedCoupons.length > 0 && (
         <Card>
           <div style={{ fontFamily: "'Poppins',sans-serif", fontWeight: 700, fontSize: 14, color: T.text, marginBottom: 14 }}>
-            📋 Histórico de Cupons
+            📋 Histórico de Cupons Aprovados ({approvedCoupons.length})
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {[...approvedCoupons, ...rejectedCoupons]
-              .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
+            {approvedCoupons
+              .sort((a, b) => (b.approvedAt?.seconds || b.createdAt?.seconds || 0) - (a.approvedAt?.seconds || a.createdAt?.seconds || 0))
+              .slice(0, 20)
               .map(r => (
                 <div key={r.id} style={{
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                   padding: '10px 12px', borderRadius: 9,
-                  background: r.approvalStatus === 'approved' ? T.success.bg : T.danger.bg,
-                  border: `1px solid ${r.approvalStatus === 'approved' ? T.success.border : T.danger.border}`,
+                  background: T.success.bg,
+                  border: `1px solid ${T.success.border}`,
                 }}>
                   <div>
-                    <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, color: T.text }}>{r.email}</span>
+                    <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, fontWeight: 600, color: T.text }}>{r.userEmail}</span>
                     <span style={{ fontFamily: "'Poppins',sans-serif", fontSize: 11, color: T.textSec, marginLeft: 8 }}>
-                      {r.requestedPlan} • {r.requestedDiscount}% • R$ {r.requestedPrice?.toFixed(2)}
+                      {r.couponCode} • {r.targetPlan} • R$ {r.finalPrice?.toFixed(2)}
                     </span>
                   </div>
-                  <Badge label={r.approvalStatus === 'approved' ? '✅ Aprovado' : '❌ Rejeitado'} type={r.approvalStatus === 'approved' ? 'success' : 'danger'} />
+                  <Badge label="✅ Aprovado" type="success" />
                 </div>
               ))}
+          </div>
+        </Card>
+      )}
+
+      {pendingCoupons.length === 0 && approvedCoupons.length === 0 && (
+        <Card>
+          <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+            <div style={{ fontSize: 48, marginBottom: 12 }}>🎫</div>
+            <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 6 }}>
+              Nenhum cupom registrado ainda
+            </div>
+            <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 12, color: T.textSec }}>
+              Quando usuários aplicarem cupons, eles aparecerão aqui para aprovação.
+            </div>
           </div>
         </Card>
       )}
@@ -947,11 +977,11 @@ function downloadCSV(content, filename) {
 export default function Admin() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { pendingCoupons } = useCoupon(); // ← USAR HOOK AQUI TAMBÉM
 
   const [activeSection, setActiveSection] = useState('exec');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [allUsers, setAllUsers] = useState([]);
-  const [coupons, setCoupons] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -959,13 +989,11 @@ export default function Admin() {
 
   const loadData = async () => {
     try {
-      const [usersSnap, couponsSnap, logsSnap] = await Promise.all([
+      const [usersSnap, logsSnap] = await Promise.all([
         getDocs(collection(db, 'users')),
-        getDocs(collection(db, 'couponRequests')),
         getDocs(collection(db, 'auditLogs')).catch(() => ({ docs: [] })),
       ]);
       setAllUsers(usersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setCoupons(couponsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       setAuditLogs(logsSnap.docs.map(d => d.data()).sort((a,b) => b.timestamp?.localeCompare?.(a.timestamp) || 0));
       setLoading(false);
     } catch (err) {
@@ -997,7 +1025,7 @@ export default function Admin() {
   };
 
   const SW = sidebarCollapsed ? 60 : 210;
-  const pendingCount = coupons.filter(c => c.approvalStatus === 'waiting').length;
+  const pendingCount = pendingCoupons.length;
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: T.bg }}>
@@ -1020,7 +1048,6 @@ export default function Admin() {
 
       <div style={{ display: 'flex', minHeight: '100vh', background: T.bg }}>
 
-        {/* ── Admin Sidebar ── */}
         <aside style={{
           width: SW, minWidth: SW, maxWidth: SW,
           background: T.card, borderRight: `1px solid ${T.border}`,
@@ -1030,7 +1057,6 @@ export default function Admin() {
           overflow: 'hidden', transition: 'width 200ms ease, min-width 200ms ease',
           boxShadow: '2px 0 8px rgba(120,100,80,0.05)', zIndex: 30, flexShrink: 0,
         }}>
-          {/* Logo */}
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: 22, justifyContent: sidebarCollapsed ? 'center' : 'space-between' }}>
             {!sidebarCollapsed && (
               <button onClick={() => navigate('/dashboard')} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
@@ -1046,7 +1072,6 @@ export default function Admin() {
             </button>
           </div>
 
-          {/* Nav */}
           <div style={{ flex: 1, overflowY: 'auto' }}>
             {!sidebarCollapsed && (
               <div style={{ fontFamily: "'Poppins',sans-serif", fontSize: 10, fontWeight: 600, color: T.textSec, letterSpacing: '.7px', padding: '0 4px', marginBottom: 6, opacity: .65 }}>SEÇÕES</div>
@@ -1084,7 +1109,6 @@ export default function Admin() {
             })}
           </div>
 
-          {/* Back to app */}
           <button onClick={() => navigate('/dashboard')} className="admin-nav-btn" style={{
             display: 'flex', alignItems: 'center', gap: sidebarCollapsed ? 0 : 8,
             justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
@@ -1098,10 +1122,8 @@ export default function Admin() {
           </button>
         </aside>
 
-        {/* ── Main ── */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
 
-          {/* Header */}
           <header style={{
             height: 56, background: T.card, borderBottom: `1px solid ${T.border}`,
             display: 'flex', alignItems: 'center', padding: '0 24px', gap: 14,
@@ -1123,11 +1145,10 @@ export default function Admin() {
             </div>
           </header>
 
-          {/* Content */}
           <main style={{ flex: 1, padding: '24px 26px 80px', overflowY: 'auto' }} className="fade">
-            {activeSection === 'exec'     && <ExecDashboard users={allUsers} coupons={coupons} />}
+            {activeSection === 'exec'     && <ExecDashboard users={allUsers} pendingCouponsCount={pendingCount} />}
             {activeSection === 'users'    && <UsersPanel users={allUsers} onUpdate={(id, data) => handleUpdateDoc('users', id, data)} onLog={handleLog} />}
-            {activeSection === 'plans'    && <PlansPanel coupons={coupons} onUpdate={handleUpdateDoc} onLog={handleLog} />}
+            {activeSection === 'plans'    && <PlansPanel onLog={handleLog} />}
             {activeSection === 'metrics'  && <MetricsPanel users={allUsers} />}
             {activeSection === 'logs'     && <LogsPanel auditLogs={auditLogs} />}
             {activeSection === 'support'  && <SupportPanel />}
