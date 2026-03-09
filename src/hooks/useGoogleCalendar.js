@@ -9,8 +9,8 @@ export function useGoogleCalendar() {
   const [tokenClient, setTokenClient] = useState(null);
 
   // Suas credenciais - SUBSTITUA COM SEU CLIENT ID
-  const CLIENT_ID = 474690245421-aj9bdca51gob4vaa3ibb4o8nbcvqouah.apps.googleusercontent.com;
-  const API_KEY = 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
+  const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
   const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest';
   const SCOPES = 'https://www.googleapis.com/auth/calendar.events';
 
