@@ -12,7 +12,7 @@ let model;
 try {
   genAI = new GoogleGenerativeAI(API_KEY);
   // ✅ CORRIGIDO: gemini-2.5-flash causava 503. Usando gemini-1.5-flash (estável)
-  model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+ model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 } catch (error) {
   console.error('❌ Erro ao inicializar Gemini:', error);
 }
