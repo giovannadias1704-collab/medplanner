@@ -214,7 +214,7 @@ export default function Settings() {
       setProcessingPDF(true);
       const result = await processPDFWithAI(file);
       alert(result.savedCount > 0 ? `✅ ${result.savedCount} evento(s) extraído(s)!` : '⚠️ Nenhum evento identificado.');
-    } catch (err) { alert(`❌ Erro: ${err.message}`); }
+    } catch (err) { console.error(err); }
     finally { setProcessingPDF(false); }
   };
 

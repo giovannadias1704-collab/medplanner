@@ -476,7 +476,7 @@ export default function Casa() {
       await loadTasks();
       setShowAIModal(false); setAiInput('');
       alert(`✅ ${list.length} tarefa(s) adicionada(s)!`);
-    } catch (e) { alert(`❌ ${e.message}`); } finally { setLoading(false); }
+    } catch (e) { console.error(e); }
   };
 
   // ─── Derived stats ─────────────────────────────────────────────────────────
