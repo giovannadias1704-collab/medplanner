@@ -13,24 +13,11 @@ import './sentry';
 initTheme();
 
 // Registrar Service Worker para PWA
-if ('serviceWorker' in navigator) {
+if ('serviceWorker' in navigator && import.meta.env.DEV) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js')
-      .then((registration) => {
-        console.log('✅ Service Worker registrado com sucesso!');
-        console.log('📍 Scope:', registration.scope);
-        registration.addEventListener('updatefound', () => {
-          const newWorker = registration.installing;
-          newWorker.addEventListener('statechange', () => {
-            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              console.log('🔄 Nova versão disponível! Recarregue a página.');
-            }
-          });
-        });
-      })
-      .catch((error) => {
-        console.log('❌ Erro ao registrar Service Worker:', error);
-      });
+      .then(() => console.log('✅ Service Worker registrado'))
+      .catch(() => {});
   });
 }
 
