@@ -11,10 +11,24 @@ let model;
 
 try {
   genAI = new GoogleGenerativeAI(API_KEY);
-  // ✅ CORRIGIDO: gemini-2.5-flash causava 503. Usando gemini-1.5-flash (estável)
- model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 } catch (error) {
   console.error('❌ Erro ao inicializar Gemini:', error);
+}
+
+// ─── Trata erros da API de forma amigável ─────────────────────────────────────
+function friendlyError(error) {
+  const msg = error?.message || '';
+  if (msg.includes('429') || msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED')) {
+    return '⏳ A IA está temporariamente indisponível. Tente novamente em alguns minutos.';
+  }
+  if (msg.includes('404') || msg.includes('not found')) {
+    return '⚠️ Serviço de IA temporariamente indisponível.';
+  }
+  if (msg.includes('API key') || msg.includes('403')) {
+    return '🔑 Configuração da IA pendente. Contate o suporte.';
+  }
+  return '⚠️ A IA está indisponível no momento. Tente novamente em breve.';
 }
 
 // ─── Converte File para base64 ────────────────────────────────────────────────
@@ -117,10 +131,10 @@ Usuário: "me explica o ciclo cardíaco"
 }
 `;
 
-// ─── CHAT PRINCIPAL com histórico e contexto do usuário ──────────────────────
+// ─── CHAT PRINCIPAL ───────────────────────────────────────────────────────────
 export async function chatWithAI(message, userContext = {}, files = [], history = []) {
   try {
-    if (!model) throw new Error('Modelo Gemini não inicializado. Verifique a VITE_GEMINI_API_KEY.');
+    if (!model) throw new Error('Modelo não inicializado.');
 
     const contextBlock = `
 === DADOS DO USUÁRIO ===
@@ -197,12 +211,7 @@ Data atual: ${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-
         raw: parsed
       };
     } catch {
-      return {
-        success: true,
-        action: 'NONE',
-        actionData: null,
-        response: text
-      };
+      return { success: true, action: 'NONE', actionData: null, response: text };
     }
 
   } catch (error) {
@@ -211,129 +220,95 @@ Data atual: ${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-
       success: false,
       action: 'NONE',
       actionData: null,
-      response: `Erro ao processar: ${error.message}`
+      response: friendlyError(error),
     };
   }
 }
 
 // ─── FLASHCARDS ───────────────────────────────────────────────────────────────
 export async function generateFlashcards(topic, quantity = 15, pdfText = '') {
-  if (!model) throw new Error('Modelo Gemini não inicializado.');
+  if (!model) throw new Error('Modelo não inicializado.');
 
-  const sourceText = pdfText
-    ? `\n\nConteúdo base para os flashcards:\n${pdfText.substring(0, 8000)}`
-    : '';
-
+  const sourceText = pdfText ? `\n\nConteúdo base:\n${pdfText.substring(0, 8000)}` : '';
   const prompt = `Crie EXATAMENTE ${quantity} flashcards sobre: ${topic}${sourceText}
 
-REGRAS OBRIGATÓRIAS:
-- Retorne APENAS os flashcards, sem introdução, sem explicação, sem texto antes ou depois
-- Cada flashcard deve ter exatamente este formato, sem variações:
+REGRAS:
+- Retorne APENAS os flashcards, sem texto antes ou depois
+- Formato exato:
 
-FRENTE: [pergunta objetiva e clara]
-VERSO: [resposta concisa, máximo 3 linhas]
+FRENTE: [pergunta]
+VERSO: [resposta, máximo 3 linhas]
 
 ---
 
-- Foque em conceitos clínicos, fisiologia, farmacologia e o que cai em provas
-- Não numere os flashcards
-- Não adicione comentários entre eles
-
-Comece agora diretamente com o primeiro flashcard:`;
+Comece agora:`;
 
   try {
     const result = await model.generateContent(prompt);
-    const text = result.response.text();
-    return { success: true, action: 'NONE', actionData: null, response: text };
+    return { success: true, action: 'NONE', actionData: null, response: result.response.text() };
   } catch (error) {
-    return { success: false, action: 'NONE', actionData: null, response: `Erro: ${error.message}` };
+    return { success: false, action: 'NONE', actionData: null, response: friendlyError(error) };
   }
 }
 
 // ─── CRONOGRAMA ───────────────────────────────────────────────────────────────
 export async function createSchedule(details) {
-  if (!model) throw new Error('Modelo Gemini não inicializado.');
+  if (!model) throw new Error('Modelo não inicializado.');
 
   const prompt = `Crie um cronograma de estudos semanal para um estudante de medicina.
-
 Detalhes: ${details}
-
-FORMATO OBRIGATÓRIO (retorne APENAS o cronograma, sem texto antes):
 
 📅 CRONOGRAMA SEMANAL
 
 Segunda-feira:
 • 07:00 - 09:00 | [atividade]
-• ...
-
-Terça-feira:
-• ...
 
 [continue para todos os dias]
 
-⚠️ Dicas de execução:
-• [3 dicas práticas]`;
+⚠️ Dicas: [3 dicas práticas]`;
 
   try {
     const result = await model.generateContent(prompt);
-    const text = result.response.text();
-    return { success: true, action: 'NONE', actionData: null, response: text };
+    return { success: true, action: 'NONE', actionData: null, response: result.response.text() };
   } catch (error) {
-    return { success: false, action: 'NONE', actionData: null, response: `Erro: ${error.message}` };
+    return { success: false, action: 'NONE', actionData: null, response: friendlyError(error) };
   }
 }
 
 // ─── ANÁLISE DE PBL ───────────────────────────────────────────────────────────
 export async function analyzePBL(pblText) {
-  if (!model) throw new Error('Modelo Gemini não inicializado.');
+  if (!model) throw new Error('Modelo não inicializado.');
 
-  const prompt = `Analise este caso PBL de medicina e estruture a abertura de caixa:
+  const prompt = `Analise este caso PBL de medicina:
 
 ${pblText}
 
-Retorne neste formato:
-
 🔍 PALAVRAS-CHAVE
-• [liste os termos relevantes do caso]
-
 ❓ PROBLEMAS IDENTIFICADOS
-• [liste os problemas/queixas]
-
 🎯 HIPÓTESES DIAGNÓSTICAS
-1. [hipótese principal]
-2. [hipótese alternativa]
-
 📚 OBJETIVOS DE APRENDIZAGEM
-1. [objetivo claro e específico]
-2. ...
-
-🔗 CORRELAÇÕES
-• [correlações fisiológicas/clínicas relevantes]`;
+🔗 CORRELAÇÕES`;
 
   try {
     const result = await model.generateContent(prompt);
-    const text = result.response.text();
-    return { success: true, action: 'NONE', actionData: null, response: text };
+    return { success: true, action: 'NONE', actionData: null, response: result.response.text() };
   } catch (error) {
-    return { success: false, action: 'NONE', actionData: null, response: `Erro: ${error.message}` };
+    return { success: false, action: 'NONE', actionData: null, response: friendlyError(error) };
   }
 }
 
 // ─── TEXTO SIMPLES ────────────────────────────────────────────────────────────
 export async function generateText(prompt) {
-  if (!model) throw new Error('Modelo Gemini não inicializado. Verifique a VITE_GEMINI_API_KEY.');
+  if (!model) {
+    throw new Error('⚠️ Serviço de IA temporariamente indisponível.');
+  }
   try {
     const result = await model.generateContent(prompt);
     return result.response.text();
   } catch (error) {
-    throw error;
+    // Lança erro amigável em vez do técnico
+    throw new Error(friendlyError(error));
   }
 }
 
-export default {
-  generateText,
-  chatWithAI,
-  generateFlashcards,
-  createSchedule,
-  analyzePBL
-};
+export default { generateText, chatWithAI, generateFlashcards, createSchedule, analyzePBL };
