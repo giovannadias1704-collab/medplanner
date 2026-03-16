@@ -133,59 +133,97 @@ async function imageToBase64(file) {
 // ═══════════════════════════════════════════════════════════════════
 // ABA IMPORTAR
 // ═══════════════════════════════════════════════════════════════════
+const GCAL_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+const GCAL_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
+
 function ImportTab({ onSaveEvents }) {
-  const [gcalStatus, setGcalStatus] = useState('idle'); // idle | loading | success | error
+  const [gcalStatus, setGcalStatus] = useState('idle'); // idle | connecting | loading | success | error
   const [gcalEvents, setGcalEvents] = useState([]);
   const [gcalSelected, setGcalSelected] = useState([]);
   const [gcalError, setGcalError] = useState('');
+  const [gcalToken, setGcalToken] = useState(null);
 
-  const [fileStatus, setFileStatus] = useState('idle'); // idle | loading | preview | saving | success | error
+  const [fileStatus, setFileStatus] = useState('idle');
   const [fileEvents, setFileEvents] = useState([]);
   const [fileSelected, setFileSelected] = useState([]);
   const [fileError, setFileError] = useState('');
   const [fileName, setFileName] = useState('');
   const fileRef = useRef(null);
 
-  // ── Google Calendar ──────────────────────────────────────────────
-  const syncGoogleCalendar = async () => {
-    setGcalStatus('loading');
+  // ── Carrega Google Identity Services ────────────────────────────
+  useEffect(() => {
+    if (document.getElementById('google-gsi')) return;
+    const script = document.createElement('script');
+    script.id = 'google-gsi';
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    document.head.appendChild(script);
+  }, []);
+
+  // ── Solicita token OAuth e busca eventos ─────────────────────────
+  const syncGoogleCalendar = () => {
+    if (!GCAL_CLIENT_ID) {
+      setGcalError('VITE_GOOGLE_CLIENT_ID não configurado no Vercel.');
+      setGcalStatus('error');
+      return;
+    }
+    setGcalStatus('connecting');
     setGcalError('');
-    setGcalEvents([]);
+
+    const tokenClient = window.google?.accounts?.oauth2?.initTokenClient({
+      client_id: GCAL_CLIENT_ID,
+      scope: GCAL_SCOPE,
+      callback: async (tokenResponse) => {
+        if (tokenResponse.error) {
+          setGcalError('Permissão negada. Tente novamente.');
+          setGcalStatus('error');
+          return;
+        }
+        setGcalToken(tokenResponse.access_token);
+        await fetchCalendarEvents(tokenResponse.access_token);
+      },
+    });
+
+    if (!tokenClient) {
+      setGcalError('Google Identity Services não carregou. Recarregue a página.');
+      setGcalStatus('error');
+      return;
+    }
+
+    tokenClient.requestAccessToken({ prompt: 'consent' });
+  };
+
+  const fetchCalendarEvents = async (token) => {
+    setGcalStatus('loading');
     try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          messages: [{
-            role: 'user',
-            content: `Liste os eventos do Google Calendar dos próximos 30 dias. 
-Retorne APENAS um array JSON válido, sem markdown, com este formato exato:
-[{"title":"Nome do evento","date":"2026-03-20","time":"14:00","description":"descrição","location":"local"}]
-Se não houver eventos, retorne [].`
-          }],
-          mcp_servers: [{
-            type: 'url',
-            url: 'https://gcal.mcp.claude.com/mcp',
-            name: 'google-calendar'
-          }]
-        })
-      });
+      const now = new Date().toISOString();
+      const future = new Date();
+      future.setDate(future.getDate() + 30);
+      const timeMax = future.toISOString();
 
-      const data = await response.json();
-      const textBlock = data.content?.find(b => b.type === 'text');
-      const raw = textBlock?.text || '[]';
+      const res = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${now}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime&maxResults=50`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
 
-      const s = raw.indexOf('['), e = raw.lastIndexOf(']');
-      const parsed = s !== -1 ? JSON.parse(raw.substring(s, e + 1)) : [];
+      if (!res.ok) throw new Error('Erro ao buscar eventos');
+      const data = await res.json();
 
-      setGcalEvents(parsed);
-      setGcalSelected(parsed.map((_, i) => i));
+      const events = (data.items || []).map(item => ({
+        title: item.summary || 'Sem título',
+        date: (item.start?.date || item.start?.dateTime || '').split('T')[0],
+        time: item.start?.dateTime ? item.start.dateTime.split('T')[1]?.substring(0, 5) : '',
+        description: item.description || '',
+        location: item.location || '',
+        googleId: item.id,
+      })).filter(e => e.date);
+
+      setGcalEvents(events);
+      setGcalSelected(events.map((_, i) => i));
       setGcalStatus('success');
     } catch (err) {
       console.error(err);
-      setGcalError('Não foi possível conectar ao Google Calendar. Verifique se está conectado nas configurações.');
+      setGcalError('Erro ao buscar eventos do Google Calendar.');
       setGcalStatus('error');
     }
   };
@@ -193,9 +231,9 @@ Se não houver eventos, retorne [].`
   const importGcalEvents = async () => {
     const toImport = gcalSelected.map(i => gcalEvents[i]).filter(Boolean);
     const events = toImport.map(ev => ({
-      title: ev.title || ev.summary || 'Evento',
-      date: ev.date?.split('T')[0] || todayStr(),
-      time: ev.time || ev.start?.dateTime?.split('T')[1]?.substring(0, 5) || '',
+      title: ev.title,
+      date: ev.date,
+      time: ev.time || '',
       description: ev.description || '',
       location: ev.location || '',
       type: 'event',
@@ -210,6 +248,7 @@ Se não houver eventos, retorne [].`
     setGcalStatus('idle');
     setGcalEvents([]);
     setGcalSelected([]);
+    setGcalToken(null);
   };
 
   // ── PDF / Imagem ─────────────────────────────────────────────────
@@ -339,13 +378,15 @@ Se não encontrar nada, retorne [].`;
           </div>
           <button
             onClick={syncGoogleCalendar}
-            disabled={gcalStatus === 'loading'}
+            disabled={gcalStatus === 'connecting' || gcalStatus === 'loading'}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm text-white transition-all disabled:opacity-60"
-            style={{ background: gcalStatus === 'loading' ? '#9ca3af' : '#4285f4' }}
+            style={{ background: (gcalStatus === 'connecting' || gcalStatus === 'loading') ? '#9ca3af' : '#4285f4' }}
           >
-            {gcalStatus === 'loading'
+            {gcalStatus === 'connecting'
+              ? <><ArrowPathIcon className="h-4 w-4 animate-spin" /> Conectando...</>
+              : gcalStatus === 'loading'
               ? <><ArrowPathIcon className="h-4 w-4 animate-spin" /> Buscando...</>
-              : <><ArrowPathIcon className="h-4 w-4" /> Sincronizar</>}
+              : <><ArrowPathIcon className="h-4 w-4" /> Conectar Google</>}
           </button>
         </div>
 
@@ -353,7 +394,7 @@ Se não encontrar nada, retorne [].`;
           <div className="p-4 bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800">
             <p className="text-sm text-red-600 dark:text-red-400">❌ {gcalError}</p>
             <p className="text-xs text-red-500 mt-1">
-              Para conectar, acesse <strong>Configurações → Integrações</strong> e conecte sua conta Google.
+              Certifique-se de permitir o acesso quando a janela do Google aparecer.
             </p>
           </div>
         )}
