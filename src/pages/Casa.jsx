@@ -366,7 +366,7 @@ export default function Casa() {
 
   const loadTasks = async () => {
     try {
-      const ref = collection(db, 'homeTasks');
+      const ref = collection(db, 'users', user.uid, 'homeTasks');
       const q = query(ref, where('userId', '==', user.uid));
       const snap = await getDocs(q);
       const data = [];
@@ -378,7 +378,7 @@ export default function Casa() {
   const saveTask = async (form) => {
     try {
       const today = new Date().toISOString().split('T')[0];
-      await addDoc(collection(db, 'homeTasks'), {
+      await addDoc(collection(db, 'users', user.uid, 'homeTasks'), {
         ...form,
         estimatedTime: Number(form.estimatedTime) || 0,
         customInterval: Number(form.customInterval) || 0,
@@ -401,7 +401,7 @@ export default function Casa() {
     const history = task.executionHistory || [];
     if (nowCompleted) history.push(today);
     try {
-      await updateDoc(doc(db, 'homeTasks', task.id), {
+      await updateDoc(doc(db, 'users', user.uid, 'homeTasks', task.id), {
         completed: nowCompleted,
         lastCompleted: nowCompleted ? today : task.lastCompleted,
         executionHistory: history,
@@ -412,18 +412,18 @@ export default function Casa() {
 
   const deleteTask = async (id) => {
     if (!window.confirm('Deseja excluir esta tarefa?')) return;
-    try { await deleteDoc(doc(db, 'homeTasks', id)); loadTasks(); } catch (e) { console.error(e); }
+    try { await deleteDoc(doc(db, 'users', user.uid, 'homeTasks', id)); loadTasks(); } catch (e) { console.error(e); }
   };
 
   const toggleSubtask = async (task, subIndex) => {
     const subs = [...(task.subtasks || [])];
     subs[subIndex] = { ...subs[subIndex], done: !subs[subIndex].done };
-    try { await updateDoc(doc(db, 'homeTasks', task.id), { subtasks: subs }); loadTasks(); } catch (e) { console.error(e); }
+    try { await updateDoc(doc(db, 'users', user.uid, 'homeTasks', task.id), { subtasks: subs }); loadTasks(); } catch (e) { console.error(e); }
   };
 
   const saveTimer = async (task, minutes) => {
     try {
-      await updateDoc(doc(db, 'homeTasks', task.id), { actualTime: minutes });
+      await updateDoc(doc(db, 'users', user.uid, 'homeTasks', task.id), { actualTime: minutes });
       setTimerTask(null);
       loadTasks();
     } catch (e) { console.error(e); }
@@ -434,7 +434,7 @@ export default function Casa() {
     if (!taskList) return;
     const today = new Date().toISOString().split('T')[0];
     for (const t of taskList) {
-      await addDoc(collection(db, 'homeTasks'), {
+      await addDoc(collection(db, 'users', user.uid, 'homeTasks'), {
         ...t,
         subtasks: (t.subtasks || []).map(s => ({ title: s, done: false })),
         completed: false, lastCompleted: null, actualTime: null,
@@ -466,7 +466,7 @@ export default function Casa() {
       const list = await generateTasksWithGemini(aiInput);
       const today = new Date().toISOString().split('T')[0];
       for (const t of list) {
-        await addDoc(collection(db, 'homeTasks'), {
+        await addDoc(collection(db, 'users', user.uid, 'homeTasks'), {
           title: t.title, environment: t.environment || 'Outros', priority: t.priority || 'média',
           frequency: t.frequency || 'semanal', estimatedTime: t.estimatedTime || 0,
           subtasks: [], completed: false, lastCompleted: null, actualTime: null,
