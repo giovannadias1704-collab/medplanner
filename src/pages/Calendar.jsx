@@ -775,14 +775,15 @@ function EventModal({ onClose, onSave, initial = null, defaultDate = '' }) {
 function EventChip({ event, onClick, compact = false }) {
   const type = TYPE_MAP[event.type] || TYPE_MAP.event;
   return (
-    <button onClick={() => onClick(event)}
-      className={`w-full text-left rounded-lg px-2 ${compact ? 'py-0.5' : 'py-1'} text-xs font-medium truncate transition-all hover:opacity-80`}
+    <div onClick={() => onClick(event)} role="button" tabIndex={0}
+      onKeyDown={e => e.key === 'Enter' && onClick(event)}
+      className={`w-full text-left rounded-lg px-2 ${compact ? 'py-0.5' : 'py-1'} text-xs font-medium truncate transition-all hover:opacity-80 cursor-pointer`}
       style={{ backgroundColor: (event.color || type.color) + '25', color: event.color || type.color, borderLeft: `3px solid ${event.color || type.color}` }}>
       {event.completed && '✓ '}
       {!compact && <span className="mr-1">{type.emoji}</span>}
       {event.time && <span className="mr-1 opacity-70">{event.time}</span>}
       {event.title}
-    </button>
+    </div>
   );
 }
 
