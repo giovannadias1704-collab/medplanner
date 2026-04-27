@@ -1,314 +1,507 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+// Configurações globais
+const CONFIG = {
+  MODEL: 'gemini-2.0-flash-exp',
+  TIMEOUT: 30000,
+  MAX_RETRIES: 3,
+  RETRY_BACKOFF: 1000,
+  CACHE_EXPIRATION: 60 * 60 * 1000,
+  RATE_LIMIT_WINDOW: 60 * 1000,
+  MAX_REQUESTS_PER_WINDOW: 10,
+  MAX_HISTORY_SIZE: 50,
+  MAX_INPUT_LENGTH: 8000,
+  MAX_FILE_SIZE: 20 * 1024 * 1024,
+  SYSTEM_PROMPT: `Você é um assistente para MedPlanner, app para estudantes de Medicina.
 
-if (!API_KEY) {
-  console.error('⚠️ VITE_GEMINI_API_KEY não configurada no arquivo .env');
-}
+INTENÇÕES PRINCIPAIS:
+- ADD_BILL: Conta/fatura médica. JSON: {type: 'bill', amount: number, description: string, date: string}
+- ADD_EVENT: Evento (consulta, aula). JSON: {type: 'event', title: string, date: string, time: string}
+- ADD_TASK: Tarefa de estudo. JSON: {type: 'task', title: string, dueDate: string, priority: 'low|med|high'}
+- ADD_HOME_TASK: Tarefa doméstica. JSON: {type: 'home_task', title: string, dueDate: string}
+- LOG_WATER: Água ingerida. JSON: {type: 'water', amount: number, time: string}
+- NONE: Conversa normal.
 
-let genAI;
-let model;
+Responda em Português Brasileiro. Para intenções, retorne JSON válido no início.`
+};
 
-try {
-  genAI = new GoogleGenerativeAI(API_KEY);
-model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-lite' });
-} catch (error) {
-  console.error('❌ Erro ao inicializar Gemini:', error);
-}
-
-// ─── Trata erros da API de forma amigável ─────────────────────────────────────
-function friendlyError(error) {
-  const msg = error?.message || '';
-  if (msg.includes('429') || msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED')) {
-    return '⏳ A IA está temporariamente indisponível. Tente novamente em alguns minutos.';
-  }
-  if (msg.includes('404') || msg.includes('not found')) {
-    return '⚠️ Serviço de IA temporariamente indisponível.';
-  }
-  if (msg.includes('API key') || msg.includes('403')) {
-    return '🔑 Configuração da IA pendente. Contate o suporte.';
-  }
-  return '⚠️ A IA está indisponível no momento. Tente novamente em breve.';
-}
-
-// ─── Converte File para base64 ────────────────────────────────────────────────
-async function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result.split(',')[1]);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-// ─── Extrai texto de PDF ──────────────────────────────────────────────────────
-async function extractPDFText(file) {
-  if (!window.pdfjsLib) {
-    await new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-      script.onload = resolve;
-      script.onerror = reject;
-      document.head.appendChild(script);
-    });
-    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+class GeminiValidation {
+  static validateApiKey(key) {
+    if (!key || typeof key !== 'string' || key.length < 10) {
+      throw new Error('API Key inválida ou ausente');
+    }
+    return true;
   }
 
-  const arrayBuffer = await file.arrayBuffer();
-  const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-
-  let fullText = '';
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const textContent = await page.getTextContent();
-    fullText += textContent.items.map(item => item.str).join(' ') + '\n';
+  static validateInput(text) {
+    if (typeof text !== 'string') throw new Error('Entrada deve ser string');
+    if (text.length > CONFIG.MAX_INPUT_LENGTH) throw new Error('Entrada muito longa');
+    if (!text.trim()) throw new Error('Entrada vazia');
+    return text.trim();
   }
 
-  return fullText;
-}
+  static validateFile(file) {
+    if (!file || !(file instanceof File)) throw new Error('Arquivo inválido');
+    if (file.size > CONFIG.MAX_FILE_SIZE) throw new Error('Arquivo muito grande');
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+    if (!allowedTypes.includes(file.type)) throw new Error('Tipo de arquivo não suportado');
+    return file;
+  }
 
-// ─── SISTEMA DE INTENÇÕES ─────────────────────────────────────────────────────
-const INTENT_SYSTEM_PROMPT = `
-Você é o assistente do MedPlanner, um app de organização para estudantes de medicina brasileiros.
-
-Você tem MEMÓRIA da conversa — sempre leve em conta o que foi dito anteriormente para dar respostas coerentes e contextuais.
-
-Você pode executar ações no app quando o usuário pedir.
-
-QUANDO EXECUTAR AÇÕES:
-- Usuário mencionar gasto, despesa, conta, pagamento → ADD_BILL
-- Usuário mencionar evento, compromisso, aula, prova, consulta → ADD_EVENT
-- Usuário mencionar tarefa, afazer, to-do, lembrete de atividade → ADD_TASK
-- Usuário mencionar tarefa doméstica, limpar, lavar, arrumar → ADD_HOME_TASK
-- Usuário mencionar que bebeu água, hidratação → LOG_WATER
-- Qualquer outro assunto → NONE
-
-FORMATO OBRIGATÓRIO DA RESPOSTA:
-Sempre responda em JSON válido, sem markdown, sem backticks, exatamente assim:
-
-{
-  "action": "NONE" | "ADD_BILL" | "ADD_EVENT" | "ADD_TASK" | "ADD_HOME_TASK" | "LOG_WATER",
-  "actionData": { ... } ou null,
-  "message": "sua resposta para o usuário aqui"
-}
-
-EXEMPLOS:
-
-Usuário: "gastei 35 reais no almoço"
-{
-  "action": "ADD_BILL",
-  "actionData": { "description": "Almoço", "amount": 35, "date": "hoje" },
-  "message": "✅ Adicionei R$ 35,00 em Finanças!"
-}
-
-Usuário: "tenho prova de anatomia na sexta às 8h"
-{
-  "action": "ADD_EVENT",
-  "actionData": { "title": "Prova de Anatomia", "date": "sexta-feira", "time": "08:00", "eventType": "exam", "description": "Prova" },
-  "message": "✅ Prova de Anatomia adicionada na agenda para sexta às 8h!"
-}
-
-Usuário: "adiciona tarefa: revisar farmacologia"
-{
-  "action": "ADD_TASK",
-  "actionData": { "title": "Revisar farmacologia", "date": "hoje", "priority": "média" },
-  "message": "✅ Tarefa criada!"
-}
-
-Usuário: "bebi 500ml de água"
-{
-  "action": "LOG_WATER",
-  "actionData": { "amount": 0.5 },
-  "message": "💧 Registrei 500ml de água!"
-}
-
-Usuário: "me explica o ciclo cardíaco"
-{
-  "action": "NONE",
-  "actionData": null,
-  "message": "O ciclo cardíaco é composto por... [resposta completa aqui]"
-}
-`;
-
-// ─── CHAT PRINCIPAL ───────────────────────────────────────────────────────────
-export async function chatWithAI(message, userContext = {}, files = [], history = []) {
-  try {
-    if (!model) throw new Error('Modelo não inicializado.');
-
-    const contextBlock = `
-=== DADOS DO USUÁRIO ===
-${userContext.name ? `Nome: ${userContext.name}` : ''}
-${userContext.finances ? `Finanças: Total pendente R$${userContext.finances.totalPending || 0}, ${userContext.finances.pendingCount || 0} contas a pagar` : ''}
-${userContext.events ? `Próximos eventos: ${userContext.events.map(e => e.title).join(', ')}` : ''}
-${userContext.tasks ? `Tarefas pendentes: ${userContext.tasks.pending}` : ''}
-Data atual: ${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
-========================`;
-
-    const systemAndContext = `${INTENT_SYSTEM_PROMPT}\n\n${contextBlock}`;
-
-    const filteredHistory = history.filter(m => m.role === 'user' || m.role === 'assistant');
-    const firstUserIndex = filteredHistory.findIndex(m => m.role === 'user');
-    const trimmedHistory = firstUserIndex >= 0 ? filteredHistory.slice(firstUserIndex) : [];
-
-    const alternatedHistory = [];
-    for (const msg of trimmedHistory) {
-      const lastRole = alternatedHistory[alternatedHistory.length - 1]?.role;
-      const currentRole = msg.role === 'assistant' ? 'model' : 'user';
-      if (currentRole !== lastRole) {
-        alternatedHistory.push({ role: currentRole, content: msg.content });
+  static sanitizeData(data) {
+    if (typeof data === 'string') {
+      return data.replace(/[<>]/g, '').trim();
+    }
+    if (typeof data === 'object') {
+      const sanitized = {};
+      for (const [k, v] of Object.entries(data)) {
+        sanitized[k] = this.sanitizeData(v);
       }
+      return sanitized;
     }
+    return data;
+  }
 
-    if (alternatedHistory[alternatedHistory.length - 1]?.role === 'model') {
-      alternatedHistory.pop();
-    }
-
-    const geminiHistory = alternatedHistory.map((msg, i) => ({
-      role: msg.role,
-      parts: [{
-        text: (i === 0 && msg.role === 'user')
-          ? `${systemAndContext}\n\nUsuário: ${msg.content}`
-          : msg.content
-      }]
-    }));
-
-    const currentParts = [];
-
-    for (const file of files) {
-      if (file.type.startsWith('image/')) {
-        const base64 = await fileToBase64(file);
-        currentParts.push({ inlineData: { mimeType: file.type, data: base64 } });
-        currentParts.push({ text: `[Imagem anexada: ${file.name}]` });
-      } else if (file.type === 'application/pdf') {
-        try {
-          const pdfText = await extractPDFText(file);
-          currentParts.push({ text: `[Conteúdo do PDF "${file.name}"]\n${pdfText.substring(0, 10000)}\n[Fim do PDF]` });
-        } catch {
-          currentParts.push({ text: `[PDF: ${file.name} - erro ao extrair texto]` });
-        }
-      }
-    }
-
-    if (geminiHistory.length === 0) {
-      currentParts.push({ text: `${systemAndContext}\n\nUsuário: ${message || 'Analise os arquivos acima.'}` });
-    } else {
-      currentParts.push({ text: `Usuário: ${message || 'Analise os arquivos acima.'}` });
-    }
-
-    const chat = model.startChat({ history: geminiHistory });
-    const result = await chat.sendMessage(currentParts);
-    const text = result.response.text();
-
+  static isLocalStorageAvailable() {
     try {
-      const cleaned = text.trim().replace(/^```json\s*/i, '').replace(/\s*```$/i, '');
-      const parsed = JSON.parse(cleaned);
-      return {
-        success: true,
-        action: parsed.action || 'NONE',
-        actionData: parsed.actionData || null,
-        response: parsed.message || text,
-        raw: parsed
+      localStorage.setItem('test', 'test');
+      localStorage.removeItem('test');
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+}
+
+class GeminiCache {
+  constructor() {
+    this.prefix = 'gemini_cache_';
+    this.cleanup();
+  }
+
+  cleanup() {
+    if (!GeminiValidation.isLocalStorageAvailable()) return;
+    try {
+      const keys = Object.keys(localStorage).filter(k => k.startsWith(this.prefix));
+      const now = Date.now();
+      keys.forEach(key => {
+        const item = JSON.parse(localStorage.getItem(key));
+        if (now - item.timestamp > CONFIG.CACHE_EXPIRATION) {
+          localStorage.removeItem(key);
+        }
+      });
+    } catch (e) {
+      console.warn('Falha na limpeza de cache:', e);
+    }
+  }
+
+  get(key) {
+    if (!GeminiValidation.isLocalStorageAvailable()) return null;
+    try {
+      const item = localStorage.getItem(this.prefix + key);
+      if (!item) return null;
+      const parsed = JSON.parse(item);
+      if (Date.now() - parsed.timestamp > CONFIG.CACHE_EXPIRATION) {
+        localStorage.removeItem(this.prefix + key);
+        return null;
+      }
+      return parsed.data;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  set(key, data) {
+    if (!GeminiValidation.isLocalStorageAvailable()) return;
+    try {
+      const item = {
+        data: GeminiValidation.sanitizeData(data),
+        timestamp: Date.now()
       };
-    } catch {
-      return { success: true, action: 'NONE', actionData: null, response: text };
+      localStorage.setItem(this.prefix + key, JSON.stringify(item));
+    } catch (e) {
+      console.warn('Falha ao salvar cache:', e);
+    }
+  }
+
+  clear() {
+    if (!GeminiValidation.isLocalStorageAvailable()) return;
+    try {
+      const keys = Object.keys(localStorage).filter(k => k.startsWith(this.prefix));
+      keys.forEach(k => localStorage.removeItem(k));
+    } catch (e) {
+      console.warn('Falha ao limpar cache:', e);
+    }
+  }
+
+  getHistory(userId = 'default') {
+    const key = `history_${userId}`;
+    const history = this.get(key) || [];
+    return history.slice(-CONFIG.MAX_HISTORY_SIZE);
+  }
+
+  updateHistory(userId, message) {
+    const key = `history_${userId}`;
+    let history = this.getHistory(userId);
+    history.push(message);
+    if (history.length > CONFIG.MAX_HISTORY_SIZE * 2) {
+      history = history.slice(-CONFIG.MAX_HISTORY_SIZE);
+    }
+    this.set(key, history);
+  }
+}
+
+class GeminiRateLimiter {
+  constructor() {
+    this.requests = new Map();
+  }
+
+  canProceed(actionType) {
+    const now = Date.now();
+    const windowStart = now - CONFIG.RATE_LIMIT_WINDOW;
+
+    if (this.requests.has(actionType)) {
+      const reqs = this.requests.get(actionType);
+      this.requests.set(actionType, reqs.filter(ts => ts > windowStart));
     }
 
-  } catch (error) {
-    console.error('❌ Erro Gemini:', error);
+    const count = this.requests.get(actionType)?.length || 0;
+    if (count >= CONFIG.MAX_REQUESTS_PER_WINDOW) {
+      return false;
+    }
+
+    if (!this.requests.has(actionType)) {
+      this.requests.set(actionType, []);
+    }
+    this.requests.get(actionType).push(now);
+    return true;
+  }
+
+  getStats(actionType) {
     return {
-      success: false,
-      action: 'NONE',
-      actionData: null,
-      response: friendlyError(error),
+      count: this.requests.get(actionType)?.length || 0,
+      window: CONFIG.RATE_LIMIT_WINDOW
     };
   }
 }
 
-// ─── FLASHCARDS ───────────────────────────────────────────────────────────────
-export async function generateFlashcards(topic, quantity = 15, pdfText = '') {
-  if (!model) throw new Error('Modelo não inicializado.');
+class GeminiService {
+  constructor() {
+    this.apiKey = this._getApiKey();
+    this.genAI = null;
+    this.cache = new GeminiCache();
+    this.rateLimiter = new GeminiRateLimiter();
+    this.stats = {
+      totalRequests: 0,
+      successful: 0,
+      failed: 0,
+      totalTokens: 0,
+      avgResponseTime: 0
+    };
+    this.logs = [];
+    this.userContext = {};
+    this.init();
+  }
 
-  const sourceText = pdfText ? `\n\nConteúdo base:\n${pdfText.substring(0, 8000)}` : '';
-  const prompt = `Crie EXATAMENTE ${quantity} flashcards sobre: ${topic}${sourceText}
+  init() {
+    try {
+      GeminiValidation.validateApiKey(this.apiKey);
+      this.genAI = new GoogleGenerativeAI(this.apiKey);
+      this._log('GeminiService inicializado com sucesso');
+    } catch (e) {
+      this._log(`Falha na inicialização: ${e.message}`, 'ERROR');
+      this.genAI = null;
+    }
+  }
 
-REGRAS:
-- Retorne APENAS os flashcards, sem texto antes ou depois
-- Formato exato:
+  _getApiKey() {
+    let key = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!key && GeminiValidation.isLocalStorageAvailable()) {
+      key = localStorage.getItem('gemini_api_key');
+    }
+    if (!key) {
+      key = prompt('Insira sua API Key do Gemini:');
+      if (key && GeminiValidation.isLocalStorageAvailable()) {
+        localStorage.setItem('gemini_api_key', key);
+      }
+    }
+    return key || '';
+  }
 
-FRENTE: [pergunta]
-VERSO: [resposta, máximo 3 linhas]
+  _log(message, level = 'INFO') {
+    const timestamp = new Date().toISOString();
+    const logEntry = { timestamp, level, message };
+    this.logs.push(logEntry);
+    if (this.logs.length > 1000) {
+      this.logs = this.logs.slice(-500);
+    }
+    console[level.toLowerCase() === 'error' ? 'error' : 'log'](`[Gemini ${level}] ${message}`);
+  }
 
----
+  _getHistory(userId = 'default') {
+    return this.cache.getHistory(userId);
+  }
 
-Comece agora:`;
+  _updateHistory(userId, role, content) {
+    const message = { role, content, timestamp: Date.now() };
+    this.cache.updateHistory(userId, message);
+  }
 
-  try {
-    const result = await model.generateContent(prompt);
-    return { success: true, action: 'NONE', actionData: null, response: result.response.text() };
-  } catch (error) {
-    return { success: false, action: 'NONE', actionData: null, response: friendlyError(error) };
+  _validateInput(input, allowFiles = false) {
+    GeminiValidation.validateInput(input);
+    if (allowFiles && input.files) {
+      if (!Array.isArray(input.files)) throw new Error('Files deve ser array');
+      input.files.forEach(GeminiValidation.validateFile);
+    }
+  }
+
+  _parseResponse(response) {
+    try {
+      const text = response.response.text();
+      const parsed = JSON.parse(text);
+      return { parsed, raw: text };
+    } catch (e) {
+      return { parsed: null, raw: response.response.text() };
+    }
+  }
+
+  async _generateWithRetry(prompt, options = {}, retries = 0) {
+    const startTime = performance.now();
+    try {
+      if (!this.genAI) throw new Error('Gemini não inicializado');
+
+      const model = this.genAI.getGenerativeModel({ model: CONFIG.MODEL });
+      const history = this._getHistory(options.userId);
+
+      let contents = [{ role: 'user', parts: [{ text: prompt }] }];
+      if (history.length) {
+        contents = contents.concat(history.map(h => ({ role: h.role, parts: [{ text: h.content }] })));
+      }
+
+      const result = await model.generateContent(contents, {
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 2048,
+          timeout: CONFIG.TIMEOUT
+        }
+      });
+
+      const response = await Promise.race([
+        result.response,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout')), CONFIG.TIMEOUT)
+        )
+      ]);
+
+      const parsed = this._parseResponse({ response });
+      const endTime = performance.now();
+      const duration = endTime - startTime;
+
+      this.stats.totalRequests++;
+      this.stats.successful++;
+      this.stats.avgResponseTime = (this.stats.avgResponseTime * (this.stats.totalRequests - 1) + duration) / this.stats.totalRequests;
+
+      this._log(`Resposta gerada em ${duration.toFixed(2)}ms`);
+
+      const cacheKey = btoa(prompt).slice(0, 50);
+      this.cache.set(cacheKey, parsed);
+
+      return parsed;
+
+    } catch (error) {
+      this.stats.failed++;
+      this._log(`Erro na geração (tentativa ${retries + 1}): ${error.message}`, 'ERROR');
+
+      if (retries < CONFIG.MAX_RETRIES) {
+        const backoff = CONFIG.RETRY_BACKOFF * Math.pow(2, retries);
+        await new Promise(resolve => setTimeout(resolve, backoff));
+        return this._generateWithRetry(prompt, options, retries + 1);
+      }
+
+      const cacheKey = btoa(prompt).slice(0, 50);
+      const cached = this.cache.get(cacheKey);
+      if (cached) {
+        this._log('Usando resposta em cache');
+        return cached;
+      }
+
+      return {
+        parsed: { intention: 'NONE', data: {} },
+        raw: 'Desculpe, estou offline. Verifique a conexão.'
+      };
+    }
+  }
+
+  async chatWithAI(input, options = {}) {
+    try {
+      this._validateInput(input, true);
+      const actionType = 'chat';
+      if (!this.rateLimiter.canProceed(actionType)) {
+        throw new Error('Rate limit excedido para chat');
+      }
+
+      const prompt = `${CONFIG.SYSTEM_PROMPT}\n\nUsuário: ${input.text || input}\nAssistente: `;
+      const response = await this._generateWithRetry(prompt, { ...options, files: input.files });
+
+      this._updateHistory(options.userId, 'user', input.text || input);
+      this._updateHistory(options.userId, 'assistant', response.raw);
+
+      this._log(`Chat concluído com intenção: ${response.parsed?.intention || 'NONE'}`);
+      return response;
+
+    } catch (e) {
+      this._log(`Erro em chatWithAI: ${e.message}`, 'ERROR');
+      throw e;
+    }
+  }
+
+  async generateFlashcards(topic, options = {}) {
+    try {
+      GeminiValidation.validateInput(topic);
+      const actionType = 'flashcards';
+      if (!this.rateLimiter.canProceed(actionType)) {
+        throw new Error('Rate limit para flashcards');
+      }
+
+      const prompt = `Gere 10 flashcards ANKI para Medicina sobre: ${topic}. Formato JSON: [{front: '', back: ''}]`;
+      const response = await this._generateWithRetry(prompt, options);
+
+      return response.parsed || [];
+
+    } catch (e) {
+      this._log(`Erro em generateFlashcards: ${e.message}`, 'ERROR');
+      return [];
+    }
+  }
+
+  async createSchedule(tasks, options = {}) {
+    try {
+      if (!Array.isArray(tasks)) throw new Error('Tasks deve ser array');
+      const actionType = 'schedule';
+      if (!this.rateLimiter.canProceed(actionType)) {
+        throw new Error('Rate limit para schedule');
+      }
+
+      const taskList = JSON.stringify(tasks);
+      const prompt = `Crie um horário otimizado para estudante de Medicina com estas tarefas: ${taskList}. Retorne JSON: {schedule: [{time: '', task: ''}], tips: ''}`;
+      const response = await this._generateWithRetry(prompt, options);
+
+      return response.parsed || { schedule: [], tips: '' };
+
+    } catch (e) {
+      this._log(`Erro em createSchedule: ${e.message}`, 'ERROR');
+      return { schedule: [], tips: 'Use horários fixos manualmente.' };
+    }
+  }
+
+  async analyzePBL(pblText, options = {}) {
+    try {
+      GeminiValidation.validateInput(pblText);
+      const actionType = 'pbl';
+      if (!this.rateLimiter.canProceed(actionType)) {
+        throw new Error('Rate limit para PBL');
+      }
+
+      const prompt = `Analise este PBL de Medicina: ${pblText}. Estruture: {problema: '', hipoteses: [], exames: [], tratamento: '', aprendizado: []}`;
+      const response = await this._generateWithRetry(prompt, options);
+
+      return response.parsed || {};
+
+    } catch (e) {
+      this._log(`Erro em analyzePBL: ${e.message}`, 'ERROR');
+      return {};
+    }
+  }
+
+  async generateText(prompt, options = {}) {
+    try {
+      GeminiValidation.validateInput(prompt);
+      const actionType = 'generate';
+      if (!this.rateLimiter.canProceed(actionType)) {
+        throw new Error('Rate limit para generateText');
+      }
+
+      const fullPrompt = `${CONFIG.SYSTEM_PROMPT}\nGere texto sobre: ${prompt}`;
+      const response = await this._generateWithRetry(fullPrompt, options);
+
+      return response.raw;
+
+    } catch (e) {
+      this._log(`Erro em generateText: ${e.message}`, 'ERROR');
+      return 'Erro na geração.';
+    }
+  }
+
+  getGeminiStats() {
+    try {
+      return {
+        ...this.stats,
+        rateLimits: {
+          chat: this.rateLimiter.getStats('chat'),
+          flashcards: this.rateLimiter.getStats('flashcards'),
+          schedule: this.rateLimiter.getStats('schedule'),
+          pbl: this.rateLimiter.getStats('pbl')
+        },
+        apiKeyValid: !!this.genAI,
+        logsCount: this.logs.length
+      };
+    } catch (e) {
+      this._log(`Erro em getGeminiStats: ${e.message}`, 'ERROR');
+      return {};
+    }
+  }
+
+  getLogs() {
+    try {
+      return this.logs.slice(-100);
+    } catch (e) {
+      return [];
+    }
+  }
+
+  clearLogs() {
+    try {
+      this.logs = [];
+      this._log('Logs limpos');
+    } catch (e) {
+      this._log(`Erro ao limpar logs: ${e.message}`, 'ERROR');
+    }
+  }
+
+  clearCache() {
+    try {
+      this.cache.clear();
+      this._log('Cache limpo');
+    } catch (e) {
+      this._log(`Erro ao limpar cache: ${e.message}`, 'ERROR');
+    }
+  }
+
+  setUserContext(context) {
+    try {
+      this.userContext = GeminiValidation.sanitizeData(context);
+      this._log('Contexto do usuário atualizado');
+    } catch (e) {
+      this._log(`Erro ao setUserContext: ${e.message}`, 'ERROR');
+    }
+  }
+
+  async checkOnline() {
+    try {
+      if (!navigator.onLine) return false;
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(), 5000);
+      await fetch('https://generativelanguage.googleapis.com/v1beta/models', {
+        signal: controller.signal
+      });
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 }
 
-// ─── CRONOGRAMA ───────────────────────────────────────────────────────────────
-export async function createSchedule(details) {
-  if (!model) throw new Error('Modelo não inicializado.');
+const geminiService = new GeminiService();
 
-  const prompt = `Crie um cronograma de estudos semanal para um estudante de medicina.
-Detalhes: ${details}
-
-📅 CRONOGRAMA SEMANAL
-
-Segunda-feira:
-• 07:00 - 09:00 | [atividade]
-
-[continue para todos os dias]
-
-⚠️ Dicas: [3 dicas práticas]`;
-
-  try {
-    const result = await model.generateContent(prompt);
-    return { success: true, action: 'NONE', actionData: null, response: result.response.text() };
-  } catch (error) {
-    return { success: false, action: 'NONE', actionData: null, response: friendlyError(error) };
-  }
-}
-
-// ─── ANÁLISE DE PBL ───────────────────────────────────────────────────────────
-export async function analyzePBL(pblText) {
-  if (!model) throw new Error('Modelo não inicializado.');
-
-  const prompt = `Analise este caso PBL de medicina:
-
-${pblText}
-
-🔍 PALAVRAS-CHAVE
-❓ PROBLEMAS IDENTIFICADOS
-🎯 HIPÓTESES DIAGNÓSTICAS
-📚 OBJETIVOS DE APRENDIZAGEM
-🔗 CORRELAÇÕES`;
-
-  try {
-    const result = await model.generateContent(prompt);
-    return { success: true, action: 'NONE', actionData: null, response: result.response.text() };
-  } catch (error) {
-    return { success: false, action: 'NONE', actionData: null, response: friendlyError(error) };
-  }
-}
-
-// ─── TEXTO SIMPLES ────────────────────────────────────────────────────────────
-export async function generateText(prompt) {
-  if (!model) {
-    throw new Error('⚠️ Serviço de IA temporariamente indisponível.');
-  }
-  try {
-    const result = await model.generateContent(prompt);
-    return result.response.text();
-  } catch (error) {
-    // Lança erro amigável em vez do técnico
-    throw new Error(friendlyError(error));
-  }
-}
-
-export default { generateText, chatWithAI, generateFlashcards, createSchedule, analyzePBL };
+export default geminiService;
+export { GeminiService, GeminiCache, GeminiRateLimiter, GeminiValidation };
