@@ -1,232 +1,143 @@
-import { 
+/**
+ * Serviço de autenticação refatorado para MedPlanner.
+ * Integra validações, rate limiting, erros customizados, cache, timeout e refresh automático.
+ * Compatível com Firebase Auth v9+.
+ */
+
+import {
+  getAuth,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult,
   signOut,
-  sendPasswordResetEmail,
-  sendEmailVerification,
+  onAuthStateChanged,
   updateProfile,
-  updatePassword,
-  reauthenticateWithCredential,
-  EmailAuthProvider
+  sendPasswordResetEmail,
+  GoogleAuthProvider,
+  signInWithPopup,
+  getIdToken
 } from 'firebase/auth';
 
-import { 
-  doc, 
-  getDoc, 
-  updateDoc,
-  collection,
-  addDoc,
-  serverTimestamp
-} from 'firebase/firestore';
+import {
+  validateEmail,
+  validatePassword,
+  validateDisplayName,
+  sanitizeInput,
+  validatePasswordStrength
+} from '../utils/authValidation';
 
-import { auth, googleProvider, db } from '../config/firebase';
-import { createOrUpdateUserProfile } from './userService';
+import { getErrorMessage, logAuthError } from '../utils/authErrors';
+import RateLimiter from '../utils/rateLimiter';
+
+const auth = getAuth();
+const rateLimiter = new RateLimiter(5, 10 * 60 * 1000); // 5 tentativas, 10 min
+let currentUser = null;
+let refreshInterval = null;
 
 /* ======================================================
-   👑 EMAIL ADMIN PRINCIPAL
+   🔒 INICIALIZAÇÃO E CACHE
 ====================================================== */
-const ADMIN_EMAIL = 'medplanner@gmail.com';
 
-/* ======================================================
-   📋 AUDITORIA DE ACESSOS
-====================================================== */
-async function logAudit(action, details = {}) {
-  try {
-    const user = auth.currentUser;
-    await addDoc(collection(db, 'audit_logs'), {
-      uid: user?.uid || 'anonymous',
-      email: user?.email || details.email || 'anonymous',
-      action,
-      details,
-      timestamp: serverTimestamp(),
-      userAgent: navigator.userAgent,
-    });
-  } catch (err) {
-    console.error('Erro ao salvar log de auditoria:', err);
-  }
+/**
+ * Listener de estado de auth com cache localStorage e refresh automático.
+ */
+function initAuthListener() {
+  onAuthStateChanged(auth, (user) => {
+    currentUser = user;
+    if (user) {
+      localStorage.setItem('medplanner_user_uid', user.uid);
+      startAutoRefresh();
+      console.info(`[MedPlanner Auth] Usuário logado: ${user.uid}`);
+    } else {
+      localStorage.removeItem('medplanner_user_uid');
+      stopAutoRefresh();
+      console.info('[MedPlanner Auth] Usuário deslogado');
+    }
+  });
 }
 
-/* ======================================================
-   🔒 GARANTE ROLE ADMIN CORRETO
-====================================================== */
-async function ensureAdminRole(user) {
-  if (!user?.uid || !user?.email) return;
-
-  const userRef = doc(db, 'users', user.uid);
-  const userSnap = await getDoc(userRef);
-
-  if (!userSnap.exists()) return;
-
-  const currentRole = userSnap.data()?.role;
-  const shouldBeAdmin = user.email === ADMIN_EMAIL;
-
-  if (shouldBeAdmin && currentRole !== 'admin') {
-    await updateDoc(userRef, { role: 'admin' });
-    console.log('👑 Role ADMIN aplicada automaticamente.');
-  }
-}
-
-/* ======================================================
-   📌 VERIFICAR SE USUÁRIO É ADMIN
-====================================================== */
-export async function isAdmin(uid) {
-  const userRef = doc(db, 'users', uid);
-  const userSnap = await getDoc(userRef);
-
-  if (!userSnap.exists()) return false;
-
-  return userSnap.data()?.role === 'admin';
-}
-
-/* ======================================================
-   ========== REGISTRO ==========
-====================================================== */
-export async function registerWithEmail(email, password, displayName) {
-  try {
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
-
-    await updateProfile(user, { displayName });
-    await sendEmailVerification(user);
-    await createOrUpdateUserProfile({ ...user, displayName });
-    await ensureAdminRole(user);
-    await logAudit('register', { email: user.email, displayName });
-
-    return {
-      success: true,
-      user: user,
-      message: 'Conta criada! Verifique seu email para ativar sua conta.'
-    };
-
-  } catch (error) {
-    await logAudit('register_failed', { email, error: error.code });
-    return {
-      success: false,
-      error: error.code,
-      message: getErrorMessage(error.code)
-    };
-  }
-}
-
-/* ======================================================
-   ========== LOGIN COM EMAIL ==========
-====================================================== */
-export async function loginWithEmail(email, password) {
-  try {
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
-
-    await createOrUpdateUserProfile(user);
-    await ensureAdminRole(user);
-    await logAudit('login_email', { email: user.email });
-
-    return {
-      success: true,
-      user: user,
-      emailVerified: user.emailVerified
-    };
-
-  } catch (error) {
-    await logAudit('login_email_failed', { email, error: error.code });
-    return {
-      success: false,
-      error: error.code,
-      message: getErrorMessage(error.code)
-    };
-  }
-}
-
-/* ======================================================
-   ========== LOGIN COM GOOGLE ==========
-====================================================== */
-export async function loginWithGoogle() {
-  try {
-    const result = await signInWithPopup(auth, googleProvider);
-    const user = result.user;
-
-    await createOrUpdateUserProfile(user);
-    await ensureAdminRole(user);
-    await logAudit('login_google', { email: user.email });
-
-    return {
-      success: true,
-      user: user,
-      isNewUser: result._tokenResponse?.isNewUser || false
-    };
-
-  } catch (error) {
-
-    if (error.code === 'auth/popup-blocked') {
+/**
+ * Inicia refresh automático a cada 55 minutos.
+ */
+function startAutoRefresh() {
+  stopAutoRefresh();
+  refreshInterval = setInterval(async () => {
+    if (currentUser) {
       try {
-        sessionStorage.setItem('googleLoginInProgress', 'true');
-        sessionStorage.setItem('googleLoginTimestamp', Date.now().toString());
-        await signInWithRedirect(auth, googleProvider);
-        return { success: true, redirecting: true };
-      } catch (redirectError) {
-        sessionStorage.removeItem('googleLoginInProgress');
-        sessionStorage.removeItem('googleLoginTimestamp');
-        return {
-          success: false,
-          error: redirectError.code,
-          message: getErrorMessage(redirectError.code)
-        };
+        await getIdToken(currentUser, true);
+        console.info('[MedPlanner Auth] Token atualizado automaticamente');
+      } catch (error) {
+        logAuthError('autoRefresh', error);
       }
     }
+  }, 55 * 60 * 1000);
+}
 
-    if (error.code === 'auth/popup-closed-by-user') {
-      return {
-        success: false,
-        error: error.code,
-        message: 'Login cancelado. Tente novamente.'
-      };
-    }
-
-    await logAudit('login_google_failed', { error: error.code });
-    return {
-      success: false,
-      error: error.code,
-      message: getErrorMessage(error.code)
-    };
+/**
+ * Para refresh automático.
+ */
+function stopAutoRefresh() {
+  if (refreshInterval) {
+    clearInterval(refreshInterval);
+    refreshInterval = null;
   }
 }
 
+/**
+ * Promise de timeout para 1 minuto.
+ */
+function timeout(ms = 60000) {
+  return new Promise((_, reject) =>
+    setTimeout(() => reject({ code: 'request-timeout', message: 'Timeout' }), ms)
+  );
+}
+
+initAuthListener();
+
 /* ======================================================
-   ========== REDIRECT RESULT ==========
+   📋 REGISTRO
 ====================================================== */
-export async function handleRedirectResult() {
+
+/**
+ * Registra novo usuário com validações.
+ * @param {string} email
+ * @param {string} password
+ * @param {string} displayName
+ * @returns {Promise<{success: boolean, user?: Object, message: string}>}
+ */
+export async function registerWithEmail(email, password, displayName) {
   try {
-    const wasRedirecting = sessionStorage.getItem('googleLoginInProgress') === 'true';
+    const cleanEmail = sanitizeInput(email);
+    const cleanDisplayName = sanitizeInput(displayName);
 
-    if (!wasRedirecting) {
-      return { success: false, noRedirect: true };
+    if (!validateEmail(cleanEmail)) {
+      throw { code: 'auth/invalid-email' };
+    }
+    if (!validatePassword(password)) {
+      throw { code: 'auth/weak-password' };
+    }
+    if (!validateDisplayName(cleanDisplayName)) {
+      throw { code: 'auth/invalid-display-name' };
     }
 
-    const result = await getRedirectResult(auth);
+    const strength = validatePasswordStrength(password);
+    console.info(`[MedPlanner Auth] Força da senha: ${strength}`);
 
-    sessionStorage.removeItem('googleLoginInProgress');
-    sessionStorage.removeItem('googleLoginTimestamp');
+    const userCredential = await Promise.race([
+      createUserWithEmailAndPassword(auth, cleanEmail, password),
+      timeout()
+    ]);
 
-    if (result?.user) {
-      await createOrUpdateUserProfile(result.user);
-      await ensureAdminRole(result.user);
-      await logAudit('login_google_redirect', { email: result.user.email });
+    await updateProfile(userCredential.user, { displayName: cleanDisplayName });
 
-      return {
-        success: true,
-        user: result.user,
-        isNewUser: result._tokenResponse?.isNewUser || false
-      };
-    }
+    console.info(`[MedPlanner Auth] Registro bem-sucedido: ${userCredential.user.uid}`);
 
-    return { success: false, noRedirect: true };
-
+    return {
+      success: true,
+      user: userCredential.user,
+      message: 'Conta criada com sucesso!'
+    };
   } catch (error) {
-    sessionStorage.removeItem('googleLoginInProgress');
-    sessionStorage.removeItem('googleLoginTimestamp');
-    await logAudit('login_google_redirect_failed', { error: error.code });
+    logAuthError('register', error);
     return {
       success: false,
       error: error.code,
@@ -236,42 +147,165 @@ export async function handleRedirectResult() {
 }
 
 /* ======================================================
-   ========== LOGOUT ==========
+   🔐 LOGIN COM EMAIL
 ====================================================== */
+
+/**
+ * Login com email/senha + rate limiting.
+ * @param {string} email
+ * @param {string} password
+ * @returns {Promise<{success: boolean, user?: Object, message?: string}>}
+ */
+export async function loginWithEmail(email, password) {
+  try {
+    const cleanEmail = sanitizeInput(email);
+
+    if (!validateEmail(cleanEmail)) {
+      throw { code: 'auth/invalid-email' };
+    }
+    if (!validatePassword(password)) {
+      throw { code: 'auth/weak-password' };
+    }
+
+    // Rate limiting
+    if (rateLimiter.isBlocked(cleanEmail)) {
+      const until = rateLimiter.getBlockedUntil(cleanEmail);
+      throw {
+        code: 'auth/too-many-requests',
+        message: `Bloqueado até ${new Date(until).toLocaleString('pt-BR')}`
+      };
+    }
+
+    if (!rateLimiter.recordAttempt(cleanEmail)) {
+      throw { code: 'auth/too-many-requests' };
+    }
+
+    const userCredential = await Promise.race([
+      signInWithEmailAndPassword(auth, cleanEmail, password),
+      timeout()
+    ]);
+
+    rateLimiter.reset(cleanEmail);
+
+    console.info(`[MedPlanner Auth] Login bem-sucedido: ${userCredential.user.uid}`);
+
+    return {
+      success: true,
+      user: userCredential.user,
+      emailVerified: userCredential.user.emailVerified
+    };
+  } catch (error) {
+    logAuthError('loginWithEmail', error);
+    return {
+      success: false,
+      error: error.code,
+      message: error.message || getErrorMessage(error.code)
+    };
+  }
+}
+
+/* ======================================================
+   🌐 LOGIN COM GOOGLE
+====================================================== */
+
+/**
+ * Login com Google.
+ * @returns {Promise<{success: boolean, user?: Object, message?: string}>}
+ */
+export async function loginWithGoogle() {
+  try {
+    const provider = new GoogleAuthProvider();
+
+    const result = await Promise.race([
+      signInWithPopup(auth, provider),
+      timeout()
+    ]);
+
+    console.info(`[MedPlanner Auth] Google login: ${result.user.uid}`);
+
+    return {
+      success: true,
+      user: result.user,
+      isNewUser: result._tokenResponse?.isNewUser || false
+    };
+  } catch (error) {
+    logAuthError('loginWithGoogle', error);
+    return {
+      success: false,
+      error: error.code,
+      message: getErrorMessage(error.code)
+    };
+  }
+}
+
+/* ======================================================
+   🚪 LOGOUT
+====================================================== */
+
+/**
+ * Logout.
+ * @returns {Promise<{success: boolean, message?: string}>}
+ */
 export async function logout() {
   try {
-    await logAudit('logout', {});
     await signOut(auth);
-    sessionStorage.clear();
+    console.info('[MedPlanner Auth] Logout executado');
     return { success: true };
   } catch (error) {
+    logAuthError('logout', error);
     return {
       success: false,
       error: error.code,
-      message: 'Erro ao fazer logout.'
+      message: getErrorMessage(error.code)
     };
   }
 }
 
 /* ======================================================
-   ========== RESET PASSWORD ==========
+   👤 USUÁRIO ATUAL
 ====================================================== */
+
+/**
+ * Retorna usuário atual do cache.
+ * @returns {Object|null}
+ */
+export function getCurrentUser() {
+  return currentUser;
+}
+
+/* ======================================================
+   🔑 RECUPERAÇÃO DE SENHA
+====================================================== */
+
+/**
+ * Envia email de reset de senha.
+ * @param {string} email
+ * @returns {Promise<{success: boolean, message: string}>}
+ */
 export async function resetPassword(email) {
   try {
-    await sendPasswordResetEmail(auth, email, {
-      url: window.location.origin + '/auth',
-      handleCodeInApp: false
-    });
+    const cleanEmail = sanitizeInput(email);
 
-    await logAudit('password_reset_requested', { email });
+    if (!validateEmail(cleanEmail)) {
+      throw { code: 'auth/invalid-email' };
+    }
+
+    await Promise.race([
+      sendPasswordResetEmail(auth, cleanEmail, {
+        url: window.location.origin + '/auth',
+        handleCodeInApp: false
+      }),
+      timeout()
+    ]);
+
+    console.info(`[MedPlanner Auth] Reset de senha enviado para ${cleanEmail}`);
 
     return {
       success: true,
       message: 'Email de recuperação enviado!'
     };
-
   } catch (error) {
-    await logAudit('password_reset_failed', { email, error: error.code });
+    logAuthError('resetPassword', error);
     return {
       success: false,
       error: error.code,
@@ -281,88 +315,14 @@ export async function resetPassword(email) {
 }
 
 /* ======================================================
-   ========== REENVIAR VERIFICAÇÃO ==========
+   📤 EXPORTAÇÃO
 ====================================================== */
-export async function resendVerificationEmail() {
-  try {
-    const user = auth.currentUser;
-
-    if (!user) return { success: false, message: 'Usuário não autenticado.' };
-    if (user.emailVerified) return { success: false, message: 'Email já verificado!' };
-
-    await sendEmailVerification(user);
-    await logAudit('verification_email_resent', { email: user.email });
-
-    return {
-      success: true,
-      message: 'Email reenviado!'
-    };
-
-  } catch (error) {
-    return {
-      success: false,
-      error: error.code,
-      message: getErrorMessage(error.code)
-    };
-  }
-}
-
-/* ======================================================
-   ========== ALTERAR SENHA ==========
-====================================================== */
-export async function changePassword(currentPassword, newPassword) {
-  try {
-    const user = auth.currentUser;
-
-    if (!user?.email) {
-      return { success: false, message: 'Usuário não autenticado.' };
-    }
-
-    const credential = EmailAuthProvider.credential(user.email, currentPassword);
-    await reauthenticateWithCredential(user, credential);
-    await updatePassword(user, newPassword);
-    await logAudit('password_changed', { email: user.email });
-
-    return { success: true, message: 'Senha alterada com sucesso!' };
-
-  } catch (error) {
-    await logAudit('password_change_failed', { error: error.code });
-    return {
-      success: false,
-      error: error.code,
-      message: getErrorMessage(error.code)
-    };
-  }
-}
-
-/* ======================================================
-   ========== ERROS ==========
-====================================================== */
-function getErrorMessage(errorCode) {
-  const errors = {
-    'auth/email-already-in-use': 'Este email já está cadastrado.',
-    'auth/invalid-email': 'Email inválido.',
-    'auth/weak-password': 'Senha muito fraca.',
-    'auth/user-not-found': 'Usuário não encontrado.',
-    'auth/wrong-password': 'Senha incorreta.',
-    'auth/invalid-credential': 'Credenciais inválidas.',
-    'auth/too-many-requests': 'Muitas tentativas. Tente mais tarde.',
-    'auth/network-request-failed': 'Erro de conexão.',
-    'auth/popup-closed-by-user': 'Login cancelado.',
-    'auth/requires-recent-login': 'Faça login novamente por segurança.'
-  };
-
-  return errors[errorCode] || 'Erro desconhecido.';
-}
 
 export default {
   registerWithEmail,
   loginWithEmail,
   loginWithGoogle,
-  handleRedirectResult,
   logout,
-  resetPassword,
-  resendVerificationEmail,
-  changePassword,
-  isAdmin
+  getCurrentUser,
+  resetPassword
 };

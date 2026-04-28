@@ -1,0 +1,47 @@
+/**
+ * Módulo de tratamento de erros de autenticação Firebase em PT-BR.
+ */
+
+/**
+ * Mapeamento de códigos de erro Firebase para mensagens em português.
+ * @type {Record<string, string>}
+ */
+export const ERROR_MESSAGES = {
+  'auth/email-already-in-use': 'Este e-mail já está cadastrado.',
+  'auth/invalid-email': 'Formato de e-mail inválido.',
+  'auth/user-not-found': 'Usuário não encontrado.',
+  'auth/wrong-password': 'Senha incorreta.',
+  'auth/weak-password': 'Senha muito fraca.',
+  'auth/too-many-requests': 'Muitas tentativas de login. Sua conta foi bloqueada temporariamente.',
+  'auth/user-disabled': 'Conta desabilitada pelo administrador.',
+  'auth/operation-not-allowed': 'Operação não permitida.',
+  'auth/popup-closed-by-user': 'Janela de login fechada pelo usuário.',
+  'request-timeout': 'Requisição expirou após 1 minuto. Tente novamente.',
+  'auth/invalid-display-name': 'Nome de exibição inválido (mínimo 3 caracteres).',
+  'default': 'Erro na autenticação. Verifique sua conexão e tente novamente.'
+};
+
+/**
+ * Retorna mensagem customizada para código de erro.
+ * @param {string} errorCode - Código do erro.
+ * @returns {string} Mensagem em PT-BR.
+ */
+export function getErrorMessage(errorCode) {
+  return ERROR_MESSAGES[errorCode] || ERROR_MESSAGES['default'];
+}
+
+/**
+ * Registra erro de auth com contexto para auditoria.
+ * @param {string} action - Ação realizada (ex: 'login').
+ * @param {Object} error - Objeto de erro com code e message.
+ * @param {Object} [details={}] - Detalhes adicionais.
+ */
+export function logAuthError(action, error, details = {}) {
+  console.error(`[MedPlanner Auth] Erro em ${action}:`, {
+    code: error.code || 'unknown',
+    message: error.message || 'sem mensagem',
+    details,
+    timestamp: new Date().toISOString(),
+    userId: error.user?.uid || 'anonymous'
+  });
+}
