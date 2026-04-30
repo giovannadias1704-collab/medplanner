@@ -505,3 +505,24 @@ const geminiService = new GeminiService();
 
 export default geminiService;
 export { GeminiService, GeminiCache, GeminiRateLimiter, GeminiValidation };
+
+// Exportar funções wrapper para uso direto em componentes
+export const generateText = (prompt, options = {}) => {
+  return geminiService.generateText(prompt, options);
+};
+
+export const chatWithAI = (input, options = {}) => {
+  return geminiService.chatWithAI(input, options);
+};
+
+export const generateFlashcards = (topic, options = {}) => {
+  return geminiService.generateFlashcards(topic, options);
+};
+
+export const createSchedule = (tasks, options = {}) => {
+  return geminiService.createSchedule(tasks, options);
+};
+
+export const analyzePBL = (pblText, options = {}) => {
+  return geminiService.analyzePBL(pblText, options);
+};
