@@ -1,8 +1,4 @@
-// Arquivo 2: useAuth.js
-// Salve este arquivo como: src/hooks/useAuth.js
-
-import React, { useState, useEffect, useCallback } from 'react';
-import { AUTH } from '../constants.js';
+import { useState, useEffect, useCallback } from 'react';
 
 const useAuth = () => {
   const [user, setUser] = useState(null);
@@ -10,132 +6,157 @@ const useAuth = () => {
   const [error, setError] = useState(null);
 
   const getToken = useCallback(() => {
-    return localStorage.getItem(AUTH.STORAGE.TOKEN);
+    return localStorage.getItem('accessToken');
   }, []);
 
-  const setTokens = useCallback((token, refreshToken, userData) => {
-    localStorage.setItem(AUTH.STORAGE.TOKEN, token);
+  const setTokens = useCallback((accessToken, refreshToken) => {
+    localStorage.setItem('accessToken', accessToken);
     if (refreshToken) {
-      localStorage.setItem(AUTH.STORAGE.REFRESH_TOKEN, refreshToken);
-    }
-    if (userData) {
-      localStorage.setItem(AUTH.STORAGE.USER, JSON.stringify(userData));
-      setUser(userData);
+      localStorage.setItem('refreshToken', refreshToken);
     }
   }, []);
 
   const clearTokens = useCallback(() => {
-    localStorage.removeItem(AUTH.STORAGE.TOKEN);
-    localStorage.removeItem(AUTH.STORAGE.REFRESH_TOKEN);
-    localStorage.removeItem(AUTH.STORAGE.USER);
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
     setUser(null);
     setError(null);
   }, []);
 
-  const apiCall = useCallback(async (endpoint, options = {}) => {
-    const token = getToken();
-    const config = {
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token && { Authorization: `Bearer ${token}` }),
-      },
-      ...options,
+  const apiCall = useCallback(async (url, options = {}) => {
+    let token = getToken();
+    const headers = {
+      'Content-Type': 'application/json',
+      ...options.headers,
     };
 
-    const response = await fetch(`${AUTH.BASE_URL}${endpoint}`, config);
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      if (response.status === 401) {
-        try {
-          await refreshToken();
-          const newToken = getToken();
-          config.headers.Authorization = `Bearer ${newToken}`;
-          const retryResponse = await fetch(`${AUTH.BASE_URL}${endpoint}`, config);
-          if (!retryResponse.ok) {
-            throw new Error(errorData.message || 'Falha na autenticação');
-          }
-          return retryResponse.json();
-        } catch (refreshErr) {
-          clearTokens();
-          throw new Error('Sessão expirada');
+    let response = await fetch(url, {
+      ...options,
+      headers,
+    });
+
+    if (response.status === 401) {
+      const refreshed = await refreshToken();
+      if (refreshed) {
+        token = getToken();
+        if (token) {
+          headers.Authorization = `Bearer ${token}`;
+          response = await fetch(url, {
+            ...options,
+            headers,
+          });
         }
       }
-      throw new Error(errorData.message || `Erro: ${response.status}`);
+      if (!response.ok) {
+        logout();
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+    }
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
 
     return response.json();
   }, [getToken]);
 
   const refreshToken = useCallback(async () => {
-    const refreshTokenValue = localStorage.getItem(AUTH.STORAGE.REFRESH_TOKEN);
-    if (!refreshTokenValue) {
-      throw new Error('Token de refresh não encontrado');
+    const refresh = localStorage.getItem('refreshToken');
+    if (!refresh) {
+      return false;
     }
 
-    const response = await fetch(`${AUTH.BASE_URL}${AUTH.REFRESH}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken: refreshTokenValue }),
-    });
+    try {
+      const response = await fetch('/api/auth/refresh', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ refreshToken: refresh }),
+      });
 
-    if (!response.ok) {
-      throw new Error('Falha ao renovar token');
+      if (!response.ok) {
+        throw new Error('Refresh failed');
+      }
+
+      const data = await response.json();
+      setTokens(data.accessToken, data.refreshToken);
+      return true;
+    } catch (err) {
+      clearTokens();
+      return false;
     }
-
-    const data = await response.json();
-    setTokens(data.token, data.refreshToken, data.user);
-  }, [setTokens]);
+  }, [setTokens, clearTokens]);
 
   const login = useCallback(async (credentials) => {
     setLoading(true);
     setError(null);
+
     try {
-      const data = await apiCall(AUTH.LOGIN, {
+      const response = await fetch('/api/auth/login', {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify(credentials),
       });
-      setTokens(data.token, data.refreshToken, data.user);
-      return data.user;
+
+      if (!response.ok) {
+        throw new Error('Login failed');
+      }
+
+      const data = await response.json();
+      setTokens(data.accessToken, data.refreshToken);
+      setUser(data.user);
+      return data;
     } catch (err) {
       setError(err.message);
-      throw err;
+      return null;
     } finally {
       setLoading(false);
     }
-  }, [apiCall, setTokens]);
+  }, [setTokens]);
 
-  const logout = useCallback(async () => {
-    try {
-      await apiCall(AUTH.LOGOUT, { method: 'POST' });
-    } catch (err) {
-      console.error('Erro no logout:', err);
-    } finally {
-      clearTokens();
-    }
-  }, [apiCall, clearTokens]);
+  const logout = useCallback(() => {
+    clearTokens();
+  }, [clearTokens]);
 
   const checkAuth = useCallback(async () => {
     setLoading(true);
-    const token = getToken();
-    if (!token) {
-      setLoading(false);
-      return;
-    }
+    setError(null);
+
     try {
-      const userData = await apiCall(AUTH.ME);
+      const userData = await apiCall('/api/auth/me');
       setUser(userData);
+      return true;
     } catch (err) {
-      clearTokens();
       setError(err.message);
+      logout();
+      return false;
     } finally {
       setLoading(false);
     }
-  }, [getToken, apiCall, clearTokens]);
+  }, [apiCall, logout]);
+
+  const isAuthenticated = useCallback(() => {
+    return !!user && !!getToken();
+  }, [user, getToken]);
 
   useEffect(() => {
-    checkAuth();
-  }, [checkAuth]);
+    const init = async () => {
+      const token = getToken();
+      if (token) {
+        await checkAuth();
+      } else {
+        setLoading(false);
+      }
+    };
+    init();
+  }, [checkAuth, getToken]);
 
   return {
     user,
@@ -144,8 +165,9 @@ const useAuth = () => {
     login,
     logout,
     checkAuth,
-    isAuthenticated: !!user && !loading,
+    isAuthenticated,
   };
 };
 
 export default useAuth;
+export { useAuth };

@@ -505,3 +505,8 @@ const geminiService = new GeminiService();
 
 export default geminiService;
 export { GeminiService, GeminiCache, GeminiRateLimiter, GeminiValidation };
+
+// Exportar função generateText para uso direto
+export const generateText = (prompt, options = {}) => {
+  return geminiService.generateText(prompt, options);
+};
