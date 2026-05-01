@@ -218,11 +218,33 @@ export default function Settings() {
     finally { setProcessingPDF(false); }
   };
 
-  const handleLogout = async () => {
-    if (confirm('Tem certeza que deseja sair?')) {
-      try { await signOut(auth); navigate('/auth'); } catch (e) { console.error(e); }
-    }
-  };
+ const handleLogout = async () => {
+     const { logout } = useContext(AppContext);
+   const navigate = useNavigate();
+   const [loading, setLoading] = useState(false);
+   const [error, setError] = useState(null);
+  // 1. Mostra confirmação ao usuário
+  if (!window.confirm('Tem certeza que deseja fazer logout?')) {
+    return;
+  }
+
+  // 2. Mostra loading enquanto faz logout e limpa erros anteriores
+  setLoading(true);
+  setError(null);
+
+  try {
+    // 3. Chama logout() do AppContext
+    await logout();
+
+    // 4. Redireciona para /login após sucesso
+    navigate('/login');
+  } catch (error) {
+    // 5. Mostra erro se logout falhar
+    setError(error.message || 'Erro ao fazer logout');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const scrollTo = (id) => {
     setActiveSection(id);

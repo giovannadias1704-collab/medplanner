@@ -1,171 +1,170 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
 
 const useAuth = () => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
+  // Retrieves the access token from localStorage
   const getToken = useCallback(() => {
     return localStorage.getItem('accessToken');
   }, []);
 
-  const setTokens = useCallback((accessToken, refreshToken) => {
-    localStorage.setItem('accessToken', accessToken);
-    if (refreshToken) {
-      localStorage.setItem('refreshToken', refreshToken);
+  // Sets access and refresh tokens in localStorage
+  const setTokens = useCallback((tokens) => {
+    if (tokens.accessToken) {
+      localStorage.setItem('accessToken', tokens.accessToken);
+    }
+    if (tokens.refreshToken) {
+      localStorage.setItem('refreshToken', tokens.refreshToken);
     }
   }, []);
 
+  // Clears authentication tokens from localStorage
   const clearTokens = useCallback(() => {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
-    setUser(null);
-    setError(null);
   }, []);
 
-  const apiCall = useCallback(async (url, options = {}) => {
-    let token = getToken();
-    const headers = {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    };
-
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
-
-    let response = await fetch(url, {
-      ...options,
-      headers,
+  // Clears all localStorage data except Firebase-related keys
+  const clearAllLocalStorage = useCallback(() => {
+    // Get all keys in localStorage
+    const allKeys = Object.keys(localStorage);
+    // Filter Firebase keys to preserve them
+    const firebaseKeys = allKeys.filter(key => key && key.startsWith('firebase:'));
+    // Backup Firebase data
+    const firebaseData = {};
+    firebaseKeys.forEach(key => {
+      firebaseData[key] = localStorage.getItem(key);
     });
+    // Clear all localStorage
+    localStorage.clear();
+    // Restore Firebase data
+    firebaseKeys.forEach(key => {
+      localStorage.setItem(key, firebaseData[key]);
+    });
+    return true;
+  }, []);
 
-    if (response.status === 401) {
-      const refreshed = await refreshToken();
-      if (refreshed) {
-        token = getToken();
-        if (token) {
-          headers.Authorization = `Bearer ${token}`;
-          response = await fetch(url, {
-            ...options,
-            headers,
-          });
-        }
-      }
-      if (!response.ok) {
-        logout();
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-    }
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    return response.json();
-  }, [getToken]);
-
+  // Refreshes the access token using the refresh token
   const refreshToken = useCallback(async () => {
-    const refresh = localStorage.getItem('refreshToken');
-    if (!refresh) {
-      return false;
-    }
+    const refreshTkn = localStorage.getItem('refreshToken');
+    if (!refreshTkn) return false;
 
     try {
-      const response = await fetch('/api/auth/refresh', {
+      const response = await fetch('/api/refresh', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ refreshToken: refresh }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: refreshTkn }),
       });
 
       if (!response.ok) {
         throw new Error('Refresh failed');
       }
 
-      const data = await response.json();
-      setTokens(data.accessToken, data.refreshToken);
+      const tokens = await response.json();
+      setTokens(tokens);
       return true;
-    } catch (err) {
+    } catch (error) {
       clearTokens();
       return false;
     }
   }, [setTokens, clearTokens]);
 
-  const login = useCallback(async (credentials) => {
-    setLoading(true);
-    setError(null);
+  // Performs API calls with automatic token refresh on 401
+  const apiCall = useCallback(async (endpoint, options = {}) => {
+    let token = getToken();
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
 
+    let retries = 0;
+    const maxRetries = 1;
+
+    while (retries <= maxRetries) {
+      const config = { ...options, headers };
+
+      const response = await fetch(endpoint, config);
+
+      if (response.status === 401 && retries < maxRetries) {
+        const refreshed = await refreshToken();
+        if (refreshed) {
+          token = getToken();
+          headers.Authorization = `Bearer ${token}`;
+          retries++;
+          continue;
+        } else {
+          throw new Error('Token refresh failed');
+        }
+      }
+
+      if (response.ok) {
+        return response.json();
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+    }
+  }, [getToken, refreshToken]);
+
+  // Handles user login and sets tokens
+  const login = useCallback(async (credentials) => {
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await apiCall('/api/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(credentials),
       });
-
-      if (!response.ok) {
-        throw new Error('Login failed');
-      }
-
-      const data = await response.json();
-      setTokens(data.accessToken, data.refreshToken);
-      setUser(data.user);
-      return data;
-    } catch (err) {
-      setError(err.message);
-      return null;
-    } finally {
-      setLoading(false);
+      setTokens(response.tokens);
+      return true;
+    } catch (error) {
+      console.error('Login failed:', error);
+      return false;
     }
-  }, [setTokens]);
+  }, [apiCall, setTokens]);
 
+  // COMPLETE logout: clears tokens from localStorage and returns success boolean
+  // AppContext can use the return value to perform additional cleanup (e.g., Firebase signOut)
   const logout = useCallback(() => {
-    clearTokens();
+    try {
+      clearTokens();
+      return true;
+    } catch (error) {
+      console.error('Logout error:', error);
+      return false;
+    }
   }, [clearTokens]);
 
-  const checkAuth = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const userData = await apiCall('/api/auth/me');
-      setUser(userData);
-      return true;
-    } catch (err) {
-      setError(err.message);
-      logout();
-      return false;
-    } finally {
-      setLoading(false);
-    }
-  }, [apiCall, logout]);
-
+  // Checks authentication synchronously (just token presence)
   const isAuthenticated = useCallback(() => {
-    return !!user && !!getToken();
-  }, [user, getToken]);
+    return !!getToken();
+  }, [getToken]);
 
-  useEffect(() => {
-    const init = async () => {
-      const token = getToken();
-      if (token) {
-        await checkAuth();
-      } else {
-        setLoading(false);
-      }
-    };
-    init();
-  }, [checkAuth, getToken]);
+  // Thorough async auth check: validates token via API
+  const checkAuth = useCallback(async () => {
+    const token = getToken();
+    if (!token) {
+      return false;
+    }
+    try {
+      await apiCall('/api/me');
+      return true;
+    } catch (error) {
+      clearTokens();
+      return false;
+    }
+  }, [getToken, apiCall, clearTokens]);
 
   return {
-    user,
-    loading,
-    error,
+    getToken,
+    setTokens,
+    clearTokens,
+    apiCall,
+    refreshToken,
     login,
     logout,
     checkAuth,
     isAuthenticated,
+    clearAllLocalStorage,
   };
 };
 

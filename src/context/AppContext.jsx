@@ -1099,6 +1099,56 @@ Retorne SOMENTE o array JSON.`;
       .sort((a, b) => new Date(a.date) - new Date(b.date));
   };
 
+  // Função para limpar todos os dados do contexto
+const clearAllContextData = () => {
+  setUser(null);
+  setEvents([]);
+  setTasks([]);
+  setBills([]);
+  setNotifications([]);
+  setWaterLogs([]);
+  setSchedule([]);
+  setMedicines([]);
+  setStudyGroups([]);
+  setGrades([]);
+  setStudyMaterials([]);
+  setSelectedDate(null);
+  setCurrentMonth(new Date());
+  setSelectedEvent(null);
+  setSelectedTask(null);
+  setError(null);
+};
+
+// Função de logout completa
+const logout = async () => {
+  try {
+    // 1. Limpa dados do contexto
+    clearAllContextData();
+    
+    // 2. Faz logout do Firebase
+    await signOut(auth);
+    
+    // 3. Limpa localStorage
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('userPreferences');
+    
+    // 4. Limpa Service Worker cache (PWA)
+    if ('serviceWorker' in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      for (let registration of registrations) {
+        await registration.unregister();
+      }
+    }
+    
+    // 5. Redireciona para login
+    window.location.href = '/login';
+  } catch (error) {
+    console.error('Erro ao fazer logout:', error);
+    throw error;
+  }
+};
+
   const value = {
     user, loading, isAdmin, events, tasks, bills, workouts, meals, weights,
     waterLogs, notes, pblCases, pblObjectives, pblReadings, homeTasks,
@@ -1127,7 +1177,7 @@ Retorne SOMENTE o array JSON.`;
     createInAppNotification, sendBrowserNotification, requestNotificationPermission,
     markNotificationAsRead, markAllNotificationsAsRead, deleteNotification,
     clearOldNotifications, getUnreadNotifications, addManualNotification,
-    checkForNotifications
+    checkForNotifications, logout
   };
 
   return (
